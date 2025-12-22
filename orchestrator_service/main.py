@@ -501,7 +501,7 @@ LINK WEB: https://www.pointecoach.shop/
     llm = ChatOpenAI(
         model="gpt-5-mini",  # Upgraded for rate limits and speed
         api_key=OPENAI_API_KEY, 
-        temperature=0, 
+        # temperature=0, # Not supported by this model (o1-mini alias)
         max_completion_tokens=1500
     )
     
