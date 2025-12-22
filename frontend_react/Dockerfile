@@ -13,4 +13,5 @@ RUN npm run build
 EXPOSE 4173
 
 # Serve the built app
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "4173"]
+RUN npm install -g serve
+CMD ["serve", "-s", "dist", "-l", "4173"]
