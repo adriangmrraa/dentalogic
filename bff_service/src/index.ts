@@ -22,10 +22,12 @@ app.get('/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', service: 'bff-interface', mode: 'proxy' });
 });
 
-// Proxy Middleware Logic (Simplified for now)
-// In production, we might use http-proxy-middleware, but for granular control we'll wrap headers manually here
-app.use('/api', async (req: Request, res: Response) => {
-    const url = `${ORCHESTRATOR_URL}${req.url}`;
+// Proxy Middleware (Catch-all)
+// Forwards all other requests to the Orchestrator preserving the original path
+app.use(async (req: Request, res: Response) => {
+    const url = `${ORCHESTRATOR_URL}${req.originalUrl}`;
+    console.log(`[Proxy] Forwarding ${req.method} ${req.originalUrl} -> ${url}`);
+
     try {
         const response = await axios({
             method: req.method,
@@ -35,6 +37,7 @@ app.use('/api', async (req: Request, res: Response) => {
         });
         res.status(response.status).send(response.data);
     } catch (error: any) {
+        console.error(`[Proxy Error] ${error.message}`);
         if (error.response) {
             res.status(error.response.status).send(error.response.data);
         } else {
