@@ -476,7 +476,7 @@ LINK WEB: https://www.pointecoach.shop/
         raise ValueError("OPENAI_API_KEY missing")
 
     llm = ChatOpenAI(
-        model="gpt-4o-mini",  # Upgraded for rate limits and speed
+        model="gpt-5-mini",  # Upgraded for rate limits and speed
         api_key=OPENAI_API_KEY, 
         temperature=0, 
         max_tokens=1500
