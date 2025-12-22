@@ -49,10 +49,7 @@ class Database:
         async with self.pool.acquire() as conn:
             await conn.execute(query, from_number, role, content, correlation_id)
 
-    async def append_chat_message(self, from_number: str, role: str, content: str, correlation_id: str):
-        query = "INSERT INTO chat_messages (from_number, role, content, correlation_id) VALUES ($1, $2, $3, $4)"
-        async with self.pool.acquire() as conn:
-            await conn.execute(query, from_number, role, content, correlation_id)
+
 
     async def get_chat_history(self, from_number: str, limit: int = 15) -> List[dict]:
         """Returns list of {'role': ..., 'content': ...} in chronological order."""
