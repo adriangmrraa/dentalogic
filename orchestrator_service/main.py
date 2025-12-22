@@ -58,6 +58,29 @@ redis_client = redis.from_url(REDIS_URL)
 
 # --- Shared Models ---
 class ToolError(BaseModel):
+    error: str
+    details: Optional[str] = None
+
+# --- Application Startup ---
+from fastapi.middleware.cors import CORSMiddleware
+app = FastAPI(title="Orchestrator Service", version="1.0.0")
+
+# CORS Configuration
+origins = [
+    "http://localhost",
+    "http://localhost:5173",
+    "http://localhost:4173",
+    "https://docker-frontend-react.yn8wow.easypanel.host",
+    "https://docker-platform-ui.yn8wow.easypanel.host", # Fallback legacy
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
     code: str = Field(..., description="Error code")
     message: str
     retryable: bool
