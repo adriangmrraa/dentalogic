@@ -133,13 +133,29 @@ async def lifespan(app: FastAPI):
         );
         
         -- 003_advanced_features.sql
-        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS system_prompt_template TEXT;
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tokens_used BIGINT DEFAULT 0;
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tool_calls BIGINT DEFAULT 0;
         
-        INSERT INTO tenants (store_name, bot_phone_number) 
-        VALUES ('Pointe Coach', '5491100000000') 
-        ON CONFLICT (bot_phone_number) DO NOTHING;
+        INSERT INTO tenants (
+            store_name, bot_phone_number, 
+            store_location, store_website, store_description, store_catalog_knowledge
+        ) VALUES (
+            'Pointe Coach', '5491100000000',
+            'Parana, Entre Rios', 'https://www.pointecoach.shop/', 'Tienda de danza', '...'
+        ) ON CONFLICT (bot_phone_number) DO NOTHING;
+        
+        -- Update Prompt if null (stricter version)
+        UPDATE tenants 
+        SET system_prompt_template = 'Eres el asistente virtual de {STORE_NAME}.
+PRIORIDADES:
+1. SALIDA: Tu respuesta final DEBE ser un objeto JSON con una clave "messages" (lista).
+   Ejemplo: { "messages": [{ "text": "Hola", "part": 1, "total": 1 }] }
+   NO uses claves como "message", "response", "answer".
+2. VERACIDAD: Usa tools.
+3. DIVISION: max 350 chars.
+GATE: Usa productsq si preguntan productos.
+CONOCIMIENTO: {STORE_CATALOG_KNOWLEDGE}'
+        WHERE store_name = 'Pointe Coach' AND system_prompt_template IS NULL;
         """
         # Execute migration
         await db.pool.execute(migration_sql)
@@ -521,19 +537,68 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
         correlation_id, "user", event.text, event.from_number
     )
     
-    # Invoke Agent
+        # Invoke Agent
     try:
         inputs = {"input": event.text, "chat_history": memory.chat_memory.messages}
         result = await executor.ainvoke(inputs)
         output = result["output"] 
         
+        # --- Smart Output Processing (Layer 2) ---
         final_messages = []
+        
+        # Case A: Strict Pydantic Object
         if isinstance(output, OrchestratorResponse):
             final_messages = output.messages
-        elif isinstance(output, dict) and "messages" in output:
-             final_messages = [OrchestratorMessage(**m) for m in output["messages"]]
+            
+        # Case B: Dict (JSON) but might have wrong keys
+        elif isinstance(output, dict):
+            # 1. Correct Format
+            if "messages" in output and isinstance(output["messages"], list):
+                 final_messages = [OrchestratorMessage(**m) for m in output["messages"]]
+            # 2. "message" or "response" single key (Common Hallucination)
+            elif "message" in output:
+                 final_messages = [OrchestratorMessage(text=str(output["message"]), part=1, total=1)]
+            elif "response" in output:
+                 final_messages = [OrchestratorMessage(text=str(output["response"]), part=1, total=1)]
+            elif "answer" in output:
+                 final_messages = [OrchestratorMessage(text=str(output["answer"]), part=1, total=1)]
+            else:
+                 # Fallback: Dump the whole dict as text provided it's not internal weirdness
+                 # Check if it has 'part', 'total', 'text' at root (Flattened)
+                 if "text" in output:
+                     final_messages = [OrchestratorMessage(text=str(output["text"]), part=output.get("part", 1), total=output.get("total", 1))]
+                 else:
+                     # Last resort: Stringify
+                     final_messages = [OrchestratorMessage(text=json.dumps(output, ensure_ascii=False), part=1, total=1)]
+                     
+        # Case C: String (maybe JSON string)
+        elif isinstance(output, str):
+            try:
+                # Try to parse string as JSON first
+                cleaned = output.strip()
+                if cleaned.startswith("```json"): cleaned = cleaned[7:].split("```")[0]
+                if cleaned.startswith("```"): cleaned = cleaned[3:].split("```")[0]
+                parsed_json = json.loads(cleaned.strip())
+                
+                # Recursively apply Case B logic
+                if isinstance(parsed_json, dict):
+                    if "messages" in parsed_json:
+                        final_messages = [OrchestratorMessage(**m) for m in parsed_json["messages"]]
+                    elif "message" in parsed_json:
+                        final_messages = [OrchestratorMessage(text=str(parsed_json["message"]), part=1, total=1)]
+                    elif "response" in parsed_json:
+                        final_messages = [OrchestratorMessage(text=str(parsed_json["response"]), part=1, total=1)]
+                    else:
+                        final_messages = [OrchestratorMessage(text=str(cleaned), part=1, total=1)]
+                else:
+                    final_messages = [OrchestratorMessage(text=output, part=1, total=1)]
+            except:
+                # Not JSON, just text
+                final_messages = [OrchestratorMessage(text=output, part=1, total=1)]
+                
         else:
             final_messages = [OrchestratorMessage(text=str(output), part=1, total=1)]
+
 
         # Store Assistant Response
         await db.pool.execute(
