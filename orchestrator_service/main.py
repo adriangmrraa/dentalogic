@@ -122,10 +122,9 @@ app = FastAPI(
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
-    # allow_origins=["*"] with allow_credentials=True is invalid in valid CORS specs.
-    # Use allow_origin_regex to allow any HTTP/HTTPS origin dynamically.
-    allow_origin_regex="https?://.*",
-    allow_credentials=True,
+    # Simplified CORS for maximum compatibility
+    allow_origins=["*"],
+    allow_credentials=False, # We use token headers, not cookies
     allow_methods=["*"],
     allow_headers=["*"],
 )
