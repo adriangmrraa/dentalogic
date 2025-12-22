@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
-# Initialize early
+# Initialize earlys
 load_dotenv()
 
 try:
