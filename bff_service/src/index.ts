@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
@@ -12,14 +12,19 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://orchestrator_se
 app.use(cors());
 app.use(express.json());
 
+// Root Route
+app.get('/', (req: Request, res: Response) => {
+    res.send('BFF Service is Running');
+});
+
 // Health Check
-app.get('/health', (req, res) => {
+app.get('/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', service: 'bff-interface', mode: 'proxy' });
 });
 
 // Proxy Middleware Logic (Simplified for now)
 // In production, we might use http-proxy-middleware, but for granular control we'll wrap headers manually here
-app.use('/api', async (req, res) => {
+app.use('/api', async (req: Request, res: Response) => {
     const url = `${ORCHESTRATOR_URL}${req.url}`;
     try {
         const response = await axios({
