@@ -93,9 +93,29 @@ class OrchestratorResult(BaseModel):
     meta: Optional[Dict[str, Any]] = None
 
 # FastAPI App
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Connect to DB
+    try:
+        await db.connect()
+        logger.info("db_connected")
+    except Exception as e:
+        logger.error("db_connection_failed", error=str(e))
+        # Don't raise here if you want to allow app to start even if DB is down temporarily,
+        # but for critical DB apps, maybe better to fail.
+    
+    yield
+    
+    # Shutdown: Disconnect DB
+    await db.disconnect()
+    logger.info("db_disconnected")
+
 app = FastAPI(
     title="Orchestrator Service",
     description="Central intelligence for Kilocode microservices.",
+    lifespan=lifespan
 )
 
 # --- CORS Middleware (Required for Platform UI in Browser) ---
