@@ -130,6 +130,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "service": "orchestrator"}
+
 # --- Include Admin Router ---
 from admin_routes import router as admin_router
 app.include_router(admin_router)
