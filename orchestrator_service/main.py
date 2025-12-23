@@ -499,11 +499,16 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
 
     # Normalize phone number (strip + if present)
     clean_phone = tenant_phone.lstrip('+')
+    logger.info("tenant_lookup_attempt", raw=tenant_phone, cleaned=clean_phone)
 
     tenant = await db.pool.fetchrow(
         "SELECT store_name, system_prompt_template, store_catalog_knowledge, tiendanube_store_id, tiendanube_access_token FROM tenants WHERE bot_phone_number = $1 OR bot_phone_number = $2", 
         clean_phone, f"+{clean_phone}"
     )
+    if not tenant:
+        logger.warning("tenant_lookup_failed", searched=[clean_phone, f"+{clean_phone}"], note="Verify DB entry matches YCloud 'to' number")
+    else:
+        logger.info("tenant_lookup_success", store=tenant['store_name'])
 
     # Set context variables for this execution
     # USER PRIORITY: Env Vars > DB
