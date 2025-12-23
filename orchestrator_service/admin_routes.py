@@ -3,8 +3,9 @@ import json
 import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional, Any
-from fastapi import APIRouter, Header, HTTPException, Depends, Request
+from fastapi import APIRouter, Header, HTTPException, Depends, Request, Response
 from pydantic import BaseModel
+import httpx
 from db import db
 
 # Configuration
@@ -204,9 +205,10 @@ async def list_chats():
         FROM chat_conversations
         ORDER BY last_message_at DESC NULLS LAST
     """
-    rows = await db.pool.fetch(query)
+    try:
+        rows = await db.pool.fetch(query)
     
-    results = []
+        results = []
     now = datetime.now().astimezone()
     
     for r in rows:
@@ -232,6 +234,10 @@ async def list_chats():
             "last_message_preview": r['last_message_preview']
         })
     return results
+    """
+    except Exception as e:
+        print(f"ERROR list_chats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list chats: {str(e)}")
 
 @router.get("/chats/{conversation_id}/messages", dependencies=[Depends(verify_admin_token)])
 async def get_chat_history(conversation_id: str):
@@ -618,13 +624,16 @@ async def analytics_summary(tenant_id: int = 1, from_date: str = None, to_date: 
     Advanced Analytics derived strictly from PostgreSQL (Single Source of Truth).
     Follows AGENTS.md contract.
     """
-    # 1. Conversation KPIs
-    active_convs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations WHERE status = 'open'")
+    try:
+        # 1. Conversation KPIs
+        active_convs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations WHERE status = 'open'")
     blocked_convs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations WHERE status = 'human_override'")
     
     # 2. Message KPIs
     total_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages")
     ai_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'assistant'")
+    human_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'human_supervisor'")
+    
     human_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'human_supervisor'")
     
     return {
@@ -640,6 +649,10 @@ async def analytics_summary(tenant_id: int = 1, from_date: str = None, to_date: 
             }
         }
     }
+    """
+    except Exception as e:
+        print(f"ERROR analytics_summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}")
 
 @router.get("/telemetry/events", dependencies=[Depends(verify_admin_token)])
 async def telemetry_events(tenant_id: int = 1):
@@ -764,39 +777,37 @@ async def send_test_msg(data: dict):
 
 @router.get("/console/events", dependencies=[Depends(verify_admin_token)])
 async def console_events(limit: int = 50):
-    """Unified event log for the Console view. Strictly derived from chat_messages."""
-    # We query only chat_messages as the Single Source of Truth
+    """Unified event log for the Console view. Derived from system_events."""
     query = """
     SELECT 
-        CASE 
-            WHEN role = 'user' THEN 'inbound'
-            ELSE 'outbound'
-        END as type,
-        correlation_id,
-        created_at as ts,
-        role as source_role,
-        content 
-    FROM chat_messages 
+        id, level, event_type, message, metadata, created_at
+    FROM system_events 
     ORDER BY created_at DESC 
     LIMIT $1
     """
-    rows = await db.pool.fetch(query, limit)
+    try:
+        rows = await db.pool.fetch(query, limit)
+    except Exception as e:
+        # If table doesn't exist yet (migration race condition), return empty safest
+        print(f"DEBUG: system_events query failed: {e}")
+        return {"events": []}
+        
     events = []
     for r in rows:
-        # Map DB roles to UI sources
-        source_label = "agent"
-        if r["source_role"] == "user": source_label = "user"
-        elif r["source_role"] == "human_supervisor": source_label = "human"
+        # Map DB row to UI event format
+        # UI expects: event_type, timestamp, source, severity, correlation_id, details
+        meta = json.loads(r["metadata"]) if r["metadata"] else {}
+        correlation_id = meta.get("correlation_id")
         
         events.append({
-            "event_type": r["type"],
-            "timestamp": r["ts"].isoformat(),
-            "source": source_label,
-            "severity": "info",
-            "correlation_id": r["correlation_id"],
+            "event_type": r["event_type"],
+            "timestamp": r["created_at"].isoformat(),
+            "source": "orchestrator",
+            "severity": r["level"],
+            "correlation_id": correlation_id,
             "details": {
-                "message": r["content"][:200], 
-                "role": r["source_role"]
+                "message": r["message"], 
+                "meta": meta
             }
         })
     return {"events": events}

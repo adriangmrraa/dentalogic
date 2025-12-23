@@ -178,11 +178,19 @@ async def lifespan(app: FastAPI):
             last_message_preview TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            UNIQUE (channel, external_user_id) -- Using partial index logic or simple unique in combination?
-                                               -- User requested UNIQUE(tenant_id, channel, external_user_id)
-                                               -- Tenant ID is nullable here? No, should be NOT NULL if possible.
-                                               -- Assuming tenant_id is NOT NULL in logic.
+            UNIQUE (channel, external_user_id) 
         );
+        
+        -- Schema Repair / Migration (Idempotent)
+        -- Ensure columns exist if table was created by older version
+        BEGIN;
+            ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_message_preview TEXT;
+            ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMPTZ;
+            ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+            ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS human_override_until TIMESTAMPTZ;
+        EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'Schema repair failed for chat_conversations';
+        END;
         -- Add unique constraint if not exists
         DO $$
         BEGIN
@@ -463,6 +471,7 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
                 
     except Exception as e:
         logger.error("mcp_bridge_error", tool=tool_name, error=str(e))
+        await log_db("error", "tool_execution_failed", f"MCP Tool {tool_name} failed: {str(e)}", {"tool": tool_name})
         return f"MCP Bridge Exception: {str(e)}"
 
 def get_cached_tool(key: str):
@@ -538,6 +547,7 @@ async def call_tiendanube_api(endpoint: str, params: dict = None):
             return data
     except Exception as e:
         logger.error("tiendanube_request_exception", error=str(e))
+        await log_db("error", "external_api_error", f"TiendaNube API failed: {endpoint}", {"error": str(e)})
         return f"Request Error: {str(e)}"
 
 @tool
@@ -759,20 +769,58 @@ CONOCIMIENTO DE TIENDA:
 # Global fallback for health checks (optional)
 # agent = ... (Removed global instantiation to force per-request dynamic loading)
 
+# Helper for DB Logging
+async def log_db(level: str, event_type: str, message: str, meta: dict = None):
+    """Fire and forget log to system_events."""
+    try:
+        if db.pool:
+            await db.pool.execute(
+                "INSERT INTO system_events (level, event_type, message, metadata, created_at) VALUES ($1, $2, $3, $4, NOW())",
+                level, event_type, message, json.dumps(meta) if meta else "{}"
+            )
+    except Exception as e:
+        # Fallback to stdout if DB fails
+        print(f"DB_LOG_FAIL: {e}")
+
 # Middleware
 @app.middleware("http")
 async def add_metrics_and_logs(request: Request, call_next):
     start_time = time.time()
     correlation_id = request.headers.get("X-Correlation-Id") or request.headers.get("traceparent")
+    
+    # Log Request Start (Verbose?) No, let's log completion only to reduce noise, 
+    # or errors.
+    
     response = await call_next(request)
     process_time = time.time() - start_time
     status_code = response.status_code
+    
     REQUESTS.labels(service=SERVICE_NAME, endpoint=request.url.path, method=request.method, status=status_code).inc()
     LATENCY.labels(service=SERVICE_NAME, endpoint=request.url.path).observe(process_time)
+    
     logger.bind(
         service=SERVICE_NAME, correlation_id=correlation_id, status_code=status_code,
         method=request.method, endpoint=request.url.path, latency_ms=round(process_time * 1000, 2)
     ).info("http_request_completed" if status_code < 400 else "http_request_failed")
+    
+    # DB Logging for Console
+    # We filter out health checks to avoid spamming the DB
+    if "/health" not in request.url.path and "/metrics" not in request.url.path:
+        level = "info" if status_code < 400 else "error"
+        evt_type = "http_request"
+        # Background task for logging to not block response? 
+        # For simplicity in this MVP, we await. It's fast (Postgres).
+        await log_db(
+            level, 
+            evt_type, 
+            f"{request.method} {request.url.path}", 
+            {
+                "status": status_code, 
+                "latency_ms": round(process_time * 1000, 2),
+                "correlation_id": correlation_id
+            }
+        )
+
     return response
 
 # Endpoints
@@ -1078,4 +1126,5 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
             
     except Exception as e:
         logger.error("agent_execution_failed", error=str(e))
+        await log_db("error", "agent_crash", f"Agent failed for {event.from_number}: {str(e)}", {"trace": str(e)})
         return OrchestratorResult(status="error", send=False, text="Error processing request")
