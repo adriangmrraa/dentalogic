@@ -561,16 +561,32 @@ async def get_tenant_details(id: int):
         }
     }
     
+
+    ycloud_keys = set()
+    meta_keys = set()
+
     for c in creds:
         c_dict = dict(c)
         if c['tenant_id'] == id:
             resp["credentials"]["tenant_specific"].append(c_dict)
             if c['name'] in ['YCLOUD_API_KEY', 'YCLOUD_WEBHOOK_SECRET']:
-                resp["connections"]["whatsapp"]["ycloud"]["configured"] = True
+                ycloud_keys.add(c['name'])
             if c['name'] in ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID']:
-                resp["connections"]["whatsapp"]["meta_api"]["configured"] = True
+                meta_keys.add(c['name'])
         else:
             resp["credentials"]["global_available"].append(c_dict)
+            # Global Check
+            if c['name'] in ['YCLOUD_API_KEY', 'YCLOUD_WEBHOOK_SECRET']:
+                ycloud_keys.add(c['name'])
+            if c['name'] in ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID']:
+                meta_keys.add(c['name'])
+
+    # Determine status based on presence of key credentials (either global or local)
+    if 'YCLOUD_API_KEY' in ycloud_keys:
+        resp["connections"]["whatsapp"]["ycloud"]["configured"] = True
+    
+    if 'WHATSAPP_ACCESS_TOKEN' in meta_keys and 'WHATSAPP_PHONE_NUMBER_ID' in meta_keys:
+        resp["connections"]["whatsapp"]["meta_api"]["configured"] = True
             
     return resp
 
