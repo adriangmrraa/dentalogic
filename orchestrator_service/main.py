@@ -130,6 +130,18 @@ async def lifespan(app: FastAPI):
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
             """,
+            # 1b. Pre-clean Handoff Config (Drop if broken)
+            """
+            DO $$
+            BEGIN
+                -- If table exists but lacks PK (broken state from previous edits), drop it to allow fresh creation.
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tenant_human_handoff_config') 
+                   AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tenant_human_handoff_config_pkey') THEN
+                   
+                   DROP TABLE tenant_human_handoff_config CASCADE;
+                END IF;
+            END $$;
+            """,
             # 1c. Tenant Human Handoff Config (Final Spec + Consistency)
             """
             CREATE TABLE IF NOT EXISTS tenant_human_handoff_config (
@@ -148,18 +160,6 @@ async def lifespan(app: FastAPI):
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()
             );
-            """,
-            # 1d. Repair Handoff Config (Ensure PK/Unique)
-            """
-            DO $$
-            BEGIN
-                -- Attempt to add UNIQUE constraint. If it fails due to duplication, ignorance is bliss.
-                BEGIN
-                    ALTER TABLE tenant_human_handoff_config ADD CONSTRAINT tenant_human_handoff_config_tenant_id_key UNIQUE (tenant_id);
-                EXCEPTION WHEN duplicate_object THEN
-                    RAISE NOTICE 'Constraint tenant_human_handoff_config_tenant_id_key already exists';
-                END;
-            END $$;
             """,
             # 2. Credentials Table
             """
