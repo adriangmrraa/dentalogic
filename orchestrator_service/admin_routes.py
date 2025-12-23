@@ -624,28 +624,26 @@ async def analytics_summary(tenant_id: int = 1, from_date: str = None, to_date: 
     try:
         # 1. Conversation KPIs
         active_convs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations WHERE status = 'open'")
-    blocked_convs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations WHERE status = 'human_override'")
-    
-    # 2. Message KPIs
-    total_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages")
-    ai_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'assistant'")
-    human_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'human_supervisor'")
-    
-    human_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'human_supervisor'")
-    
-    return {
-        "kpis": {
-            "conversations": {
-                "active": active_convs or 0,
-                "blocked": blocked_convs or 0
-            },
-            "messages": {
-                "total": total_msgs or 0,
-                "ai": ai_msgs or 0,
-                "human": human_msgs or 0
+        blocked_convs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations WHERE status = 'human_override'")
+        
+        # 2. Message KPIs
+        total_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages")
+        ai_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'assistant'")
+        human_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'human_supervisor'")
+        
+        return {
+            "kpis": {
+                "conversations": {
+                    "active": active_convs or 0,
+                    "blocked": blocked_convs or 0
+                },
+                "messages": {
+                    "total": total_msgs or 0,
+                    "ai": ai_msgs or 0,
+                    "human": human_msgs or 0
+                }
             }
         }
-    }
     except Exception as e:
         print(f"ERROR analytics_summary: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}")
