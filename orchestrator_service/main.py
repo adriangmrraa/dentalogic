@@ -787,13 +787,15 @@ ACCIÓN REQUERIDA:
 
     # 3. SMTP Send
     try:
-        smtp_host = config['smtp_host']
-        smtp_user = config['smtp_username']
+        smtp_host = str(config['smtp_host']).strip() if config['smtp_host'] else ""
+        smtp_user = str(config['smtp_username']).strip() if config['smtp_username'] else ""
         smtp_pass = decrypt_password(config['smtp_password_encrypted'])
         smtp_port = config['smtp_port']
-        smtp_sec = config['smtp_security'].upper()
+        smtp_sec = str(config['smtp_security']).strip().upper() if config['smtp_security'] else "SSL"
+        
+        target_email = str(config['destination_email']).strip() if config['destination_email'] else ""
 
-        if smtp_user and smtp_pass and smtp_host:
+        if smtp_user and smtp_pass and smtp_host and target_email:
             msg = MIMEText(body)
             msg['Subject'] = subject
             msg['From'] = smtp_user
