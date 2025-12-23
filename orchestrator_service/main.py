@@ -6,6 +6,7 @@ import uuid
 import requests
 import redis
 import structlog
+import httpx
 from typing import Any, Dict, List, Optional, Union, Literal
 from fastapi import FastAPI, HTTPException, Header, Depends, status, Request
 from fastapi.responses import JSONResponse, Response
@@ -39,6 +40,7 @@ from db import db
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
+POSTGRES_DSN = os.getenv("POSTGRES_DSN")
 
 if not OPENAI_API_KEY:
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
