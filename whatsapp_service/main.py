@@ -305,39 +305,178 @@ async def ycloud_webhook(request: Request):
     except: raise HTTPException(status_code=400, detail="Invalid JSON")
     
     event = body[0] if isinstance(body, list) and body else body
-    if event.get("type") != "whatsapp.inbound_message.received": return {"status": "ignored"}
-
-    msg = event.get("whatsappInboundMessage", {})
-    from_n, to_n, name = msg.get("from"), msg.get("to"), msg.get("customerProfile", {}).get("name")
-    msg_type = msg.get("type")
-    text = None
-
-    if msg_type == "text":
-        text = msg.get("text", {}).get("body")
-    elif msg_type == "audio":
-        audio_link = msg.get("audio", {}).get("link")
-        if audio_link:
-            logger.info("audio_received_starting_transcription", correlation_id=correlation_id)
-            text = await transcribe_audio(audio_link, correlation_id)
+    event_type = event.get("type")
+    
+    # --- 1. Handle Inbound Messages ---
+    if event_type == "whatsapp.inbound_message.received":
+        msg = event.get("whatsappInboundMessage", {})
+        from_n, to_n, name = msg.get("from"), msg.get("to"), msg.get("customerProfile", {}).get("name")
+        msg_type = msg.get("type")
+        
+        # A. Text Messages -> Buffer (Debounce)
+        if msg_type == "text":
+            text = msg.get("text", {}).get("body")
             if text:
-                logger.info("transcription_success", text_preview=text[:50], correlation_id=correlation_id)
-    
-    if not text: 
-        return {"status": "ignored_no_text"}
+                buffer_key, timer_key, lock_key = f"buffer:{from_n}", f"timer:{from_n}", f"active_task:{from_n}"
+                redis_client.rpush(buffer_key, text)
+                redis_client.setex(timer_key, 16, "1")
+                
+                if not redis_client.get(lock_key):
+                    redis_client.setex(lock_key, 60, "1")
+                    asyncio.create_task(process_user_buffer(from_n, to_n, name, event.get("id"), msg.get("wamid") or event.get("id")))
+                    return {"status": "buffering_started", "correlation_id": correlation_id}
+                return {"status": "buffering_updated", "correlation_id": correlation_id}
+        
+        # B. Media Messages -> Immediate Forward (No Buffer)
+        media_list = []
+        text_content = None
+        
+        if msg_type == "image":
+            node = msg.get("image", {})
+            text_content = node.get("caption")
+            media_list.append({
+                "type": "image", 
+                "url": node.get("link"), 
+                "mime_type": node.get("mime_type"),
+                "provider_id": node.get("id")
+            })
+            
+        elif msg_type == "document":
+            node = msg.get("document", {})
+            text_content = node.get("caption")
+            media_list.append({
+                "type": "document", 
+                "url": node.get("link"), 
+                "mime_type": node.get("mime_type"), 
+                "file_name": node.get("filename"),
+                "provider_id": node.get("id")
+            })
+            
+        elif msg_type == "audio":
+            node = msg.get("audio", {})
+            media_list.append({
+                "type": "audio", 
+                "url": node.get("link"), 
+                "mime_type": node.get("mime_type"),
+                "provider_id": node.get("id")
+            })
+            # Transcription
+            if node.get("link"):
+                logger.info("audio_received_starting_transcription", correlation_id=correlation_id)
+                transcription = await transcribe_audio(node.get("link"), correlation_id)
+                if transcription:
+                     text_content = transcription
+                     
+        if media_list:
+             # Construct payload compatible with InboundChatEvent + Media extension
+             payload = {
+                "provider": "ycloud", 
+                "event_id": event.get("id"), 
+                "provider_message_id": msg.get("wamid") or event.get("id"),
+                "from_number": from_n, 
+                "to_number": to_n, 
+                "text": text_content, # Can be None/null
+                "customer_name": name,
+                "event_type": "whatsapp.inbound_message.received", 
+                "correlation_id": correlation_id,
+                "media": media_list
+             }
+             headers = {"X-Correlation-Id": correlation_id}
+             if INTERNAL_API_TOKEN: headers["X-Internal-Token"] = INTERNAL_API_TOKEN
+             
+             await forward_to_orchestrator(payload, headers)
+             return {"status": "media_forwarded", "count": len(media_list)}
+             
+        return {"status": "ignored_type_or_empty", "type": msg_type}
 
-    buffer_key, timer_key, lock_key = f"buffer:{from_n}", f"timer:{from_n}", f"active_task:{from_n}"
-    redis_client.rpush(buffer_key, text)
-    redis_client.setex(timer_key, 16, "1")
-    
-    if not redis_client.get(lock_key):
-        redis_client.setex(lock_key, 60, "1")
-        asyncio.create_task(process_user_buffer(from_n, to_n, name, event.get("id"), msg.get("wamid") or event.get("id")))
-        return {"status": "buffering_started", "correlation_id": correlation_id}
-    return {"status": "buffering_updated", "correlation_id": correlation_id}
+    # --- 2. Handle Echoes (Manual Messages) ---
+    elif event_type == "whatsapp.message.echo" or event_type == "whatsapp.smb.message.echoes":
+        logger.info("echo_received", correlation_id=correlation_id, event=event_type)
+        msg = event.get("whatsappMessage", {}) or event.get("message", {})
+        
+        user_phone = msg.get("to")
+        bot_phone = msg.get("from")
+        
+        text = None
+        if msg.get("type") == "text":
+            text = msg.get("text", {}).get("body")
+        
+        if text and user_phone:
+             payload = {
+                "provider": "ycloud", 
+                "event_id": event.get("id"), 
+                "provider_message_id": msg.get("wamid") or event.get("id"),
+                "from_number": user_phone,     # Ensuring this maps to 'external_user_id' in DB
+                "to_number": bot_phone,
+                "text": text,
+                "event_type": "whatsapp.message.echo", # Standardize for Orchestrator
+                "correlation_id": correlation_id
+             }
+             headers = {"X-Correlation-Id": correlation_id}
+             if INTERNAL_API_TOKEN: headers["X-Internal-Token"] = INTERNAL_API_TOKEN
+             
+             try:
+                 await forward_to_orchestrator(payload, headers)
+                 return {"status": "echo_forwarded"}
+             except Exception as e:
+                 logger.error("echo_forward_failed", error=str(e))
+                 return {"status": "error_forwarding_echo"}
+                 
+    return {"status": "ignored_event_type", "type": event_type}
 
 @app.post("/messages/send")
-def send_message(message: SendMessage):
-    raise HTTPException(status_code=501, detail="The orchestrator should handle sending messages.")
+async def send_message(message: SendMessage, request: Request):
+    """Internal endpoint for sending manual messages from orchestrator."""
+    token = request.headers.get("X-Internal-Token")
+    if token != (INTERNAL_API_TOKEN or "internal-secret"):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    correlation_id = request.headers.get("X-Correlation-Id") or str(uuid.uuid4())
+    # Retrieve config
+    v_ycloud = await get_config("YCLOUD_API_KEY", YCLOUD_API_KEY)
+    # We need to know which business number to use - for now assume default or pass in body if model updated
+    # To keep it simple for now, we use the default env var logic inside YCloudClient via send_sequence or re-instantiate
+    # Ideally SendMessage model should include 'from_number' (business number)
+    
+    # Since SendMessage is simple (to, text), we try to get a business number from config or context
+    # But YCloudClient needs it.
+    # Hack: We initialize YCloudClient with a dummy if needed, but it really needs the sender ID.
+    # Let's check send_sequence usage: client = YCloudClient(v_ycloud, business_number)
+    
+    # IMPROVEMENT: The request should probably provide the separate business number/ID
+    # For this MVP, let's assume global YCloud config unless passed
+    
+    try:
+        # Re-use send_sequence logic but for a single message
+        # We need to wrap it as OrchestratorMessage
+        orch_msg = OrchestratorMessage(text=message.text)
+        
+        # We need the 'from' number (the bot's number). 
+        # Since we don't have it in the simple body, we might need to assume it's the one in ENV or context.
+        # However, for multi-tenant, orchestrator MUST tell us.
+        # Let's inspect headers or just rely on YCloudClient to default if allowed.
+        # Actually YCloudClient requires `from_phone_number`. 
+        
+        # Updated Logic: We will parse `from_number` from query param or header if available, or fetch from config
+        business_number = request.query_params.get("from_number")
+        if not business_number:
+            # Fallback to env or fetch
+             business_number = await get_config("YCLOUD_Phone_Number_ID") # Placeholder
+        
+        if not business_number:
+             # Basic fallback
+             business_number = "default"
+
+        # Initialize Client
+        client = YCloudClient(v_ycloud, business_number)
+        
+        # Send
+        await client.send_text(message.to, message.text, correlation_id)
+        return {"status": "sent", "correlation_id": correlation_id}
+        
+    except Exception as e:
+        logger.error("manual_send_failed", error=str(e), correlation_id=correlation_id)
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

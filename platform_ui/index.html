@@ -29,6 +29,9 @@
                 <button class="nav-item" onclick="showView('stores')">
                     <span class="icon">🏘️</span> Mis Tiendas
                 </button>
+                <button class="nav-item" onclick="showView('chats')">
+                    <span class="icon">💬</span> Conversaciones
+                </button>
                 <button class="nav-item" onclick="showView('logs')">
                     <span class="icon">📜</span> Live History
                 </button>
@@ -189,6 +192,52 @@
                             <!-- JS populated -->
                         </tbody>
                     </table>
+                </div>
+            </section>
+
+            <!-- New view: Chats (Human-in-the-Loop) -->
+            <section id="view-chats" class="view">
+                <div class="chats-layout">
+                    <!-- Left Column: Chat List -->
+                    <div class="chat-list-container glass">
+                        <div class="chat-list-header">
+                            <input type="text" id="chat-search" placeholder="Buscar..." onkeyup="filterChats()">
+                            <button onclick="loadChats()" class="btn-icon">🔄</button>
+                        </div>
+                        <div class="chat-list" id="chat-list-items">
+                            <!-- Populated by JS -->
+                            <div class="chat-loading">Cargando conversaciones...</div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Chat Window -->
+                    <div class="chat-window-container glass">
+                        <div id="chat-empty-state" class="chat-empty-state">
+                            <div class="empty-icon">💬</div>
+                            <h3>Selecciona una conversación</h3>
+                            <p>Aquí verás el historial y podrás intervenir manualmente.</p>
+                        </div>
+
+                        <div id="chat-interface" style="display: none;">
+                            <div class="chat-header">
+                                <div class="chat-avatar">👤</div>
+                                <div class="chat-info">
+                                    <h3 id="chat-current-phone">Loading...</h3>
+                                    <span class="chat-role-badge">WhatsApp User</span>
+                                </div>
+                            </div>
+
+                            <div class="chat-messages" id="chat-messages-area">
+                                <!-- Messages -->
+                            </div>
+
+                            <div class="chat-input-area">
+                                <textarea id="chat-input-text"
+                                    placeholder="Escribe un mensaje manual (Human Override)..."></textarea>
+                                <button onclick="sendManualMessage()" id="chat-send-btn" class="btn-primary">➤</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 

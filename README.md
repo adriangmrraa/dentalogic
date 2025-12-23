@@ -6,6 +6,7 @@ Este proyecto implementa un agente de chat para WhatsApp que interactúa con la 
 
 - **whatsapp_service**: Maneja webhooks de WhatsApp (ycloud), verifica firmas y reenvía mensajes al orquestador.
 - **orchestrator_service**: Contiene el agente LangChain, gestiona memoria, dedupe y orquesta tools.
+- **platform_ui**: Dashboard administrativo (React) para gestionar tenants, credenciales y analizar métricas.
 - **tiendanube_service**: Expone tools para interactuar con la API de Tienda Nube.
 
 ## Requisitos

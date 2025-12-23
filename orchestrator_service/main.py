@@ -105,7 +105,7 @@ async def lifespan(app: FastAPI):
         # --- Auto-Migration for EasyPanel ---
         # Since the db/ folder isn't copied to the container, we inline the critical schema here.
         migration_sql = """
-        -- 002_platform_schema.sql
+        -- 002_platform_schema.sql (Platform Core)
         CREATE TABLE IF NOT EXISTS tenants (
             id SERIAL PRIMARY KEY,
             store_name TEXT NOT NULL,
@@ -147,7 +147,6 @@ async def lifespan(app: FastAPI):
                 SELECT 1 FROM pg_constraint 
                 WHERE conname = 'unique_name_scope' AND conrelid = 'credentials'::regclass
             ) THEN
-                -- If we can't add it due to duplicates, we'll log it but here we'll try to add it
                 BEGIN
                     ALTER TABLE credentials ADD CONSTRAINT unique_name_scope UNIQUE(name, scope);
                 EXCEPTION WHEN others THEN
@@ -156,10 +155,86 @@ async def lifespan(app: FastAPI):
             END IF;
         END $$;
         
-        -- 003_advanced_features.sql
-        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tokens_used BIGINT DEFAULT 0;
-        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tool_calls BIGINT DEFAULT 0;
-        
+        -- HITL & Chat History Schema (Strict Implementation)
+        -- Ensure pgcrypto for UUIDs (if available, else fallback to text or app-generated handled via DEFAULT if supported)
+        -- We will try to create extension, ignore if fails (could be managed permissions)
+        BEGIN;
+            CREATE EXTENSION IF NOT EXISTS pgcrypto;
+        EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'Could not create extension pgcrypto - assuming it exists or not needed if manually handling UUIDs';
+        END;
+
+        -- 1. chat_conversations
+        CREATE TABLE IF NOT EXISTS chat_conversations (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id INTEGER REFERENCES tenants(id), -- Adapted for compat
+            channel VARCHAR(32) NOT NULL, 
+            external_user_id VARCHAR(128) NOT NULL,
+            display_name VARCHAR(255),
+            avatar_url TEXT,
+            status VARCHAR(32) NOT NULL DEFAULT 'open',
+            human_override_until TIMESTAMPTZ,
+            last_message_at TIMESTAMPTZ,
+            last_message_preview TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            UNIQUE (channel, external_user_id) -- Using partial index logic or simple unique in combination?
+                                               -- User requested UNIQUE(tenant_id, channel, external_user_id)
+                                               -- Tenant ID is nullable here? No, should be NOT NULL if possible.
+                                               -- Assuming tenant_id is NOT NULL in logic.
+        );
+        -- Add unique constraint if not exists
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chat_conversations_tenant_channel_user_key') THEN
+                 -- If tenant_id was UUID, we would include it. Since it's INT and references tenants, we include it.
+                 -- Note: Handling the constraint creation carefully
+                 ALTER TABLE chat_conversations ADD CONSTRAINT chat_conversations_tenant_channel_user_key UNIQUE (tenant_id, channel, external_user_id);
+            EXCEPTION WHEN OTHERS THEN
+                 -- Fallback if duplicates exist or tenant_id issues
+                 RAISE NOTICE 'Could not constraint unique chat_conversations';
+            END;
+        END $$;
+
+
+        -- 2. chat_media
+        CREATE TABLE IF NOT EXISTS chat_media (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id INTEGER, 
+            channel VARCHAR(32) NOT NULL,
+            provider_media_id VARCHAR(128),
+            media_type VARCHAR(32) NOT NULL,
+            mime_type VARCHAR(64),
+            file_name VARCHAR(255),
+            file_size INTEGER,
+            storage_url TEXT NOT NULL,
+            preview_url TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        -- 3. chat_messages
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id INTEGER, 
+            conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+            role VARCHAR(32) NOT NULL,
+            message_type VARCHAR(32) NOT NULL DEFAULT 'text',
+            content TEXT,
+            media_id UUID REFERENCES chat_media(id),
+            human_override BOOLEAN NOT NULL DEFAULT false,
+            sent_by_user_id TEXT, 
+            sent_from VARCHAR(64),
+            sent_context VARCHAR(64),
+            ycloud_message_id VARCHAR(128),
+            provider_status VARCHAR(32),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        -- Indexes
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages (conversation_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_chat_conversations_tenant ON chat_conversations (tenant_id, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_media ON chat_messages (media_id);
+
         -- 003_advanced_features.sql
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tokens_used BIGINT DEFAULT 0;
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tool_calls BIGINT DEFAULT 0;
@@ -235,16 +310,24 @@ class ToolResponse(BaseModel):
     error: Optional[ToolError] = None
     meta: Optional[Dict[str, Any]] = None
 
+class InboundMedia(BaseModel):
+    type: str
+    url: str
+    mime_type: Optional[str] = None
+    file_name: Optional[str] = None
+    provider_id: Optional[str] = None
+
 class InboundChatEvent(BaseModel):
     provider: str
     event_id: str
     provider_message_id: str
     from_number: str
     to_number: Optional[str] = None
-    text: str
+    text: Optional[str] = None # made optional for pure media messages
     customer_name: Optional[str] = None
     event_type: str
     correlation_id: str
+    media: Optional[List[InboundMedia]] = None
 
 class OrchestratorMessage(BaseModel):
     part: Optional[int] = Field(None, description="The sequence number of this message.")
@@ -721,7 +804,130 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
         return OrchestratorResult(status="duplicate", send=False)
         
     redis_client.set(f"processed:{event_id}", "1", ex=86400)
+    
+    # --- 1. Conversation & Lockout Management ---
+    # Resolve Conversation ID using (channel, external_user_id)
+    # Typically channel="whatsapp", external_user_id=event.from_number
+    channel = "whatsapp" # Default for now, could be passed in event
+    # Ensure tenant_id is resolved or defaulted (since table requires it)
+    # We'll use a placeholder or resolve based on 'to_number' (Bot Phone)
+    
+    # Try to find existing conversation
+    # We also fetch tenant_id to reuse it
+    conv = await db.pool.fetchrow("""
+        SELECT id, tenant_id, status, human_override_until 
+        FROM chat_conversations 
+        WHERE channel = $1 AND external_user_id = $2
+    """, channel, event.from_number)
+    
+    conv_id = None
+    is_locked = False
+    
+    if conv:
+        conv_id = conv['id']
+        # Check Lockout
+        if conv['human_override_until'] and conv['human_override_until'] > datetime.now().astimezone():
+            is_locked = True
+    else:
+        # Create new conversation
+        # Need tenant_id. Resolve from tokens or default.
+        # Since 'tenants' table exists, we should try to link it.
+        # Lookup by to_number (Bot Phone)
+        tenant_row = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number = $1", event.to_number)
+        tenant_id = tenant_row['id'] if tenant_row else 1 # Default to 1 if not found
+        
+        conv_id = await db.pool.fetchval("""
+            INSERT INTO chat_conversations (
+                id, tenant_id, channel, external_user_id, display_name, status, created_at, updated_at
+            ) VALUES (
+                gen_random_uuid(), $1, $2, $3, $4, 'open', NOW(), NOW()
+            ) RETURNING id
+        """, tenant_id, channel, event.from_number, event.customer_name or event.from_number)
 
+    # --- 2. Handle Echoes (Human Messages from App) ---
+    is_echo = False
+    # Check extra fields in event or implicit type
+    # For now, InboundChatEvent might need extending or we check payload properties if passed loosely
+    # User's spec said: "whatsapp.smb.message.echoes = true" in webhook
+    # The 'whatsapp_service' needs to pass this flag. 
+    # Let's assume 'event_type' == 'whatsapp.message.echo' or implicit flag in extra fields?
+    # User plan: "Handle Echo events: Insert human message, set human_override_until (+24h), abort AI."
+    # We will assume if event_type is 'echo' or similar custom logic.
+    if event.event_type == "whatsapp.message.echo": 
+        is_echo = True
+        
+    if is_echo:
+        # 2.1 Update Lockout
+        lockout_time = datetime.now() + timedelta(hours=24)
+        await db.pool.execute("""
+            UPDATE chat_conversations 
+            SET human_override_until = $1, status = 'human_override', updated_at = NOW(), last_message_at = NOW(), last_message_preview = $2
+            WHERE id = $3
+        """, lockout_time, event.text[:50], conv_id)
+        
+        # 2.2 Insert Message
+        await db.pool.execute("""
+            INSERT INTO chat_messages (
+                id, tenant_id, conversation_id, role, content, 
+                human_override, sent_from, sent_context, created_at
+            ) VALUES (
+                gen_random_uuid(), (SELECT tenant_id FROM chat_conversations WHERE id=$1), $1, 'human_supervisor', $2,
+                TRUE, 'webhook', 'whatsapp_echo', NOW()
+            )
+        """, conv_id, event.text)
+        
+        return OrchestratorResult(status="ignored", send=False, text="Echo handled")
+        
+    # --- 3. Handle User Message (Inbound) ---
+    
+    # Handle Media if present
+    media_id = None
+    message_type = "text"
+    if event.media and len(event.media) > 0:
+        m = event.media[0] # Assuming single media per message for now
+        message_type = m.type
+        # Persist Media
+        media_id = await db.pool.fetchval("""
+            INSERT INTO chat_media (
+                id, tenant_id, channel, provider_media_id, media_type, 
+                mime_type, file_name, storage_url, created_at
+            ) VALUES (
+                gen_random_uuid(), $1, $2, $3, $4, 
+                $5, $6, $7, NOW()
+            ) RETURNING id
+        """, tenant_id, channel, m.provider_id, m.type, m.mime_type or "application/octet-stream", m.file_name, m.url)
+    
+    # Store User Message
+    correlation_id = event.correlation_id or str(uuid.uuid4())
+    content = event.text or "" # Can be empty if just image
+    
+    await db.pool.execute("""
+        INSERT INTO chat_messages (
+            id, tenant_id, conversation_id, role, content, 
+            correlation_id, created_at, message_type, media_id
+        ) VALUES (
+            gen_random_uuid(), (SELECT tenant_id FROM chat_conversations WHERE id=$1), $1, 'user', $2,
+            $3, NOW(), $4, $5
+        )
+    """, conv_id, content, correlation_id, message_type, media_id)
+    
+    # Update Conversation Metadata
+    preview_text = content[:50] if content else f"[{message_type}]"
+    await db.pool.execute("""
+        UPDATE chat_conversations 
+        SET last_message_at = NOW(), last_message_preview = $1, updated_at = NOW()
+        WHERE id = $2
+    """, preview_text, conv_id)
+
+    # CHECK LOCKOUT: If locked, Abort AI
+    if is_locked:
+        logger.info("ai_locked_by_human_override", conversation_id=str(conv_id))
+        return OrchestratorResult(status="ignored", send=False, text="Conversation locked by human override")
+
+
+
+    # --- 4. Invoke Agent (If not locked) ---
+    
     # Chat History
     session_id = f"{event.from_number}"
     memory = ConversationBufferMemory(
@@ -730,19 +936,10 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
         chat_memory=RedisChatMessageHistory(url=REDIS_URL, session_id=session_id)
     )
     
-    # --- Dynamic Agent Loading ---
-    # Use to_number (business) if provided, fallback to from_number (testing)
+    # Dynamic Agent Loading
     tenant_lookup = event.to_number or event.from_number
     executor = await get_agent_executable(tenant_phone=tenant_lookup)
     
-    # Store User Message
-    correlation_id = str(uuid.uuid4())
-    await db.pool.execute(
-        "INSERT INTO chat_messages (correlation_id, role, content, from_number) VALUES ($1, $2, $3, $4)",
-        correlation_id, "user", event.text, event.from_number
-    )
-    
-        # Invoke Agent
     try:
         inputs = {"input": event.text, "chat_history": memory.chat_memory.messages}
         result = await executor.ainvoke(inputs)
@@ -848,20 +1045,22 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
 
 
         # Store Assistant Response
-        await db.pool.execute(
-            "INSERT INTO chat_messages (correlation_id, role, content, from_number) VALUES ($1, $2, $3, $4)",
-            correlation_id, "assistant", output.json() if hasattr(output, 'json') else json.dumps(output), "Bot"
-        )
+        raw_output_str = output.json() if hasattr(output, 'json') else json.dumps(output)
+        
+        await db.pool.execute("""
+            INSERT INTO chat_messages (
+                id, tenant_id, conversation_id, role, content, correlation_id, created_at
+            ) VALUES (
+                gen_random_uuid(), (SELECT tenant_id FROM chat_conversations WHERE id=$1), $1, 'assistant', $2, $3, NOW()
+            )
+        """, conv_id, raw_output_str, correlation_id)
         
         # Track Usage
         await db.pool.execute("UPDATE tenants SET total_tool_calls = total_tool_calls + 1 WHERE bot_phone_number = $1", event.from_number)
         
-        # Fail-safe: Update default tenant if specific not found (optional)
-        # await db.pool.execute("UPDATE tenants SET total_tool_calls = total_tool_calls + 1 WHERE bot_phone_number = '5491100000000'")
-
         # Update Memory
         memory.chat_memory.add_user_message(event.text)
-        memory.chat_memory.add_ai_message(output.json() if hasattr(output, 'json') else json.dumps(output))
+        memory.chat_memory.add_ai_message(raw_output_str)
 
         return OrchestratorResult(
             status="ok", 

@@ -68,6 +68,7 @@ function showView(viewId, event = null) {
     if (viewId === 'tools') loadTools();
     if (viewId === 'analytics') loadAnalytics();
     if (viewId === 'console') loadConsoleEvents();
+    if (viewId === 'chats') loadChats();
 }
 
 // Modal handling
@@ -2861,3 +2862,207 @@ window.configureTool = configureTool;
 window.deleteTool = deleteTool;
 window.loadYCloudConfig = loadYCloudConfig;
 window.testTenantConnection = testTenantConnection;
+// --- Chats View Logic (Human-in-the-Loop) ---
+
+let chatsCache = [];
+let currentChatPhone = null;
+
+// --- Chat View (Human-in-the-Loop) Logic ---
+
+let activeChatId = null;
+let activeChatPoll = null;
+
+async function loadChats() {
+    const listContainer = document.getElementById('chat-list-items');
+    // Only show loading if empty to prevent flickering on poll
+    if (listContainer.children.length === 0 || listContainer.innerHTML.includes('Cargando')) {
+        listContainer.innerHTML = '<div class="chat-loading">Cargando conversaciones...</div>';
+    }
+
+    try {
+        const chats = await adminFetch('/admin/chats');
+        if (!chats || chats.length === 0) {
+            listContainer.innerHTML = '<div class="chat-empty">No hay conversaciones activas</div>';
+            return;
+        }
+
+        // Sort: Human Override active first, then by Last Message
+        chats.sort((a, b) => {
+            const aLocked = a.human_override_until && new Date(a.human_override_until) > new Date();
+            const bLocked = b.human_override_until && new Date(b.human_override_until) > new Date();
+            if (aLocked !== bLocked) return bLocked ? 1 : -1;
+            return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
+        });
+
+        // Render List
+        listContainer.innerHTML = '';
+        chats.forEach(chat => {
+            const div = document.createElement('div');
+            div.className = `chat-item ${activeChatId === chat.id ? 'active' : ''}`;
+            div.onclick = () => selectChat(chat.id, chat);
+
+            const time = chat.last_message_at ? new Date(chat.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            const isLocked = chat.human_override_until && new Date(chat.human_override_until) > new Date();
+            const lockedIcon = isLocked ? '<span style="color: #ffd700; margin-right:5px;">👤</span>' : '';
+            const statusClass = isLocked ? 'status-locked' : 'status-auto';
+
+            div.innerHTML = `
+                <div class="chat-item-avatar">${chat.avatar_url || '👤'}</div>
+                <div class="chat-item-info">
+                    <div class="chat-item-header">
+                        <span class="chat-name">${chat.display_name || chat.external_user_id}</span>
+                        <span class="chat-time">${time}</span>
+                    </div>
+                    <div class="chat-preview">
+                        ${lockedIcon} ${chat.last_message_preview || 'Nueva conversación'}
+                    </div>
+                </div>
+                <div class="chat-status-indicator ${statusClass}"></div>
+            `;
+            listContainer.appendChild(div);
+        });
+    } catch (err) {
+        console.error("Error loading chats:", err);
+        listContainer.innerHTML = `<div class="chat-error">Error: ${err.message}</div>`;
+    }
+}
+
+async function selectChat(chatId, chatObj = null) {
+    activeChatId = chatId;
+
+    // UI Updates
+    document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
+    // Find and highlight (might rely on next loadChats poll, but we force active class here if found)
+    // We can iterate listContainer children to find matching onclick handler? Hard.
+    // We just rely on re-render or finding by text? No, safer to just wait for poll or rebuild list if needed.
+    // Actually, let's keep it simple: loadChats() calls render which highlights activeChatId.
+    // Calling loadChats() here might be overkill, so we just set the global ID.
+
+    document.getElementById('chat-empty-state').style.display = 'none';
+    document.getElementById('chat-interface').style.display = 'flex';
+
+    if (chatObj) {
+        document.getElementById('chat-current-phone').textContent = chatObj.display_name || chatObj.external_user_id;
+    }
+
+    // Initial Load
+    await loadChatHistory(chatId);
+}
+
+async function loadChatHistory(chatId) {
+    const messagesArea = document.getElementById('chat-messages-area');
+    // loading spinner only if empty?
+    if (messagesArea.children.length === 0) {
+        messagesArea.innerHTML = '<div class="chat-loading">Cargando historial...</div>';
+    }
+
+    try {
+        const messages = await adminFetch(`/admin/chats/${chatId}/messages`);
+
+        messagesArea.innerHTML = '';
+
+        // Filter duplicates if any? DB should be unique.
+
+        messages.forEach(msg => {
+            renderMessageBubble(msg, messagesArea);
+        });
+
+        // Scroll to bottom
+        messagesArea.scrollTop = messagesArea.scrollHeight;
+
+    } catch (err) {
+        messagesArea.innerHTML = `<div class="chat-error">Error cargando mensajes: ${err.message}</div>`;
+    }
+}
+
+function renderMessageBubble(msg, container) {
+    const div = document.createElement('div');
+    const isUser = msg.role === 'user';
+    const isHuman = msg.human_override || msg.role === 'human_supervisor';
+    const isAssistant = msg.role === 'assistant';
+
+    let bubbleClass = 'bot';
+    if (isUser) bubbleClass = 'user';
+    // Human sends as "bot" typically (right side) but with different style
+
+    div.className = `chat-bubble ${bubbleClass} ${isHuman ? 'human' : ''}`;
+
+    let contentHtml = '';
+    const mediaUrl = msg.storage_url || msg.preview_url;
+
+    if (msg.message_type === 'image') {
+        const caption = msg.content || '';
+        contentHtml = `<img src="${mediaUrl || '#'}" class="chat-media-img" loading="lazy" onclick="window.open('${mediaUrl}', '_blank')">`;
+        if (caption) contentHtml += `<div class="caption">${caption}</div>`;
+    } else if (msg.message_type === 'audio') {
+        contentHtml = `<audio controls src="${mediaUrl || '#'}"></audio>`;
+        if (msg.content) contentHtml += `<div class="transcription">🎤 ${msg.content}</div>`;
+    } else if (msg.message_type === 'document') {
+        contentHtml = `<div class="file-attachment">
+            <span class="icon">📄</span> 
+            <a href="${mediaUrl}" target="_blank">Ver Documento</a>
+         </div>`;
+        if (msg.content) contentHtml += `<div class="caption">${msg.content}</div>`;
+    } else {
+        // Text
+        contentHtml = `<p>${msg.content || ''}</p>`;
+    }
+
+    const time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Status Icon
+    let statusIcon = '';
+    if (isHuman) statusIcon = '<span title="Agente Humano">👤</span>';
+    if (isAssistant) statusIcon = '<span>🤖</span>';
+
+    div.innerHTML = `
+        <div class="bubble-content">
+            ${contentHtml}
+        </div>
+        <div class="bubble-meta">
+            <span>${time}</span>
+            ${statusIcon}
+        </div>
+    `;
+
+    container.appendChild(div);
+}
+
+async function sendManualMessage() {
+    if (!activeChatId) return;
+    const input = document.getElementById('chat-input-text');
+    const text = input.value.trim();
+    if (!text) return;
+
+    const sendBtn = document.getElementById('chat-send-btn');
+    const originalText = sendBtn.innerText;
+    sendBtn.disabled = true;
+    sendBtn.innerText = '⏳';
+
+    try {
+        await adminFetch('/admin/messages/send', 'POST', {
+            conversation_id: activeChatId,
+            text: text,
+            human_override: true
+        });
+        input.value = '';
+
+        // Refresh immediately
+        await loadChatHistory(activeChatId);
+        loadChats(); // Update sidebar preview
+
+    } catch (err) {
+        showNotification(false, 'Error', 'No se pudo enviar el mensaje: ' + err.message);
+    } finally {
+        sendBtn.disabled = false;
+        sendBtn.innerText = originalText;
+    }
+}
+
+function filterChats() {
+    const query = document.getElementById('chat-search').value.toLowerCase();
+    document.querySelectorAll('.chat-item').forEach(item => {
+        const name = item.querySelector('.chat-name').innerText.toLowerCase();
+        item.style.display = name.includes(query) ? 'flex' : 'none';
+    });
+}

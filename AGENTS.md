@@ -1,54 +1,128 @@
-# AGENTS.md: Guía para Agentes de IA
+# AGENTS.md: Arquitectura y Guía de Agentes
 
-Este documento centraliza la información necesaria para que los agentes de inteligencia artificial comprendan y ejecuten tareas en este repositorio.
+Este documento centraliza la arquitectura, lógica de negocio e integración de los Agentes de IA en el ecosistema **PointCoach**.
 
-## Descripción del Proyecto
+## Visión General del Sistema
 
-Este proyecto es una implementación de un agente de chat para WhatsApp, diseñado para interactuar con la plataforma de e-commerce Tienda Nube. El sistema utiliza una arquitectura de microservicios distribuida con LangChain (v0.1.0) para la orquestación.
+El sistema opera bajo una arquitectura de microservicios centralizada en un "Orquestador Inteligente", apoyado por un Dashboard administrativo (`platform-ui`) y servicios satélite de percepción y ejecución.
 
-## Arquitectura de Microservicios
+### Diagrama de Arquitectura Lógica
 
-El sistema se compone de dos microservicios principales coordinados mediante `docker-compose.yml`:
+```mermaid
+graph TD
+    User((Usuario WhatsApp)) <-->|Audio/Texto/Media| WA[WhatsApp Service]
+    Admin((Administrador)) <-->|Dashboard Web| UI[Platform UI]
+    
+    subgraph "Core Intelligence"
+        WA -->|HTTP /webhook| ORCH[Orchestrator Service]
+        UI -->|HTTP /admin| ORCH
+        
+        ORCH <-->|LangChain| AI[Brain: GPT-4o-mini]
+        ORCH <-->|Read/Write| DB[(PostgreSQL)]
+        ORCH <-->|Locking/Cache| REDIS[(Redis)]
+    end
+    
+    subgraph "External Tools"
+        ORCH -->|API| TN[TiendaNube]
+        ORCH -->|Bridge| N8N[n8n Automation]
+        WA -->|Whisper| OPENAI[OpenAI Platform]
+    end
+```
 
-1.  **`whatsapp_service` (Puerta de Enlace & Percepción)**
-    *   **Propósito:** Interfaz con YCloud (WhatsApp).
-    *   **Buffering Inteligente:** Ventana de **16 segundos** para agrupar ráfagas de mensajes del usuario.
-    *   **Audio (Whisper):** Detecta notas de voz, las descarga de YCloud y las transcribe usando OpenAI Whisper (`whisper-1`) antes de enviarlas al orquestador.
-    *   **Entrega Secuencial:** Envía ráfagas de burbujas ("Burst Format") con indicadores de escritura y esperas de **4 segundos** para una experiencia humana.
-    *   **Tecnologías:** Python, FastAPI, Redis, requests.
+## Componentes del Sistema
 
-2.  **`orchestrator_service` (El Cerebro)**
-    *   **Propósito:** Procesa la lógica de negocio y decide qué herramientas usar.
-    *   **Modelo:** GPT-4o-mini (especializado en JSON estructurado).
-    *   **Estrategia Híbrida de Herramientas:**
-        *   **Directas (HTTP):** `productsq`, `productsq_category`, `orders` (Consulta directa a la API de Tienda Nube para velocidad).
-        *   **MCP (n8n Bridge):** `cupones_list`, `sendemail` (Vía puente manual HTTP/SSE que soporta handshakes stateful y persistencia de sesión).
-    *   **Reglas de Negocio:**
-        *   **Ventaneo:** Máximo 3-4 productos por turno con link a la web.
-        *   **Veracidad:** Descripciones textuales (extraídas palabra por palabra de la tienda).
-        *   **Normalización:** Corrección automática de errores ortográficos del cliente (ej: "matatarsiana" -> "metatarsianas").
-    *   **Seguridad:** Redis Lock de **80 segundos** por usuario para evitar colisiones y duplicados.
-    *   **Tecnologías:** LangChain 0.1.0, PostgreSQL (historial/dedup), Redis.
+### 1. Platform UI (Escritorio de Control)
+*   **Rol:** Interfaz visual para la administración de tenancies, configuración y **Human-in-the-Loop**.
+*   **Stack:** Vanilla JS (HTML5, CSS3, ES6+).
+*   **Funciones Clave:**
+    *   **Gestión de Tenants:** Alta de nuevas tiendas con números de teléfono únicos.
+    *   **Chat View (HITL):** Visualización en tiempo real de conversaciones, estados de bloqueo IA, y envío manual de mensajes.
+    *   **Gestión de Credenciales:** Sistema centralizado para configurar API Keys (YCloud, Meta, OpenAI).
 
-## Stack Tecnológico
+### 2. Orchestrator Service (El Cerebro)
+*   **Rol:** Núcleo de decisión y API administrativa.
+*   **Stack:** Python 3.11, FastAPI, LangChain.
+*   **Novedades v2.0 (HITL):**
+    *   **Control de Flujo:** Gestiona la lógica de bloqueo de IA (`human_override`).
+    *   **Persistencia Centralizada:** Almacena todos los mensajes (User, AI, Human) en `chat_messages`.
+    *   **Endpoints Administrativos:** Provee APIs para listar chats, historial completo y envío manual.
+    *   **Ingesta de Media:** Procesa y almacena metadatos de imágenes, audios y documentos.
 
-*   **Lenguaje:** Python 3.11
-*   **Orquestación:** LangChain 0.1.0 (PINNED)
-*   **Bases de Datos:**
-    *   Redis: Buffering, Caching y Locking de concurrencia.
-    *   PostgreSQL: Persistencia de mensajes y deduplicación.
-*   **Seguridad:** Firma HMAC para webhooks y `X-Internal-Token` para red cerrada.
+### 3. WhatsApp Service (Percepción y Entrega)
+*   **Rol:** Pasarela de comunicación con YCloud/Meta.
+*   **Stack:** Python, FastAPI.
+*   **Capacidades:**
+    *   **Manejo de Media:** Extrae metadatos de imágenes/docs y los envía INMEDIATAMENTE al orquestador.
+    *   **Detección de Echoes:** Identifica mensajes enviados desde el celular físico (WhatsApp App) y los remite como "Human Messages" para activar el bloqueo de IA.
+    *   **Transcrpción de Audio:** Usa Whisper para notas de voz.
+    *   **Buffering de Texto:** Agrupa mensajes de texto cortos (ventana de 2s) para mejorar el contexto de la IA.
 
-## Lógica de Conversación
+## Human-in-the-Loop (HITL) Architecture
 
-1.  **Entrada:** `whatsapp_service` recibe texto o audio. Si es audio, lo transcribe.
-2.  **Buffer:** Se acumulan mensajes en Redis durante un período de silencio de 2s (máx 16s total).
-3.  **Chat:** El Orquestador recibe el bloque de texto, consulta el historial en Postgres y ejecuta tools. Genera una respuesta JSON con una lista de mensajes.
-4.  **Salida:** `whatsapp_service` recorre la lista enviando imagen y texto por separado con delays de 4s para un efecto natural.
+El sistema implementa un modelo estricto de intervención humana. La IA está subordinada a la acción humana.
 
-## Variables Críticas
-Asegúrate de que ambos servicios tengan cargadas:
-- `OPENAI_API_KEY` (Para GPT-4 y Whisper)
-- `TIENDANUBE_SERVICE_URL` y tokens correspondientes.
-- `YCLOUD_API_KEY` y `YCLOUD_WEBHOOK_SECRET`.
-- `INTERNAL_API_TOKEN`.
+### 1. Modelo de Datos (`chat_conversations` & `chat_messages`)
+
+La "verdad" del sistema reside en PostgreSQL, tabla `chat_messages`.
+
+**Tabla `chat_conversations`:**
+*   `status`: `open`, `human_override`, `closed`, `archived`.
+*   `human_override_until`: TIMESTAMP. Si `NOW() < human_override_until`, la IA **NO** responde.
+*   `last_message_at`: Para ordenamiento.
+
+**Tabla `chat_messages`:**
+*   `role`: `user`, `assistant`, `human_supervisor`, `system`.
+*   `message_type`: `text`, `image`, `audio`, `document`.
+*   `human_override`: BOOLEAN. Indica si el mensaje forzó el bloqueo de la IA.
+*   `media_id`: Link a la tabla `chat_media` con URLs de almacenamiento.
+
+### 2. Lógica de Bloqueo (AI Lockout)
+
+La IA se bloquea automáticamente por 24 horas (`human_override_until = NOW() + 24h`) cuando:
+1.  Un humano envía un mensaje desde el **Platform UI** (`/admin/messages/send`).
+2.  Un humano envía un mensaje desde la **App de WhatsApp** (detectado como evento `echo`).
+
+Durante el bloqueo:
+*   El Orquestador recibe los mensajes del usuario.
+*   Los persiste en la DB.
+*   **NO** invoca a LangChain/OpenAI.
+*   Retorna status `ignored` (Conversation locked).
+
+### 3. Manejo de Media
+
+*   **Ingesta:** WhatsApp Service extrae URLs y MimeTypes.
+*   **Almacenamiento:** Orquestador guarda en `chat_media`.
+*   **Visualización:** Platform UI renderiza burbujas multimedia (Imagen, Audio Player, Link Documento).
+
+## API Endpoints (Admin)
+
+### Chat Management
+*   `GET /admin/chats`: Lista conversaciones activas con estado de bloqueo y previews.
+*   `GET /admin/chats/{id}/messages`: Historial cronológico completo enriquecido con media.
+
+### Messaging
+*   `POST /admin/messages/send`:
+    *   Payload: `{ conversation_id, text, human_override: true }`
+    *   Efecto: Envía mensaje a WhatsApp, persiste como `human_supervisor`, activa bloqueo IA.
+
+### Credentials & Config
+*   `GET /admin/credentials`: Lista credenciales (masked).
+*   `POST /admin/credentials`: Crea o actualiza credenciales (atomic upsert).
+
+## Lógica de Agente y Reglas de Negocio
+
+El Prompt del Sistema (`system_prompt_template`) define reglas críticas que **todo modelo debe respetar**:
+
+### 1. Protocolo de Respuesta (Burbujas)
+Para presentar productos, el agente DEBE seguir una secuencia estricta de 8 pasos ("burbujas") para maximizar la conversión.
+
+### 2. Estrategia de Herramientas (Hybrid Tools)
+*   **Search (Directa):** `search_specific_products` (consultas específicas).
+*   **General (Fallback):** `browse_general_storefront` (exploración).
+
+## Guía para Desarrolladores
+
+1.  **Regla de Oro (Conectividad):** Nunca toques el orden de los middlewares en `main.py`. CORS va primero.
+2.  **Migraciones:** Usa SQL *idempotente* (con `IF NOT EXISTS`) dentro de `lifespan` en `main.py`.
+3.  **UI Updates:** Si cambias la API, actualiza `platform_ui/app.js` correspondientemente.
+4.  **HITL Integrity:** Nunca bypasses el check `human_override` en el endpoint `/chat`. La confianza del usuario depende de que el bot se calle cuando se le ordena.
