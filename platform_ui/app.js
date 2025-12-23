@@ -38,6 +38,9 @@ console.log('API_BASE detected:', API_BASE);
 console.log('Current location:', window.location.href);
 
 let currentView = 'overview';
+let activeChatId = null;
+let renderedMessageIds = new Set();
+let pollingInterval = null;
 
 // Navigation
 function showView(viewId, event = null) {
@@ -2869,9 +2872,6 @@ let currentChatPhone = null;
 
 // --- Chat View (Human-in-the-Loop) Logic ---
 
-let activeChatId = null;
-let activeChatPoll = null;
-
 async function loadChats() {
     const listContainer = document.getElementById('chat-list-items');
     // Only show loading if empty to prevent flickering on poll
@@ -2894,19 +2894,16 @@ async function loadChats() {
             return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
         });
 
-        // Render List
-        listContainer.innerHTML = '';
+        // Smart Render: Update existing or add new
         chats.forEach(chat => {
-            const div = document.createElement('div');
-            div.className = `chat-item ${activeChatId === chat.id ? 'active' : ''}`;
-            div.onclick = () => selectChat(chat.id, chat);
-
+            let existing = document.querySelector(`.chat-item[data-id="${chat.id}"]`);
             const time = chat.last_message_at ? new Date(chat.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
             const isLocked = chat.human_override_until && new Date(chat.human_override_until) > new Date();
             const lockedIcon = isLocked ? '<span style="color: #ffd700; margin-right:5px;">👤</span>' : '';
             const statusClass = isLocked ? 'status-locked' : 'status-auto';
+            const isActive = activeChatId === chat.id;
 
-            div.innerHTML = `
+            const innerHTML = `
                 <div class="chat-item-avatar">${chat.avatar_url || '👤'}</div>
                 <div class="chat-item-info">
                     <div class="chat-item-header">
@@ -2919,11 +2916,33 @@ async function loadChats() {
                 </div>
                 <div class="chat-status-indicator ${statusClass}"></div>
             `;
-            listContainer.appendChild(div);
+
+            if (existing) {
+                if (existing.innerHTML !== innerHTML || existing.classList.contains('active') !== isActive) {
+                    existing.innerHTML = innerHTML;
+                    existing.className = `chat-item ${isActive ? 'active' : ''}`;
+                }
+            } else {
+                const div = document.createElement('div');
+                div.className = `chat-item ${isActive ? 'active' : ''}`;
+                div.setAttribute('data-id', chat.id);
+                div.onclick = () => selectChat(chat.id, chat);
+                div.innerHTML = innerHTML;
+                listContainer.appendChild(div);
+            }
         });
+
+        // Remove old chats if needed (unlikely in this context but good for consistency)
+        document.querySelectorAll('.chat-item').forEach(el => {
+            const id = el.getAttribute('data-id');
+            if (!chats.find(c => c.id === id)) el.remove();
+        });
+
     } catch (err) {
         console.error("Error loading chats:", err);
-        listContainer.innerHTML = `<div class="chat-error">Error: ${err.message}</div>`;
+        if (listContainer.children.length === 0) {
+            listContainer.innerHTML = `<div class="chat-error">Error: ${err.message}</div>`;
+        }
     }
 }
 
@@ -2945,6 +2964,11 @@ async function selectChat(chatId, chatObj = null) {
         document.getElementById('chat-current-phone').textContent = chatObj.display_name || chatObj.external_user_id;
     }
 
+    // Reset history tracking
+    renderedMessageIds.clear();
+    const messagesArea = document.getElementById('chat-messages-area');
+    messagesArea.innerHTML = '';
+
     // Initial Load
     await loadChatHistory(chatId);
 }
@@ -2959,19 +2983,24 @@ async function loadChatHistory(chatId) {
     try {
         const messages = await adminFetch(`/admin/chats/${chatId}/messages`);
 
-        messagesArea.innerHTML = '';
-
-        // Filter duplicates if any? DB should be unique.
-
+        // Only append new messages
+        let hasNew = false;
         messages.forEach(msg => {
-            renderMessageBubble(msg, messagesArea);
+            if (!renderedMessageIds.has(msg.id)) {
+                if (messagesArea.querySelector('.chat-loading')) messagesArea.innerHTML = '';
+                renderMessageBubble(msg, messagesArea);
+                renderedMessageIds.add(msg.id);
+                hasNew = true;
+            }
         });
 
-        // Scroll to bottom
-        messagesArea.scrollTop = messagesArea.scrollHeight;
+        // Scroll to bottom if new messages added
+        if (hasNew) {
+            messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
 
     } catch (err) {
-        messagesArea.innerHTML = `<div class="chat-error">Error cargando mensajes: ${err.message}</div>`;
+        console.error("Error loading messages:", err);
     }
 }
 
@@ -3101,3 +3130,23 @@ function filterChats() {
         item.style.display = name.includes(query) ? 'flex' : 'none';
     });
 }
+
+// Background Polling
+function startPolling() {
+    if (pollingInterval) clearInterval(pollingInterval);
+
+    pollingInterval = setInterval(async () => {
+        // Only poll if window is visible or active? (Simpler for now: always while in chats view)
+        if (currentView === 'chats') {
+            await loadChats();
+            if (activeChatId) {
+                await loadChatHistory(activeChatId);
+            }
+        }
+    }, 4000); // 4 seconds
+}
+
+// Initialize
+window.onload = () => {
+    startPolling();
+};
