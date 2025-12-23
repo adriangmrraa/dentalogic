@@ -130,13 +130,6 @@ async def sync_environment():
 
 # --- Endpoints ---
 
-@router.get("/bootstrap", dependencies=[Depends(verify_admin_token)])
-async def bootstrap():
-    """Initial load for the dashboard."""
-    # 1. Sync Env Vars to DB so they appear in UI
-    await sync_environment()
-
-    # Get tenants count
 
 class HumanOverrideModel(BaseModel):
     enabled: bool
@@ -148,6 +141,15 @@ class ConversationModel(BaseModel):
     status: str
     last_message_at: Optional[datetime] = None
     human_override_until: Optional[datetime] = None
+
+@router.get("/bootstrap", dependencies=[Depends(verify_admin_token)])
+async def bootstrap():
+    """Initial load for the dashboard."""
+    # 1. Sync Env Vars to DB so they appear in UI
+    await sync_environment()
+
+    # Get tenants count
+    tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants")
     
     # Get last activity
     last_inbound = await db.pool.fetchval("SELECT MAX(received_at) FROM inbound_messages")
