@@ -497,7 +497,7 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
         except:
             raise HTTPException(status_code=503, detail="Database connection pool not initialized (Check DSN/Connectivity)")
 
-    # Normalize phone number (strip + if present)
+    # Normal phone number (strip + if present)
     clean_phone = tenant_phone.lstrip('+')
     logger.info("tenant_lookup_attempt", raw=tenant_phone, cleaned=clean_phone)
 
