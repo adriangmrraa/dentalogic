@@ -33,6 +33,7 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 from langchain.memory import ConversationBufferMemory
 from langchain_community.chat_message_histories import RedisChatMessageHistory
+from langchain_core.messages import SystemMessage
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 from db import db
@@ -618,8 +619,9 @@ CONOCIMIENTO DE TIENDA:
         sys_template = sys_template.replace("{STORE_DESCRIPTION}", description)
 
     # 2. Construct Prompt Object
+    # Use SystemMessage literal to avoid LangChain parsing curly braces in JSON/Names as variables
     prompt = ChatPromptTemplate.from_messages([
-        ("system", sys_template),
+        SystemMessage(content=sys_template),
         MessagesPlaceholder(variable_name="chat_history"),
         ("user", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
