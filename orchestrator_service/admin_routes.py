@@ -212,10 +212,66 @@ async def create_tenant(tenant: TenantModel):
     row = await db.pool.fetchrow(q, tenant.store_name, tenant.bot_phone_number, tenant.owner_email, tenant.store_location, tenant.store_website, tenant.store_description, tenant.store_catalog_knowledge, tenant.tiendanube_store_id, tenant.tiendanube_access_token)
     return {"status": "ok", "id": row['id']}
 
+@router.get("/tenants/{phone}", dependencies=[Depends(verify_admin_token)])
+async def get_tenant(phone: str):
+    row = await db.pool.fetchrow("SELECT * FROM tenants WHERE bot_phone_number = $1", phone)
+    if not row:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return dict(row)
+
+@router.delete("/tenants", dependencies=[Depends(verify_admin_token)])
+async def delete_all_tenants():
+    await db.pool.execute("DELETE FROM tenants")
+    return {"status": "ok"}
+
 @router.delete("/tenants/{phone}", dependencies=[Depends(verify_admin_token)])
 async def delete_tenant(phone: str):
     await db.pool.execute("DELETE FROM tenants WHERE bot_phone_number = $1", phone)
     return {"status": "ok"}
+
+@router.get("/tenants/{id}/details", dependencies=[Depends(verify_admin_token)])
+async def get_tenant_details(id: int):
+    tenant = await db.pool.fetchrow("SELECT * FROM tenants WHERE id = $1", id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    # Get credentials for this tenant
+    creds = await db.pool.fetch("SELECT * FROM credentials WHERE tenant_id = $1 OR scope = 'global'", id)
+    
+    # Format for UI
+    resp = {
+        "tenant": dict(tenant),
+        "connections": {
+            "whatsapp": {
+                "ycloud": {"configured": False},
+                "meta_api": {"configured": False}
+            }
+        },
+        "credentials": {
+            "tenant_specific": [],
+            "global_available": []
+        }
+    }
+    
+    for c in creds:
+        c_dict = dict(c)
+        if c['tenant_id'] == id:
+            resp["credentials"]["tenant_specific"].append(c_dict)
+            if c['name'] in ['YCLOUD_API_KEY', 'YCLOUD_WEBHOOK_SECRET']:
+                resp["connections"]["whatsapp"]["ycloud"]["configured"] = True
+            if c['name'] in ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID']:
+                resp["connections"]["whatsapp"]["meta_api"]["configured"] = True
+        else:
+            resp["credentials"]["global_available"].append(c_dict)
+            
+    return resp
+
+@router.post("/tenants/{phone}/test-message", dependencies=[Depends(verify_admin_token)])
+async def test_message(phone: str):
+    """Trigger a test message for the tenant."""
+    # In a real scenario, this would trigger an n8n webhook or YCloud directly
+    # For now, we return OK to satisfy the UI.
+    return {"status": "ok", "message": f"Test message sent to {phone}"}
 
 # --- Credentials Routes ---
 

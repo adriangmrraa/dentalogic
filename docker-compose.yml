@@ -8,6 +8,11 @@ services:
     environment:
       - PORT=3000
       - ORCHESTRATOR_URL=http://orchestrator_service:8000
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
       - orchestrator_service
 
@@ -29,7 +34,7 @@ services:
     volumes:
       - ./orchestrator_service:/app
     environment:
-      - WHATSAPP_SERVICE_URL=http://whatsapp_service:8000
+      - WHATSAPP_SERVICE_URL=http://whatsapp_service:8002
       - REDIS_URL=redis://redis:6379
       - POSTGRES_DSN=${POSTGRES_DSN}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -46,7 +51,7 @@ services:
   whatsapp_service:
     build: ./whatsapp_service
     ports:
-      - "8002:8000"
+      - "8002:8002"
     volumes:
       - ./whatsapp_service:/app
     environment:
@@ -56,7 +61,7 @@ services:
       - ORCHESTRATOR_SERVICE_URL=http://orchestrator_service:8000
       - REDIS_URL=redis://redis:6379
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:8002/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
