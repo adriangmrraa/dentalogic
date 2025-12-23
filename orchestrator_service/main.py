@@ -203,8 +203,8 @@ PRIORIDADES:
    - Si piden "bolsos", busca marcas o términos específicos del catálogo (ej: "Grishko", "Capezio").
    - NO inventes categorías.
 GATE: Usa `search_specific_products` SIEMPRE que pidan algo específico (ej: "medias", "puntas"). Usa `browse_general_storefront` SOLO si el usuario dice "qué tenés?" o "muéstrame todo" sin especificar.
-DESCRIPCION: {GLOBAL_STORE_DESCRIPTION}
-CONOCIMIENTO: {GLOBAL_STORE_CATALOG_KNOWLEDGE}'
+DESCRIPCION: {STORE_DESCRIPTION}
+CONOCIMIENTO: {STORE_CATALOG_KNOWLEDGE}'
         WHERE store_name = 'Pointe Coach' OR id = 39;
         """
         # Execute migration
@@ -444,10 +444,10 @@ async def search_specific_products(q: str):
     return result
 
 @tool
-async def productsq_category(category: str, keyword: str):
+async def search_by_category(category: str, keyword: str):
     """Search for products by category and keyword in Tienda Nube. Returns top 3 results simplified."""
     q = f"{category} {keyword}"
-    cache_key = f"productsq_category:{category}:{keyword}"
+    cache_key = f"search_by_category:{category}:{keyword}"
     cached = get_cached_tool(cache_key)
     if cached: return cached
     result = await call_tiendanube_api("/products", {"q": q, "per_page": 3})
@@ -455,8 +455,8 @@ async def productsq_category(category: str, keyword: str):
     return result
 
 @tool
-async def productsall():
-    """Get a general list of products from Tienda Nube (Top 3)."""
+async def browse_general_storefront():
+    """Browse the generic storefront (latest items). Use ONLY for vague requests like 'what do you have?' or 'show me catalogue'. DO NOT USE for specific items."""
     cache_key = "productsall"
     cached = get_cached_tool(cache_key)
     if cached: return cached
@@ -482,7 +482,7 @@ async def sendemail(subject: str, text: str):
     """Send an email to support or customer via n8n MCP."""
     return await call_mcp_tool("sendemail", {"Subject": subject, "Text": text})
 
-tools = [productsq, productsq_category, productsall, cupones_list, orders, sendemail]
+tools = [search_specific_products, search_by_category, browse_general_storefront, cupones_list, orders, sendemail]
 
 from langchain.output_parsers import PydanticOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
@@ -520,7 +520,7 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
         f"%{short_phone}"
     )
     if not tenant:
-        logger.warning("tenant_lookup_failed", searched=[clean_phone, f"+{clean_phone}"], note="Verify DB entry matches YCloud 'to' number")
+        logger.warning("tenant_lookup_failed", searched=[tenant_phone, f"+{tenant_phone}"], note="Verify DB entry matches YCloud 'to' number")
     else:
         logger.info("tenant_lookup_success", store=tenant['store_name'])
 
@@ -548,7 +548,7 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
          conn_success = True
          
     if not conn_success:
-        logger.warning("no_credentials_found", searched_phone=clean_phone, note="Check both DB 'tenants' table and Global Env Vars")
+        logger.warning("no_credentials_found", searched_phone=tenant_phone, note="Check both DB 'tenants' table and Global Env Vars")
     
     # Default Prompt if DB is empty or tenant not found
     sys_template = ""
@@ -586,7 +586,7 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
         # Dynamic Fallback Prompt
         sys_template = f"""Eres el asistente virtual de {store_name}.
 CONTEXTO DE LA TIENDA:
-{description}
+{{description}}
 
 REGLAS CRÍTICAS DE RESPUESTA:
 1. SALIDA: Responde SIEMPRE con el formato JSON de OrchestratorResponse (una lista de objetos "messages").
@@ -603,13 +603,13 @@ REGLAS CRÍTICAS DE RESPUESTA:
    - Burbuja 8: CTA Final con la URL general ({store_url}) en una línea nueva o invitación a Fitting si son puntas.
 5. FITTING: Si el usuario pregunta por "zapatillas de punta" por primera vez, recomienda SIEMPRE un fitting en la Burbuja 8.
 6. NO inventes enlaces. Usa los devueltos por las tools.
-7. USO DE CATALOGO: Tu variable {STORE_CATALOG_KNOWLEDGE} contiene las categorías y marcas reales.
+7. USO DE CATALOGO: Tu variable {{STORE_CATALOG_KNOWLEDGE}} contiene las categorías y marcas reales.
    - Antes de llamar a `search_specific_products`, REVISA el catálogo.
    - Si el usuario pide "bolsos", mira que marcas de bolsos hay y busca por marca o categoría exacta (ej: `search_specific_products("Bolsos")`).
    - Evita `browse_general_storefront` si hay un término de búsqueda claro.
    - Evita búsquedas genéricas que traigan "Zapatillas" cuando piden "Bolsos" (por coincidencias en descripción).
 CONOCIMIENTO DE TIENDA:
-{STORE_CATALOG_KNOWLEDGE}
+{{STORE_CATALOG_KNOWLEDGE}}
 """
 
     # Inject variables if they exist in the template string (simple replacement)
