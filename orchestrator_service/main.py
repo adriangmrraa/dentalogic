@@ -697,9 +697,11 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
         elif isinstance(output, str):
             try:
                 # Try to parse string as JSON first
+                # Try to parse string as JSON using robust regex
                 cleaned = output.strip()
-                if cleaned.startswith("```json"): cleaned = cleaned[7:].split("```")[0]
-                if cleaned.startswith("```"): cleaned = cleaned[3:].split("```")[0]
+                match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+                if match:
+                    cleaned = match.group(0)
                 
                 parsed_json = json.loads(cleaned.strip())
                 
