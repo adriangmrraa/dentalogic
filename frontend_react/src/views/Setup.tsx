@@ -40,7 +40,7 @@ export const Setup: React.FC = () => {
             setTestResult({ status: 'loading', message: 'Probando...' });
 
             if (step === 3) {
-                // Create store if needed
+                // Create storee if needed
                 const payload = {
                     store_name: formData.store_name,
                     bot_phone_number: formData.bot_phone_number,
