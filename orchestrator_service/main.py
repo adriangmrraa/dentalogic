@@ -540,7 +540,7 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
         knowledge = tenant['store_catalog_knowledge'] or ""
     else:
         # Dynamic Fallback Prompt
-sys_template = f"""Eres el asistente virtual de {store_name}.
+        sys_template = f"""Eres el asistente virtual de {store_name}.
 REGLAS CRÍTICAS DE RESPUESTA:
 1. SALIDA: Responde SIEMPRE con el formato JSON de OrchestratorResponse (una lista de objetos "messages").
 2. ESTILO: Tus respuestas deben ser naturales y amigables. El contenido de los mensajes NO debe parecer datos crudos.
