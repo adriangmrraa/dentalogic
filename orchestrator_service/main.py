@@ -124,7 +124,10 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Connect to DB
-    try:
+        if not POSTGRES_DSN:
+            logger.error("missing_postgres_dsn", note="Check environment variables")
+            raise ValueError("POSTGRES_DSN is not set")
+
         await db.connect()
         logger.info("db_connected")
         
@@ -188,9 +191,12 @@ CONOCIMIENTO: {STORE_CATALOG_KNOWLEDGE}'
         logger.info("db_migrations_applied")
         
     except Exception as e:
-        logger.error("startup_error", error=str(e))
-        # Don't raise here if you want to allow app to start even if DB is down temporarily,
-        # but for critical DB apps, maybe better to fail.
+        logger.error("startup_critical_error", error=str(e), dsn_preview=POSTGRES_DSN[:15] if POSTGRES_DSN else "None")
+        # Optimization: We let it start, but health checks will fail.
+        # However, for debugging, let's stop it if it's a gaierror to force visibility.
+        if "Name or service not known" in str(e):
+             print(f"CRITICAL DNS ERROR: Cannot resolve database host. Check your POSTGRES_DSN: {POSTGRES_DSN}")
+             raise e
     
     yield
     
@@ -242,97 +248,90 @@ def get_cached_tool(key: str):
 # --- Tools & Helpers ---
 MCP_URL = "https://n8n-n8n.qvwxm2.easypanel.host/mcp/d36b3e5f-9756-447f-9a07-74d50543c7e8"
 
-def call_mcp_tool(tool_name: str, arguments: dict):
+async def call_mcp_tool(tool_name: str, arguments: dict):
     """Bridge to call tools on n8n MCP server with stateful session and SSE support."""
     logger.info("mcp_handshake_start", tool=tool_name)
     try:
-        session = requests.Session()
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream"
-        }
-        
-        # 1. Initialize
-        init_payload = {
-            "jsonrpc": "2.0",
-            "id": "init-" + str(uuid.uuid4())[:8],
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "Orchestrator-Bridge", "version": "1.0"}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream"
             }
-        }
-        init_resp = session.post(MCP_URL, json=init_payload, headers=headers, timeout=10)
-        
-        if init_resp.status_code != 200:
-            return f"MCP Init Failed ({init_resp.status_code}): {init_resp.text}"
-        
-        # Capture Mcp-Session-Id
-        session_id = init_resp.headers.get("Mcp-Session-Id")
-        if not session_id:
-            try:
-                result = init_resp.json().get("result", {})
-                session_id = result.get("meta", {}).get("sessionId") or result.get("sessionId")
-            except: pass
-        
-        if session_id:
-            logger.info("mcp_session_captured", session_id=session_id)
-            session.headers.update({"Mcp-Session-Id": session_id})
-
-        # 2. Notifications/initialized
-        notif_payload = {
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized"
-        }
-        session.post(MCP_URL, json=notif_payload, headers=headers, timeout=5)
-
-        # 3. Call Tool
-        call_payload = {
-            "jsonrpc": "2.0",
-            "id": "call-" + str(uuid.uuid4())[:8],
-            "method": "tools/call",
-            "params": {
-                "name": tool_name,
-                "arguments": arguments
+            
+            # 1. Initialize
+            init_payload = {
+                "jsonrpc": "2.0",
+                "id": "init-" + str(uuid.uuid4())[:8],
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "Orchestrator-Bridge", "version": "1.0"}
+                }
             }
-        }
-        
-        # MCP over SSE uses a stream. We need to catch the first relevant 'data:' line
-        resp = session.post(MCP_URL, json=call_payload, headers=headers, timeout=30, stream=True)
-        
-        if resp.status_code != 200:
-            raw_text = resp.text if not resp.encoding else "".join([chunk.decode(resp.encoding) for chunk in resp.iter_content(8192)])
-            return f"MCP Tool Call Error {resp.status_code}: {raw_text}"
-
-        all_text = ""
-        # Read the stream for 'data:' lines (Standard MCP over SSE)
-        for line in resp.iter_lines():
-            if not line: continue
-            line_str = line.decode('utf-8').strip()
-            if line_str.startswith("data: "):
-                data_json = line_str[6:]
+            init_resp = await client.post(MCP_URL, json=init_payload, headers=headers)
+            
+            if init_resp.status_code != 200:
+                return f"MCP Init Failed ({init_resp.status_code}): {init_resp.text}"
+            
+            # Capture Mcp-Session-Id
+            session_id = init_resp.headers.get("Mcp-Session-Id")
+            if not session_id:
                 try:
-                    msg = json.loads(data_json)
-                    # Look for the result or error in the JSON-RPC response
-                    if msg.get("id") == call_payload["id"] or "result" in msg or "error" in msg:
-                        if "result" in msg: return msg["result"]
-                        if "error" in msg: return f"MCP Tool Error: {msg['error']}"
+                    result = init_resp.json().get("result", {})
+                    session_id = result.get("meta", {}).get("sessionId") or result.get("sessionId")
                 except: pass
-            all_text += line_str + "\n"
+            
+            if session_id:
+                logger.info("mcp_session_captured", session_id=session_id)
+                client.headers.update({"Mcp-Session-Id": session_id})
 
-        # Fallback if no SSE 'data:' was found but we have body
-        if not all_text.strip():
-            return "MCP Server returned an empty response. Check if the n8n workflow is correctly sending a response."
-        
-        try:
-            # Maybe it wasn't SSE after all
-            json_resp = json.loads(all_text)
-            if "result" in json_resp: return json_resp["result"]
-            return json_resp
-        except:
-            return all_text
-        
+            # 2. Notifications/initialized
+            notif_payload = {
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized"
+            }
+            await client.post(MCP_URL, json=notif_payload, headers=headers)
+
+            # 3. Call Tool
+            call_payload = {
+                "jsonrpc": "2.0",
+                "id": "call-" + str(uuid.uuid4())[:8],
+                "method": "tools/call",
+                "params": {
+                    "name": tool_name,
+                    "arguments": arguments
+                }
+            }
+            
+            all_text = ""
+            async with client.stream("POST", MCP_URL, json=call_payload, headers=headers) as resp:
+                if resp.status_code != 200:
+                    raw_text = await resp.aread()
+                    return f"MCP Tool Call Error {resp.status_code}: {raw_text.decode()}"
+
+                async for line in resp.aiter_lines():
+                    if not line: continue
+                    if line.startswith("data: "):
+                        data_json = line[6:]
+                        try:
+                            msg = json.loads(data_json)
+                            if msg.get("id") == call_payload["id"] or "result" in msg or "error" in msg:
+                                if "result" in msg: return msg["result"]
+                                if "error" in msg: return f"MCP Tool Error: {msg['error']}"
+                        except: pass
+                    all_text += line + "\n"
+
+            if not all_text.strip():
+                return "MCP Server returned an empty response."
+            
+            try:
+                json_resp = json.loads(all_text)
+                if "result" in json_resp: return json_resp["result"]
+                return json_resp
+            except:
+                return all_text
+                
     except Exception as e:
         logger.error("mcp_bridge_error", tool=tool_name, error=str(e))
         return f"MCP Bridge Exception: {str(e)}"
@@ -375,7 +374,7 @@ def simplify_product(p):
         "imageUrl": image_url
     }
 
-def call_tiendanube_api(endpoint: str, params: dict = None):
+async def call_tiendanube_api(endpoint: str, params: dict = None):
     # Retrieve current tenant credentials from ContextVar
     store_id = tenant_store_id.get()
     token = tenant_access_token.get()
@@ -391,68 +390,71 @@ def call_tiendanube_api(endpoint: str, params: dict = None):
     }
     try:
         url = f"https://api.tiendanube.com/v1/{store_id}{endpoint}"
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        if response.status_code != 200:
-            return f"Error HTTP {response.status_code}: {response.text}"
-        
-        data = response.json()
-        
-        # Auto-simplify if it's a list of products
-        if isinstance(data, list) and "/products" in endpoint:
-            return [simplify_product(p) for p in data]
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=headers)
+            if response.status_code != 200:
+                logger.error("tiendanube_api_error", status=response.status_code, text=response.text)
+                return f"Error HTTP {response.status_code}: {response.text}"
             
-        return data
+            data = response.json()
+            
+            # Auto-simplify if it's a list of products
+            if isinstance(data, list) and "/products" in endpoint:
+                return [simplify_product(p) for p in data]
+                
+            return data
     except Exception as e:
+        logger.error("tiendanube_request_exception", error=str(e))
         return f"Request Error: {str(e)}"
 
 @tool
-def productsq(q: str):
+async def productsq(q: str):
     """Search for products by keyword in Tienda Nube. Returns top 3 results simplified."""
     cache_key = f"productsq:{q}"
     cached = get_cached_tool(cache_key)
     if cached: return cached
-    result = call_tiendanube_api("/products", {"q": q, "per_page": 3})
+    result = await call_tiendanube_api("/products", {"q": q, "per_page": 3})
     if isinstance(result, (dict, list)): set_cached_tool(cache_key, result, ttl=600)
     return result
 
 @tool
-def productsq_category(category: str, keyword: str):
+async def productsq_category(category: str, keyword: str):
     """Search for products by category and keyword in Tienda Nube. Returns top 3 results simplified."""
     q = f"{category} {keyword}"
     cache_key = f"productsq_category:{category}:{keyword}"
     cached = get_cached_tool(cache_key)
     if cached: return cached
-    result = call_tiendanube_api("/products", {"q": q, "per_page": 3})
+    result = await call_tiendanube_api("/products", {"q": q, "per_page": 3})
     if isinstance(result, (dict, list)): set_cached_tool(cache_key, result, ttl=600)
     return result
 
 @tool
-def productsall():
+async def productsall():
     """Get a general list of products from Tienda Nube (Top 3)."""
     cache_key = "productsall"
     cached = get_cached_tool(cache_key)
     if cached: return cached
-    result = call_tiendanube_api("/products", {"per_page": 3})
+    result = await call_tiendanube_api("/products", {"per_page": 3})
     if isinstance(result, (dict, list)): set_cached_tool(cache_key, result, ttl=600)
     return result
 
 @tool
-def cupones_list():
+async def cupones_list():
     """List active coupons and discounts from Tienda Nube via n8n MCP."""
-    return call_mcp_tool("cupones_list", {})
+    return await call_mcp_tool("cupones_list", {})
 
 @tool
-def orders(q: str):
+async def orders(q: str):
     """Search for order information directly in Tienda Nube API.
     Pass the order ID (without #) to retrieve status and details."""
     clean_q = q.replace("#", "").strip()
     # Using search parameter 'q' as seen in the successful n8n config
-    return call_tiendanube_api("/orders", {"q": clean_q})
+    return await call_tiendanube_api("/orders", {"q": clean_q})
 
 @tool
-def sendemail(subject: str, text: str):
+async def sendemail(subject: str, text: str):
     """Send an email to support or customer via n8n MCP."""
-    return call_mcp_tool("sendemail", {"Subject": subject, "Text": text})
+    return await call_mcp_tool("sendemail", {"Subject": subject, "Text": text})
 
 tools = [productsq, productsq_category, productsall, cupones_list, orders, sendemail]
 
@@ -474,9 +476,18 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
     Creates an AgentExecutor dynamically based on the Tenant's System Prompt in DB.
     """
     # 1. Fetch Tenant Context
+    if not db.pool:
+        try:
+            await db.connect()
+        except:
+            raise HTTPException(status_code=503, detail="Database connection pool not initialized (Check DSN/Connectivity)")
+
+    # Normalize phone number (strip + if present)
+    clean_phone = tenant_phone.lstrip('+')
+
     tenant = await db.pool.fetchrow(
-        "SELECT system_prompt_template, store_catalog_knowledge, tiendanube_store_id, tiendanube_access_token FROM tenants WHERE bot_phone_number = $1", 
-        tenant_phone
+        "SELECT system_prompt_template, store_catalog_knowledge, tiendanube_store_id, tiendanube_access_token FROM tenants WHERE bot_phone_number = $1 OR bot_phone_number = $2", 
+        clean_phone, f"+{clean_phone}"
     )
 
     # Set context variables for this execution
@@ -577,11 +588,7 @@ async def verify_internal_token(x_internal_token: str = Header(...)):
     if INTERNAL_API_TOKEN and x_internal_token != INTERNAL_API_TOKEN:
          raise HTTPException(status_code=401, detail="Invalid Internal Token")
 
-@app.on_event("startup")
-async def startup(): await db.connect()
-
-@app.on_event("shutdown")
-async def shutdown(): await db.disconnect()
+# Startup and Shutdown are handled by lifespan context manager.
 
 @app.post("/chat", response_model=OrchestratorResult)
 async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_token: str = Header(None)):
