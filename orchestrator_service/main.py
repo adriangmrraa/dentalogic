@@ -124,6 +124,7 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Connect to DB
+    try:
         if not POSTGRES_DSN:
             logger.error("missing_postgres_dsn", note="Check environment variables")
             raise ValueError("POSTGRES_DSN is not set")
