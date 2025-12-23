@@ -4,6 +4,7 @@ import hashlib
 import time
 import uuid
 import requests
+import re
 import redis
 import structlog
 import httpx
@@ -192,9 +193,13 @@ PRIORIDADES:
    NO uses claves como "message", "response", "answer".
 2. VERACIDAD: Usa tools.
 3. DIVISION: max 350 chars.
+4. BUSQUEDA: Antes de buscar, analiza {STORE_CATALOG_KNOWLEDGE}. 
+   - Si piden "bolsos", busca marcas o términos específicos del catálogo (ej: "Grishko", "Capezio").
+   - NO inventes categorías.
 GATE: Usa productsq si preguntan productos.
+DESCRIPCION: {STORE_DESCRIPTION}
 CONOCIMIENTO: {STORE_CATALOG_KNOWLEDGE}'
-        WHERE store_name = 'Pointe Coach' AND system_prompt_template IS NULL;
+        WHERE store_name = 'Pointe Coach' OR id = 39;
         """
         # Execute migration
         await db.pool.execute(migration_sql)
@@ -505,7 +510,7 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
     logger.info("tenant_lookup_attempt", raw=tenant_phone, search_suffix=short_phone)
 
     tenant = await db.pool.fetchrow(
-        "SELECT store_name, system_prompt_template, store_catalog_knowledge, tiendanube_store_id, tiendanube_access_token FROM tenants WHERE bot_phone_number LIKE $1", 
+        "SELECT store_name, system_prompt_template, store_catalog_knowledge, store_description, tiendanube_store_id, tiendanube_access_token FROM tenants WHERE bot_phone_number LIKE $1", 
         f"%{short_phone}"
     )
     if not tenant:
@@ -533,8 +538,10 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
         logger.warning("no_credentials_found", searched_phone=clean_phone, note="Check both Env Vars and DB 'tenants' table")
     
     # Default Prompt if DB is empty or tenant not found
+    # Default Prompt if DB is empty or tenant not found
     sys_template = ""
     knowledge = ""
+    description = ""
     
     store_name = "Pointe Coach"
     store_url = "https://www.pointecoach.shop"
@@ -546,9 +553,13 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
     if tenant and tenant['system_prompt_template']:
         sys_template = tenant['system_prompt_template']
         knowledge = tenant['store_catalog_knowledge'] or ""
+        description = tenant['store_description'] or ""
     else:
         # Dynamic Fallback Prompt
         sys_template = f"""Eres el asistente virtual de {store_name}.
+CONTEXTO DE LA TIENDA:
+{description}
+
 REGLAS CRÍTICAS DE RESPUESTA:
 1. SALIDA: Responde SIEMPRE con el formato JSON de OrchestratorResponse (una lista de objetos "messages").
 2. ESTILO: Tus respuestas deben ser naturales y amigables. El contenido de los mensajes NO debe parecer datos crudos.
@@ -564,12 +575,20 @@ REGLAS CRÍTICAS DE RESPUESTA:
    - Burbuja 8: CTA Final con la URL general ({store_url}) en una línea nueva o invitación a Fitting si son puntas.
 5. FITTING: Si el usuario pregunta por "zapatillas de punta" por primera vez, recomienda SIEMPRE un fitting en la Burbuja 8.
 6. NO inventes enlaces. Usa los devueltos por las tools.
+7. USO DE CATALOGO: Tu variable {STORE_CATALOG_KNOWLEDGE} contiene las categorías y marcas reales.
+   - Antes de llamar a `productsq`, REVISA el catálogo.
+   - Si el usuario pide "bolsos", mira que marcas de bolsos hay y busca por marca o categoría exacta.
+   - Evita búsquedas genéricas que traigan "Zapatillas" cuando piden "Bolsos" (por coincidencias en descripción).
+CONOCIMIENTO DE TIENDA:
+{STORE_CATALOG_KNOWLEDGE}
 """
 
     # Inject variables if they exist in the template string (simple replacement)
     # The user might have put {STORE_CATALOG_KNOWLEDGE} in the DB text.
     if "{STORE_CATALOG_KNOWLEDGE}" in sys_template:
         sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", knowledge)
+    if "{STORE_DESCRIPTION}" in sys_template:
+        sys_template = sys_template.replace("{STORE_DESCRIPTION}", description)
 
     # 2. Construct Prompt Object
     prompt = ChatPromptTemplate.from_messages([
