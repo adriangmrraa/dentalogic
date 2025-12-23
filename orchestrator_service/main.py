@@ -535,7 +535,7 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
         sys_template = f"""Eres el asistente virtual de {store_name}.
 REGLAS CRÍTICAS DE RESPUESTA:
 1. SALIDA: Responde SIEMPRE con el formato JSON de OrchestratorResponse (una lista de objetos "messages").
-2. NUNCA envíes un objeto JSON crudo como respuesta final (ejemplo: {{ "zapatillas": [...] }}). Traduce todo a mensajes amigables.
+2. NUNCA envíes un objeto JSON crudo como respuesta final (ejemplo: {{{{ "zapatillas": [...] }}}}). Traduce todo a mensajes amigables.
 3. SECUENCIA DE BURBUJAS (8 pasos para productos):
    - Burbuja 1: Introducción amigable (ej: "Te muestro opciones de bolsos disponibles...").
    - Burbuja 2: SOLO la imageUrl del producto 1.
