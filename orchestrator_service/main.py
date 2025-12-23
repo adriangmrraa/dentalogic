@@ -202,7 +202,7 @@ PRIORIDADES:
 4. BUSQUEDA: Antes de buscar, analiza {STORE_CATALOG_KNOWLEDGE}. 
    - Si piden "bolsos", busca marcas o términos específicos del catálogo (ej: "Grishko", "Capezio").
    - NO inventes categorías.
-GATE: Usa productsq si preguntan productos.
+GATE: Usa productsq si preguntan productos específicos (ej: "medias"). NUNCA uses productsall para búsquedas específicas.
 DESCRIPCION: {STORE_DESCRIPTION}
 CONOCIMIENTO: {STORE_CATALOG_KNOWLEDGE}'
         WHERE store_name = 'Pointe Coach' OR id = 39;
@@ -435,7 +435,7 @@ async def call_tiendanube_api(endpoint: str, params: dict = None):
 
 @tool
 async def productsq(q: str):
-    """Search for products by keyword in Tienda Nube. Returns top 3 results simplified."""
+    """Search for products by keyword (name, category, or brand). REQUIRED for specific requests (e.g. 'medias', 'puntas', 'grishko')."""
     cache_key = f"productsq:{q}"
     cached = get_cached_tool(cache_key)
     if cached: return cached
@@ -605,7 +605,8 @@ REGLAS CRÍTICAS DE RESPUESTA:
 6. NO inventes enlaces. Usa los devueltos por las tools.
 7. USO DE CATALOGO: Tu variable {STORE_CATALOG_KNOWLEDGE} contiene las categorías y marcas reales.
    - Antes de llamar a `productsq`, REVISA el catálogo.
-   - Si el usuario pide "bolsos", mira que marcas de bolsos hay y busca por marca o categoría exacta.
+   - Si el usuario pide "bolsos", mira que marcas de bolsos hay y busca por marca o categoría exacta (ej: `productsq("Bolsos")` o `productsq("Capezio")`).
+   - Evita `productsall` si hay un término de búsqueda claro.
    - Evita búsquedas genéricas que traigan "Zapatillas" cuando piden "Bolsos" (por coincidencias en descripción).
 CONOCIMIENTO DE TIENDA:
 {STORE_CATALOG_KNOWLEDGE}
