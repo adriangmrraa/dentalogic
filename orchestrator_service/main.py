@@ -245,6 +245,16 @@ async def lifespan(app: FastAPI):
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
             """,
+            # 9b. Chat Messages Repair (Ensure media_id exists)
+            """
+            DO $$
+            BEGIN
+                ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS media_id UUID;
+                ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS human_override BOOLEAN DEFAULT false;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Schema repair failed for chat_messages';
+            END $$;
+            """,
             # 10. System Events
             """
             CREATE TABLE IF NOT EXISTS system_events (
