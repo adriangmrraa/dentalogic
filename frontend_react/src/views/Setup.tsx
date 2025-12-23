@@ -51,7 +51,7 @@ export const Setup: React.FC = () => {
                 await fetchApi('/admin/tenants', { method: 'POST', body: payload });
                 setTestResult({ status: 'success', message: 'Tienda creada/actualizada correctamente.' });
             } else if (step === 4) {
-                await fetchApi('/health');
+                await fetchApi('/admin/diagnostics/healthz');
                 setTestResult({ status: 'success', message: 'Conexión con Orquestador: OK' });
             } else if (step === 5) {
                 // Send test msg

@@ -216,7 +216,7 @@ async function updateStats() {
     }
 
     try {
-        health = await adminFetch('/diagnostics/healthz');
+        health = await adminFetch('/admin/diagnostics/healthz');
     } catch (error) {
         console.warn('Failed to fetch health:', error);
         showNotification(false, 'Error de Salud', 'No se pudieron cargar los indicadores de salud');
@@ -468,11 +468,11 @@ async function loadAnalytics() {
 
     try {
         // Load analytics summary
-        const summary = await adminFetch(`/analytics/summary?tenant_id=${tenantFilter || 1}&from_date=${startDateStr}&to_date=${endDate}`);
+        const summary = await adminFetch(`/admin/analytics/summary?tenant_id=${tenantFilter || 1}&from_date=${startDateStr}&to_date=${endDate}`);
         displayAnalyticsSummary(summary);
 
         // Load recent events
-        const events = await adminFetch(`/telemetry/events?tenant_id=${tenantFilter || 1}&from_date=${startDateStr}&to_date=${endDate}&page_size=20`);
+        const events = await adminFetch(`/admin/telemetry/events?tenant_id=${tenantFilter || 1}&from_date=${startDateStr}&to_date=${endDate}&page_size=20`);
         displayAnalyticsEvents(events);
 
     } catch (error) {
@@ -1717,29 +1717,23 @@ async function deleteTenant(phoneNumber) {
     }
 }
 
-async function testTenantConnection(phoneNumber, storeId, token) {
-    if (!storeId || !token) {
-        showNotification(false, 'Sin Credenciales', 'Esta tienda no tiene credenciales configuradas');
-        return;
-    }
+async function testTenantConnection(botPhoneNumber) {
+    if (!botPhoneNumber) return;
+
+    showNotification(true, 'Iniciando Test', 'Enviando mensaje de prueba al bot...');
 
     try {
-        const result = await adminFetch('/diagnostics/tiendanube/test', 'POST', {
-            store_id: storeId,
-            access_token: token
-        });
-
-        if (result && result.status === 'OK') {
-            showNotification(true, 'Conexión Exitosa', `Tienda ${storeId} conectada correctamente`);
-            // Could update the status in the UI here
-            loadTenants(); // Refresh to show updated status
+        const res = await adminFetch(`/admin/tenants/${botPhoneNumber}/test-message`, 'POST');
+        if (res && res.status === 'ok') {
+            showNotification(true, 'Test Exitoso', 'El mensaje de prueba se procesó correctamente.');
         } else {
-            showNotification(false, 'Error de Conexión', result?.error || 'No se pudo conectar a Tienda Nube');
+            showNotification(false, 'Error de Test', 'El orquestador no pudo procesar el mensaje de prueba.');
         }
     } catch (error) {
-        showNotification(false, 'Error', `Error al probar conexión: ${error.message}`);
+        showNotification(false, 'Error de Conexión', `Error: ${error.message}`);
     }
 }
+
 
 async function deleteAllTenants() {
     if (!confirm('¿Estás seguro de que quieres ELIMINAR TODAS las tiendas? Esta acción no se puede deshacer.')) return;

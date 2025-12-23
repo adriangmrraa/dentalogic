@@ -30,7 +30,7 @@ export const Dashboard: React.FC = () => {
             try {
                 const [statsData, healthData] = await Promise.all([
                     fetchApi('/admin/stats'),
-                    fetchApi('/diagnostics/healthz')
+                    fetchApi('/admin/diagnostics/healthz')
                 ]);
                 setStats(statsData);
                 setHealth(healthData);
