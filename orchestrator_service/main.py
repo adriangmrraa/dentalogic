@@ -928,8 +928,7 @@ REGLAS CRÍTICAS DE RESPUESTA:
    - Burbuja 5: Descripción breve. Luego un salto de línea y la URL del producto.
    - Burbuja 6: SOLO la imageUrl del producto 3 (si hay).
    - Burbuja 7: Descripción breve. Luego un salto de línea y la URL del producto.
-   - Burbuja 8: CTA Final con la URL general ({store_url}) en una línea nueva o invitación a Fitting si son puntas.
-5. FITTING: Si el usuario pregunta por "zapatillas de punta" por primera vez, recomienda SIEMPRE un fitting en la Burbuja 8.
+   - Burbuja 8: CTA Final con la URL general ({store_url}) en una línea nueva.
 6. NO inventes enlaces. Usa los devueltos por las tools.
 7. USO DE CATALOGO: Tu variable {{STORE_CATALOG_KNOWLEDGE}} contiene las categorías y marcas reales.
    - Antes de llamar a `search_specific_products`, REVISA el catálogo.
@@ -947,7 +946,7 @@ CONOCIMIENTO DE TIENDA:
         
         # Build rules string from checkboxes
         granular_rules = []
-        if policy.get('rule_fitting'): granular_rules.append("- Solicitud de Fitting / Asesora / Turno")
+        if policy.get('rule_fitting'): granular_rules.append("- Fitting para ZAPATILLAS DE PUNTA: Si el usuario busca o pregunta por zapatillas de punta, OFRECER primero una asesoría personalizada de fitting. SOLO si el usuario acepta o pregunta específicamente por un turno/especialista, derivar inmediatamente.")
         if policy.get('rule_reclamo'): granular_rules.append("- Reclamos o tono negativo/enojado")
         if policy.get('rule_dolor'): granular_rules.append("- Mensajes sobre dolor, lesión o incomodidad fuerte")
         if policy.get('rule_talle'): granular_rules.append("- Ambigüedad de talle o modelo no resuelta en 1-2 preguntas")
@@ -966,8 +965,8 @@ INSTRUCCIONES ADICIONALES:
 "{handoff_rules}"
 
 ACCIONES OBLIGATORIAS:
-1. Si detectas estas intenciones, DETENER toda otra acción comercial.
-2. Ejecutar inmediatamente la tool `derivhumano` con los detalles correspondientes.
+1. Para reclamos, errores o casos críticos: DETENER toda otra acción y ejecutar `derivhumano` inmediatamente.
+2. Para casos de FITTING o Dudas de Talle: El procedimiento es OFRECER o sugerir la derivación primero. Si el usuario acepta o lo pide, ejecutar `derivhumano`.
 3. Informar al usuario de forma amigable que será contactado por el equipo humano.
 4. No mostrar productos ni enlaces comerciales en este caso.
 """
