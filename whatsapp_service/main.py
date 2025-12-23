@@ -266,6 +266,7 @@ def health(): return {"status": "ok"}
 
 @app.post("/webhook/ycloud")
 async def ycloud_webhook(request: Request):
+    logger.info("webhook_hit", headers=str(request.headers))
     await verify_signature(request)
     correlation_id = request.headers.get("traceparent") or str(uuid.uuid4())
     try: body = await request.json()
