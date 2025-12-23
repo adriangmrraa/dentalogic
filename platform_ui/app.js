@@ -39,6 +39,7 @@ console.log('Current location:', window.location.href);
 
 let currentView = 'overview';
 let activeChatId = null;
+let allChats = []; // Global store for chat metadata
 let renderedMessageIds = new Set();
 let pollingInterval = null;
 
@@ -3121,19 +3122,42 @@ async function loadChats() {
 async function selectChat(chatId, chatObj = null) {
     activeChatId = chatId;
 
+    // Resolve chatObj from global store if needed
+    if (!chatObj && allChats.length > 0) {
+        chatObj = allChats.find(c => c.id === chatId);
+    }
+
     // UI Updates
     document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
     // Find and highlight (might rely on next loadChats poll, but we force active class here if found)
-    // We can iterate listContainer children to find matching onclick handler? Hard.
-    // We just rely on re-render or finding by text? No, safer to just wait for poll or rebuild list if needed.
-    // Actually, let's keep it simple: loadChats() calls render which highlights activeChatId.
-    // Calling loadChats() here might be overkill, so we just set the global ID.
+    const activeItem = document.querySelector(`.chat-item[data-id="${chatId}"]`);
+    if (activeItem) activeItem.classList.add('active');
 
     document.getElementById('chat-empty-state').style.display = 'none';
     document.getElementById('chat-interface').style.display = 'flex';
 
     if (chatObj) {
         document.getElementById('chat-current-phone').textContent = chatObj.display_name || chatObj.external_user_id;
+
+        // Update Human Override Toggle State
+        const toggle = document.getElementById('human-override-toggle');
+        const label = document.getElementById('human-override-label');
+
+        // Logic: Check is_locked (if backend sends it) OR timestamp logic
+        // Ensuring we parse the timestamp correctly
+        let isLocked = chatObj.is_locked;
+        if (isLocked === undefined && chatObj.human_override_until) {
+            isLocked = new Date(chatObj.human_override_until) > new Date();
+        }
+
+        toggle.checked = !!isLocked;
+        if (isLocked) {
+            label.innerText = "Atención Humana";
+            label.style.color = "#ef4444"; // Red
+        } else {
+            label.innerText = "Agente Activo";
+            label.style.color = "#22c55e"; // Green
+        }
     }
 
     // Mobile View Toggle
