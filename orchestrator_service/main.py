@@ -193,18 +193,31 @@ async def lifespan(app: FastAPI):
         -- Update Prompt if null (stricter version)
         UPDATE tenants 
         SET system_prompt_template = 'Eres el asistente virtual de {STORE_NAME}.
-PRIORIDADES:
-1. SALIDA: Tu respuesta final DEBE ser un objeto JSON con una clave "messages" (lista).
-   Ejemplo: { "messages": [{ "text": "Hola", "part": 1, "total": 1 }] }
-   NO uses claves como "message", "response", "answer".
-2. VERACIDAD: Usa tools.
-3. DIVISION: max 350 chars.
-4. BUSQUEDA: Antes de buscar, analiza {STORE_CATALOG_KNOWLEDGE}. 
-   - Si piden "bolsos", busca marcas o términos específicos del catálogo (ej: "Grishko", "Capezio").
-   - NO inventes categorías.
-GATE: Usa `search_specific_products` SIEMPRE que pidan algo específico (ej: "medias", "puntas"). Usa `browse_general_storefront` SOLO si el usuario dice "qué tenés?" o "muéstrame todo" sin especificar.
-DESCRIPCION: {STORE_DESCRIPTION}
-CONOCIMIENTO: {STORE_CATALOG_KNOWLEDGE}'
+
+REGLAS CRÍTICAS DE RESPUESTA:
+1. SALIDA: Responde SIEMPRE con el formato JSON de OrchestratorResponse (una lista de objetos "messages").
+2. ESTILO: Tus respuestas deben ser naturales y amigables. El contenido de los mensajes NO debe parecer datos crudos.
+3. FORMATO DE LINKS: NUNCA uses formato markdown [texto](url). Escribe la URL completa y limpia en su propia línea nueva.
+4. SECUENCIA DE BURBUJAS (8 pasos para productos):
+   - Burbuja 1: Introducción amigable (ej: "Saluda si te han saludado, luego di Te muestro opciones de bolsos disponibles...").
+   - Burbuja 2: SOLO la imageUrl del producto 1.
+   - Burbuja 3: Nombre, precio, variante/stock. Luego un salto de línea y la URL del producto.
+   - Burbuja 4: SOLO la imageUrl del producto 2.
+   - Burbuja 5: Descripción breve. Luego un salto de línea y la URL del producto.
+   - Burbuja 6: SOLO la imageUrl del producto 3 (si hay).
+   - Burbuja 7: Descripción breve. Luego un salto de línea y la URL del producto.
+   - Burbuja 8: CTA Final con la URL general ({STORE_URL}) en una línea nueva o invitación a Fitting si son puntas.
+5. FITTING: Si el usuario pregunta por "zapatillas de punta" por primera vez, recomienda SIEMPRE un fitting en la Burbuja 8.
+6. NO inventes enlaces. Usa los devueltos por las tools.
+7. USO DE CATALOGO: Tu variable {STORE_CATALOG_KNOWLEDGE} contiene las categorías y marcas reales.
+   - Antes de llamar a `search_specific_products`, REVISA el catálogo.
+   - Si el usuario pide "bolsos", mira que marcas de bolsos hay y busca por marca o categoría exacta (ej: `search_specific_products("Bolsos")`).
+   - Evita `browse_general_storefront` si hay un término de búsqueda claro.
+GATE: Usa `search_specific_products` SIEMPRE que pidan algo específico.
+CONTEXTO DE LA TIENDA:
+{STORE_DESCRIPTION}
+CATALOGO:
+{STORE_CATALOG_KNOWLEDGE}'
         WHERE store_name = 'Pointe Coach' OR id = 39;
         """
         # Execute migration
@@ -613,11 +626,18 @@ CONOCIMIENTO DE TIENDA:
 """
 
     # Inject variables if they exist in the template string (simple replacement)
-    # The user might have put {STORE_CATALOG_KNOWLEDGE} in the DB text.
     if "{STORE_CATALOG_KNOWLEDGE}" in sys_template:
-        sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", knowledge)
+        sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", knowledge if knowledge else "No catalog data available")
     if "{STORE_DESCRIPTION}" in sys_template:
-        sys_template = sys_template.replace("{STORE_DESCRIPTION}", description)
+        sys_template = sys_template.replace("{STORE_DESCRIPTION}", description if description else "No shop description available")
+    if "{STORE_NAME}" in sys_template:
+        sys_template = sys_template.replace("{STORE_NAME}", store_name)
+    if "{STORE_URL}" in sys_template:
+        sys_template = sys_template.replace("{STORE_URL}", store_url)
+
+    # Ensure format instructions are present if not already in template
+    if "messages" not in sys_template.lower() or "json" not in sys_template.lower():
+        sys_template += "\n\nCRITICAL: You must answer in JSON format following this schema: " + parser.get_format_instructions()
 
     # 2. Construct Prompt Object
     # Use SystemMessage literal to avoid LangChain parsing curly braces in JSON/Names as variables
@@ -767,13 +787,19 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
                         try:
                             parsed = json.loads(cleaned)
                         except json.JSONDecodeError:
-                            # If direct parse fails, try regex extraction for embedded JSON
-                            match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-                            if match:
-                                try: parsed = json.loads(match.group(0))
-                                except: break
-                            else:
-                                break
+                            # Handle common LLM hallucinations like trailing backslashes/quotes
+                            # e.g. }\" or }\ 
+                            cleaned_harden = re.sub(r'\\"?\s*$', '', cleaned.strip())
+                            try:
+                                parsed = json.loads(cleaned_harden)
+                            except:
+                                # If direct parse fails, try regex extraction for embedded JSON
+                                match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+                                if match:
+                                    try: parsed = json.loads(match.group(0))
+                                    except: break
+                                else:
+                                    break
                     else:
                         break
                 
