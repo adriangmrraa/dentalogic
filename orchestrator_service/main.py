@@ -383,8 +383,12 @@ async def call_tiendanube_api(endpoint: str, params: dict = None):
     token = tenant_access_token.get()
 
     if not store_id or not token:
-        logger.error("tiendanube_config_missing", store_id=store_id, has_token=bool(token))
-        return "Error: Store ID or Token not configured for this tenant."
+        # Debug: Check if vars are actually empty
+        logger.error("tiendanube_config_missing", 
+                     store_id=store_id, 
+                     has_token=bool(token),
+                     context_note="ContextVar might not have propagated to tool task")
+        return "Error: Store ID or Token not configured for this tenant. Please check database configuration for this phone number."
 
     headers = {
         "Authentication": f"bearer {token}",
@@ -396,7 +400,7 @@ async def call_tiendanube_api(endpoint: str, params: dict = None):
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url, params=params, headers=headers)
             if response.status_code != 200:
-                logger.error("tiendanube_api_error", status=response.status_code, text=response.text)
+                logger.error("tiendanube_api_error", status=response.status_code, text=response.text[:200])
                 return f"Error HTTP {response.status_code}: {response.text}"
             
             data = response.json()
@@ -489,14 +493,17 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
     clean_phone = tenant_phone.lstrip('+')
 
     tenant = await db.pool.fetchrow(
-        "SELECT system_prompt_template, store_catalog_knowledge, tiendanube_store_id, tiendanube_access_token FROM tenants WHERE bot_phone_number = $1 OR bot_phone_number = $2", 
+        "SELECT store_name, system_prompt_template, store_catalog_knowledge, tiendanube_store_id, tiendanube_access_token FROM tenants WHERE bot_phone_number = $1 OR bot_phone_number = $2", 
         clean_phone, f"+{clean_phone}"
     )
 
     # Set context variables for this execution
     if tenant:
+        logger.info("tenant_found", store_name=tenant['store_name'], store_id=tenant['tiendanube_store_id'])
         tenant_store_id.set(tenant['tiendanube_store_id'])
         tenant_access_token.set(tenant['tiendanube_access_token'])
+    else:
+        logger.warning("tenant_not_found", searched_phone=clean_phone)
     
     # Default Prompt if DB is empty or tenant not found
     sys_template = ""
@@ -667,26 +674,33 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
                 cleaned = output.strip()
                 if cleaned.startswith("```json"): cleaned = cleaned[7:].split("```")[0]
                 if cleaned.startswith("```"): cleaned = cleaned[3:].split("```")[0]
+                
                 parsed_json = json.loads(cleaned.strip())
                 
                 # Recursively apply Case B logic
                 if isinstance(parsed_json, dict):
-                    if "messages" in parsed_json:
-                        final_messages = [OrchestratorMessage(**m) for m in parsed_json["messages"]]
+                    if "messages" in parsed_json and isinstance(parsed_json["messages"], list):
+                        final_messages = []
+                        for m in parsed_json["messages"]:
+                            # Support both imageUrl and image_url, text or content
+                            txt = m.get("text") or m.get("content")
+                            img = m.get("imageUrl") or m.get("image_url")
+                            final_messages.append(OrchestratorMessage(text=txt, imageUrl=img))
                     elif "message" in parsed_json:
-                        final_messages = [OrchestratorMessage(text=str(parsed_json["message"]), part=1, total=1)]
-                    elif "response" in parsed_json:
-                        final_messages = [OrchestratorMessage(text=str(parsed_json["response"]), part=1, total=1)]
+                        final_messages = [OrchestratorMessage(text=str(parsed_json["message"]))]
+                    elif "text" in parsed_json:
+                        final_messages = [OrchestratorMessage(text=str(parsed_json["text"]))]
                     else:
-                        final_messages = [OrchestratorMessage(text=str(cleaned), part=1, total=1)]
+                        # If it's a dict but we don't know the keys, just use the string version
+                        final_messages = [OrchestratorMessage(text=cleaned)]
                 else:
-                    final_messages = [OrchestratorMessage(text=output, part=1, total=1)]
-            except:
-                # Not JSON, just text
-                final_messages = [OrchestratorMessage(text=output, part=1, total=1)]
+                    final_messages = [OrchestratorMessage(text=output)]
+            except Exception as parse_err:
+                logger.debug("output_not_json", error=str(parse_err))
+                final_messages = [OrchestratorMessage(text=output)]
                 
         else:
-            final_messages = [OrchestratorMessage(text=str(output), part=1, total=1)]
+            final_messages = [OrchestratorMessage(text=str(output))]
 
 
         # Store Assistant Response
