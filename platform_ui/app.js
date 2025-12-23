@@ -993,11 +993,15 @@ document.getElementById('ycloud-form').addEventListener('submit', async (e) => {
 
     try {
         // Save both keys to credentials table
+        const tenant_id = data.tenant_id ? parseInt(data.tenant_id) : null;
+        const scope = tenant_id ? 'tenant' : 'global';
+
         await adminFetch('/admin/credentials', 'POST', {
             name: "YCLOUD_API_KEY",
             value: data.api_key || data.YCLOUD_API_KEY,
             category: "whatsapp_ycloud",
-            scope: "global",
+            scope: scope,
+            tenant_id: tenant_id,
             description: "YCloud API Key for WhatsApp"
         });
 
@@ -1005,7 +1009,8 @@ document.getElementById('ycloud-form').addEventListener('submit', async (e) => {
             name: "YCLOUD_WEBHOOK_SECRET",
             value: data.webhook_secret || data.YCLOUD_WEBHOOK_SECRET,
             category: "whatsapp_ycloud",
-            scope: "global",
+            scope: scope,
+            tenant_id: tenant_id,
             description: "YCloud Webhook Secret"
         });
 
@@ -1910,27 +1915,33 @@ document.getElementById('whatsapp-meta-form').addEventListener('submit', async (
         data.tenant_id = null;
     }
 
+    const scope = data.tenant_id ? 'tenant' : 'global';
+    const tenant_id = data.tenant_id ? parseInt(data.tenant_id) : null;
+
     try {
         // Store as credentials
         await adminFetch('/admin/credentials', 'POST', {
             name: "WHATSAPP_ACCESS_TOKEN",
             value: data.access_token,
             category: "whatsapp_meta",
-            scope: "global",
+            scope: scope,
+            tenant_id: tenant_id,
             description: "Meta API Access Token"
         });
         await adminFetch('/admin/credentials', 'POST', {
             name: "WHATSAPP_PHONE_NUMBER_ID",
             value: data.phone_number_id,
             category: "whatsapp_meta",
-            scope: "global",
+            scope: scope,
+            tenant_id: tenant_id,
             description: "Meta API Phone Number ID"
         });
         await adminFetch('/admin/credentials', 'POST', {
             name: "WHATSAPP_BUSINESS_ACCOUNT_ID",
             value: data.business_account_id,
             category: "whatsapp_meta",
-            scope: "global",
+            scope: scope,
+            tenant_id: tenant_id,
             description: "Meta API Business Account ID"
         });
 
@@ -1938,7 +1949,8 @@ document.getElementById('whatsapp-meta-form').addEventListener('submit', async (
             name: "WHATSAPP_VERIFY_TOKEN",
             value: data.verify_token,
             category: "whatsapp_meta",
-            scope: "global",
+            scope: scope,
+            tenant_id: tenant_id,
             description: "Webhook Verify Token"
         });
 

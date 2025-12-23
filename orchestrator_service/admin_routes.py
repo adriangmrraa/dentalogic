@@ -311,6 +311,21 @@ async def create_credential(cred: CredentialModel):
     row = await db.pool.fetchrow(q_upsert, cred.name, cred.value, cred.category, cred.scope, tenant_id, cred.description)
     return {"status": "ok", "id": row['id'], "action": "upserted"}
 
+@router.put("/credentials/{id}", dependencies=[Depends(verify_admin_token)])
+async def update_credential(id: int, cred: CredentialModel):
+    tenant_id = cred.tenant_id if cred.scope == "tenant" else None
+    
+    q_update = """
+    UPDATE credentials 
+    SET name = $1, value = $2, category = $3, scope = $4, tenant_id = $5, description = $6, updated_at = NOW()
+    WHERE id = $7
+    RETURNING id
+    """
+    row = await db.pool.fetchrow(q_update, cred.name, cred.value, cred.category, cred.scope, tenant_id, cred.description, id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Credential not found")
+    return {"status": "ok", "id": row['id'], "action": "updated"}
+
 # --- Internal Endpoints (for inter-service use) ---
 
 @router.get("/internal/credentials/{name}")
