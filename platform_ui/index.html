@@ -535,6 +535,132 @@
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Human Handoff Configuration -->
+                <div class="handoff-config-section glass" style="margin-top: 30px; padding: 30px;">
+                    <div class="section-header"
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                        <div>
+                            <h2 style="color: var(--accent); margin-bottom: 5px;">🤝 Derivación a Humano (derivhumano)
+                            </h2>
+                            <p style="color: var(--text-secondary); font-size: 14px;">Define cuándo la IA debe ceder el
+                                control al equipo humano y cómo debe notificar.</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="handoff-enabled" onchange="toggleHandoffUI()">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <div id="handoff-form-container"
+                        style="opacity: 0.5; pointer-events: none; transition: var(--transition);">
+                        <!-- Granular Policy Rules -->
+                        <div class="policy-grid"
+                            style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
+                            <div class="policy-box glass" style="padding: 20px;">
+                                <h3 style="font-size: 15px; margin-bottom: 15px; color: var(--accent);">🎯 ¿Cuándo
+                                    Derivar? (Policy)</h3>
+                                <div class="checkbox-group" style="display: flex; flex-direction: column; gap: 10px;">
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" id="rule-fitting"> Solicitud de Fitting / Asesora / Turno
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" id="rule-reclamo"> Reclamos o tono negativo
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" id="rule-dolor"> Dolor / Lesión / Incomodidad
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" id="rule-talle"> Ambigüedad de talle no resuelta
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" id="rule-especial"> Coordinación especial / Retiros
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="policy-box glass" style="padding: 20px;">
+                                <h3 style="font-size: 15px; margin-bottom: 15px; color: var(--accent-secondary);">✉️
+                                    ¿Qué incluir en el Email?</h3>
+                                <div class="checkbox-group" style="display: flex; flex-direction: column; gap: 10px;">
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" id="ctx-name" checked> Nombre del usuario
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" id="ctx-phone" checked> Teléfono / WhatsApp ID
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" id="ctx-history"> Resumen de últimos mensajes
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" id="ctx-id"> Conversation ID & Timestamp
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div class="form-group full">
+                                <label>Instrucciones Adicionales (AI Instructions)</label>
+                                <textarea id="handoff-instructions" rows="3"
+                                    placeholder="Instrucciones específicas adicionales para el agente..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Email de Destino (Recepción)</label>
+                                <input type="email" id="handoff-target-email" placeholder="ejemplo@correo.com">
+                            </div>
+                            <div class="form-group">
+                                <label>Mensaje al Cliente (Feedback)</label>
+                                <input type="text" id="handoff-message"
+                                    placeholder="Te derivo con una persona del equipo...">
+                            </div>
+                        </div>
+
+                        <!-- SMTP Config Box -->
+                        <div class="smtp-config-box glass"
+                            style="margin-top: 30px; padding: 25px; border: 1px solid rgba(255,255,255,0.05);">
+                            <h3 style="font-size: 15px; margin-bottom: 20px; color: var(--accent);">⚙️ Configuración
+                                SMTP (Admin)</h3>
+                            <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                <div class="form-group">
+                                    <label>Host SMTP</label>
+                                    <input type="text" id="smtp-host" placeholder="smtp.ejemplo.com">
+                                </div>
+                                <div class="form-group">
+                                    <label>Puerto SMTP</label>
+                                    <input type="number" id="smtp-port" placeholder="465">
+                                </div>
+                                <div class="form-group">
+                                    <label>Seguridad (Security)</label>
+                                    <select id="smtp-security">
+                                        <option value="SSL">SSL (Recom. 465)</option>
+                                        <option value="STARTTLS">STARTTLS (Recom. 587)</option>
+                                        <option value="NONE">NONE</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Usuario SMTP</label>
+                                    <input type="text" id="smtp-user" placeholder="usuario@ejemplo.com">
+                                </div>
+                                <div class="form-group">
+                                    <label>Contraseña SMTP</label>
+                                    <input type="password" id="smtp-pass" placeholder="********">
+                                    <small style="color: var(--text-secondary); font-size: 11px;">Escribe para
+                                        cambiarla, deja ******** para mantener.</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 30px; text-align: right;">
+                            <select id="handoff-tenant-select"
+                                style="background: var(--bg-card); color: white; border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px;">
+                                <option value="">Seleccionar Tenant...</option>
+                            </select>
+                            <button class="btn btn-primary" onclick="saveHandoffSettings()">
+                                <span>💾 Guardar Configuración de Derivación</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <!-- New view: Consola -->

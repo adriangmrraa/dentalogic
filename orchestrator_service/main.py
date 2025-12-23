@@ -8,6 +8,9 @@ import re
 import redis
 import structlog
 import httpx
+import smtplib
+from email.mime.text import MIMEText
+from email.utils import formatdate
 from typing import Any, Dict, List, Optional, Union, Literal
 from fastapi import FastAPI, HTTPException, Header, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +22,9 @@ from dotenv import load_dotenv
 # --- Dynamic Context ---
 tenant_store_id: ContextVar[Optional[str]] = ContextVar("tenant_store_id", default=None)
 tenant_access_token: ContextVar[Optional[str]] = ContextVar("tenant_access_token", default=None)
+current_tenant_id: ContextVar[Optional[int]] = ContextVar("current_tenant_id", default=None)
+current_conversation_id: ContextVar[Optional[uuid.UUID]] = ContextVar("current_conversation_id", default=None)
+current_customer_phone: ContextVar[Optional[str]] = ContextVar("current_customer_phone", default=None)
 
 # Initialize earlys
 load_dotenv()
@@ -82,6 +88,7 @@ class ToolError(BaseModel):
 
 # FastAPI App
 from contextlib import asynccontextmanager
+from .utils import encrypt_password, decrypt_password
 from admin_routes import router as admin_router, sync_environment
 
 @asynccontextmanager
@@ -121,6 +128,25 @@ async def lifespan(app: FastAPI):
                 tiendanube_access_token TEXT,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            """,
+            # 1c. Tenant Human Handoff Config (Final Spec + Consistency)
+            """
+            CREATE TABLE IF NOT EXISTS tenant_human_handoff_config (
+                tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+                enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                destination_email TEXT NOT NULL,
+                handoff_instructions TEXT, 
+                handoff_message TEXT,
+                smtp_host TEXT NOT NULL,
+                smtp_port INTEGER NOT NULL,
+                smtp_security TEXT NOT NULL DEFAULT 'SSL', -- SSL | STARTTLS | NONE
+                smtp_username TEXT NOT NULL,
+                smtp_password_encrypted TEXT NOT NULL,
+                triggers JSONB NOT NULL DEFAULT '{}',
+                email_context JSONB NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
             );
             """,
             # 2. Credentials Table
@@ -677,7 +703,109 @@ async def sendemail(subject: str, text: str):
     """Send an email to support or customer via n8n MCP."""
     return await call_mcp_tool("sendemail", {"Subject": subject, "Text": text})
 
-tools = [search_specific_products, search_by_category, browse_general_storefront, cupones_list, orders, sendemail]
+@tool
+async def derivhumano(reason: str, contact_name: Optional[str] = None, contact_phone: Optional[str] = None, summary: Optional[str] = None, action_required: Optional[str] = None):
+    """EQUIPO/HUMANO: Use this tool to derive the conversation to a human operator via email and lock the AI. 
+    Inputs:
+    - reason: The main reason for handoff.
+    - contact_name: Name of the customer.
+    - contact_phone: Phone of the customer.
+    - summary: 1-3 lines summary of the conversation.
+    - action_required: What should the human do?"""
+    
+    tid = current_tenant_id.get()
+    cid = current_conversation_id.get()
+    cphone = current_customer_phone.get()
+    
+    if not tid or not cid:
+        return "Error: Context not initialized for handoff."
+
+    # 1. Fetch Tenant Handoff Settings
+    config = await db.pool.fetchrow("""
+        SELECT c.*, t.store_name 
+        FROM tenant_human_handoff_config c
+        JOIN tenants t ON c.tenant_id = t.id
+        WHERE c.tenant_id = $1
+    """, tid)
+    
+    if not config or not config['enabled']:
+        return "Error: Handoff is currently disabled or not configured for this tenant."
+    
+    target_email = config['destination_email']
+    handoff_msg = config['handoff_message'] or "Te derivo con una persona del equipo para ayudarte mejor 😊"
+
+    # 2. Build Email Content based on email_context flags
+    ctx = config['email_context'] or {}
+    wa_id = (cphone or contact_phone) if ctx.get('ctx-phone') else "Oculto"
+    user_name = (contact_name or 'No especificado') if ctx.get('ctx-name') else "Oculto"
+    wa_link = f"https://wa.me/{wa_id}" if wa_id != "Oculto" else "No disponible"
+    
+    history_section = ""
+    if ctx.get('ctx-history'):
+        history_section = f"\nRESUMEN RECIENTE:\n{summary or 'Sin resumen de historial'}\n"
+
+    metadata_section = ""
+    if ctx.get('ctx-id'):
+        metadata_section = f"Conversation ID: {cid}\nTimestamp: {formatdate(localtime=True)}\n"
+
+    subject = f"Derivación Humana: {reason} - {user_name}"
+    body = f"""DETALLE DE DERIVACIÓN (EQUIPO {config['store_name'].upper()})
+
+Motivo: {reason}
+Cliente: {user_name}
+Teléfono: {wa_id}
+Link WhatsApp: {wa_link}
+{history_section}
+ACCIÓN REQUERIDA:
+{action_required or 'Atención inmediata'}
+
+{metadata_section}Tienda: {config['store_name']}
+"""
+
+    # 3. SMTP Send
+    try:
+        smtp_host = config['smtp_host']
+        smtp_user = config['smtp_username']
+        smtp_pass = decrypt_password(config['smtp_password_encrypted'])
+        smtp_port = config['smtp_port']
+        smtp_sec = config['smtp_security'].upper()
+
+        if smtp_user and smtp_pass and smtp_host:
+            msg = MIMEText(body)
+            msg['Subject'] = subject
+            msg['From'] = smtp_user
+            msg['To'] = target_email
+            msg['Date'] = formatdate(localtime=True)
+
+            if smtp_sec == 'SSL':
+                with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+                    server.login(smtp_user, smtp_pass)
+                    server.send_message(msg)
+            elif smtp_sec == 'STARTTLS':
+                with smtplib.SMTP(smtp_host, smtp_port) as server:
+                    server.starttls()
+                    server.login(smtp_user, smtp_pass)
+                    server.send_message(msg)
+            else: # NONE or fallback
+                with smtplib.SMTP(smtp_host, smtp_port) as server:
+                    server.login(smtp_user, smtp_pass)
+                    server.send_message(msg)
+            
+            logger.info("handoff_email_sent_smtp", to=target_email, host=smtp_host, port=smtp_port, security=smtp_sec)
+        else:
+            await call_mcp_tool("sendemail", {"Subject": subject, "Text": body})
+            logger.info("handoff_email_sent_mcp_fallback", to=target_email)
+            
+    except Exception as e:
+        logger.error("handoff_email_failed", error=str(e))
+        await log_db("error", "handoff_email_failed", str(e), {"tid": tid, "cid": str(cid)})
+
+    # 4. Lock Conversation (24h)
+    await db.pool.execute("UPDATE chat_conversations SET human_override_until = NOW() + INTERVAL '24 hours' WHERE id = $1", cid)
+    
+    return handoff_msg
+
+tools = [search_specific_products, search_by_category, browse_general_storefront, cupones_list, orders, sendemail, derivhumano]
 
 from langchain.output_parsers import PydanticOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
@@ -711,7 +839,12 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
     logger.info("tenant_lookup_attempt", raw=tenant_phone, search_suffix=short_phone)
 
     tenant = await db.pool.fetchrow(
-        "SELECT store_name, system_prompt_template, store_catalog_knowledge, store_description, tiendanube_store_id, tiendanube_access_token FROM tenants WHERE bot_phone_number LIKE $1", 
+        """SELECT t.id, t.store_name, t.system_prompt_template, t.store_catalog_knowledge, t.store_description, 
+                  t.tiendanube_store_id, t.tiendanube_access_token,
+                  h.enabled as handoff_enabled, h.handoff_instructions, h.triggers as handoff_policy
+           FROM tenants t
+           LEFT JOIN tenant_human_handoff_config h ON t.id = h.tenant_id
+           WHERE t.bot_phone_number LIKE $1""", 
         f"%{short_phone}"
     )
     if not tenant:
@@ -719,7 +852,6 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
     else:
         logger.info("tenant_lookup_success", store=tenant['store_name'])
 
-    # Set context variables for this execution
     # Set context variables for this execution
     # USER PRIORITY: DB First > Global Env Fallback
     
@@ -733,6 +865,7 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
             logger.info("tenant_found_in_db", store_name=tenant['store_name'], store_id=local_store_id)
             tenant_store_id.set(local_store_id)
             tenant_access_token.set(local_token)
+            current_tenant_id.set(tenant['id']) # Set Tenant ID context
             conn_success = True
     
     # 2. Fallback to Global Env if DB failed/missing
@@ -760,23 +893,23 @@ async def get_agent_executable(tenant_phone: str = "5491100000000"):
         
     # Resolve Knowledge/Description/Prompt (DB > Global Env > Default)
     
-    # 1. System Template
-    if tenant and tenant['system_prompt_template']:
-        sys_template = tenant['system_prompt_template']
-    elif GLOBAL_SYSTEM_PROMPT:
-        sys_template = GLOBAL_SYSTEM_PROMPT
-        
-    # 2. Knowledge
+    # 1. Knowledge
     if tenant and tenant['store_catalog_knowledge']:
         knowledge = tenant['store_catalog_knowledge']
     elif GLOBAL_CATALOG_KNOWLEDGE:
         knowledge = GLOBAL_CATALOG_KNOWLEDGE
         
-    # 3. Description
+    # 2. Description
     if tenant and tenant['store_description']:
         description = tenant['store_description']
     elif GLOBAL_STORE_DESCRIPTION:
         description = GLOBAL_STORE_DESCRIPTION
+    
+    # 3. System Template
+    if tenant and tenant['system_prompt_template']:
+        sys_template = tenant['system_prompt_template']
+    elif GLOBAL_SYSTEM_PROMPT:
+        sys_template = GLOBAL_SYSTEM_PROMPT
     else:
         # Dynamic Fallback Prompt
         sys_template = f"""Eres el asistente virtual de {store_name}.
@@ -806,6 +939,39 @@ REGLAS CRÍTICAS DE RESPUESTA:
 CONOCIMIENTO DE TIENDA:
 {{STORE_CATALOG_KNOWLEDGE}}
 """
+
+    # 4. POLÍTICA DE DERIVACIÓN A HUMANO (HI-PRIORITY)
+    if tenant and tenant.get('handoff_enabled'):
+        policy = tenant.get('handoff_policy') or {}
+        handoff_rules = tenant.get('handoff_instructions') or ""
+        
+        # Build rules string from checkboxes
+        granular_rules = []
+        if policy.get('rule_fitting'): granular_rules.append("- Solicitud de Fitting / Asesora / Turno")
+        if policy.get('rule_reclamo'): granular_rules.append("- Reclamos o tono negativo/enojado")
+        if policy.get('rule_dolor'): granular_rules.append("- Mensajes sobre dolor, lesión o incomodidad fuerte")
+        if policy.get('rule_talle'): granular_rules.append("- Ambigüedad de talle o modelo no resuelta en 1-2 preguntas")
+        if policy.get('rule_especial'): granular_rules.append("- Coordinación especial, retiros o pedidos complejos")
+        
+        rules_text = "\n".join(granular_rules) if granular_rules else "Actuar según criterio profesional de derivación."
+        
+        sys_template += f"""
+=== POLÍTICA DE DERIVACIÓN A HUMANO (PRIORIDAD MÁXIMA) ===
+El siguiente conjunto de REGLAS es OBLIGATORIO y tiene prioridad sobre ventas o catálogo:
+
+CASOS DE DERIVACIÓN:
+{rules_text}
+
+INSTRUCCIONES ADICIONALES:
+"{handoff_rules}"
+
+ACCIONES OBLIGATORIAS:
+1. Si detectas estas intenciones, DETENER toda otra acción comercial.
+2. Ejecutar inmediatamente la tool `derivhumano` con los detalles correspondientes.
+3. Informar al usuario de forma amigable que será contactado por el equipo humano.
+4. No mostrar productos ni enlaces comerciales en este caso.
+"""
+
 
     # Inject variables if they exist in the template string (simple replacement)
     if "{STORE_CATALOG_KNOWLEDGE}" in sys_template:
@@ -1080,6 +1246,10 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
     # Dynamic Agent Loading
     tenant_lookup = event.to_number or event.from_number
     executor = await get_agent_executable(tenant_phone=tenant_lookup)
+    
+    # Set Conversation Context for Tools
+    current_conversation_id.set(conv_id)
+    current_customer_phone.set(event.from_number)
     
     try:
         inputs = {"input": event.text, "chat_history": chat_history}

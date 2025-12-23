@@ -73,7 +73,10 @@ function showView(viewId, event = null) {
         loadCredentials();
         loadCredentialFilters();
     }
-    if (viewId === 'tools') loadTools();
+    if (viewId === 'tools') {
+        loadTools();
+        initHandoffConfig();
+    }
     if (viewId === 'analytics') loadAnalytics();
     if (viewId === 'console') loadConsoleEvents();
     if (viewId === 'chats') loadChats();
@@ -482,6 +485,163 @@ async function deleteTool(name) {
     if (confirm(`¿Estás seguro de eliminar la herramienta ${name}?`)) {
         showNotification(true, 'Procesando', 'Las herramientas predefinidas no se pueden eliminar en esta versión.');
     }
+}
+
+// --- Human Handoff Configuration ---
+
+function toggleHandoffUI() {
+    const isEnabled = document.getElementById('handoff-enabled').checked;
+    const container = document.getElementById('handoff-form-container');
+    if (isEnabled) {
+        container.style.opacity = '1';
+        container.style.pointerEvents = 'all';
+    } else {
+        container.style.opacity = '0.5';
+        container.style.pointerEvents = 'none';
+    }
+}
+
+async function updateHandoffTenantSelect() {
+    const select = document.getElementById('handoff-tenant-select');
+    const tenants = await adminFetch('/admin/tenants');
+    if (!tenants) return;
+
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">Seleccionar Tenant...</option>';
+    tenants.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = `${t.store_name} (${t.bot_phone_number})`;
+        select.appendChild(opt);
+    });
+    if (currentValue) select.value = currentValue;
+}
+
+// Triggered when switching to 'tools' view
+async function initHandoffConfig() {
+    await updateHandoffTenantSelect();
+    const select = document.getElementById('handoff-tenant-select');
+
+    // Auto-select first tenant if available
+    if (select.options.length > 1 && !select.value) {
+        select.selectedIndex = 1;
+        loadHandoffSettings();
+    }
+}
+
+// Add event listener for tenant change
+document.getElementById('handoff-tenant-select')?.addEventListener('change', loadHandoffSettings);
+
+async function loadHandoffSettings() {
+    const tenantId = document.getElementById('handoff-tenant-select').value;
+    if (!tenantId) return;
+
+    try {
+        const config = await adminFetch(`/admin/handoff/${tenantId}`);
+
+        if (config) {
+            document.getElementById('handoff-enabled').checked = config.enabled;
+            document.getElementById('handoff-target-email').value = config.destination_email || '';
+            document.getElementById('handoff-instructions').value = config.handoff_instructions || '';
+            document.getElementById('handoff-message').value = config.handoff_message || '';
+
+            // Triggers
+            const triggers = config.triggers || {};
+            document.getElementById('rule-fitting').checked = triggers.rule_fitting || false;
+            document.getElementById('rule-reclamo').checked = triggers.rule_reclamo || false;
+            document.getElementById('rule-dolor').checked = triggers.rule_dolor || false;
+            document.getElementById('rule-talle').checked = triggers.rule_talle || false;
+            document.getElementById('rule-especial').checked = triggers.rule_especial || false;
+
+            // Context
+            const ctx = config.email_context || {};
+            document.getElementById('ctx-name').checked = ctx.ctx_name !== false;
+            document.getElementById('ctx-phone').checked = ctx.ctx_phone !== false;
+            document.getElementById('ctx-history').checked = ctx.ctx_history || false;
+            document.getElementById('ctx-id').checked = ctx.ctx_id || false;
+
+            // SMTP
+            document.getElementById('smtp-host').value = config.smtp_host || '';
+            document.getElementById('smtp-port').value = config.smtp_port || '';
+            document.getElementById('smtp-security').value = config.smtp_security || 'SSL';
+            document.getElementById('smtp-user').value = config.smtp_username || '';
+            document.getElementById('smtp-pass').value = config.smtp_password || '********';
+
+            toggleHandoffUI();
+        } else {
+            // Reset for new tenant
+            document.getElementById('handoff-enabled').checked = true;
+            document.getElementById('handoff-target-email').value = '';
+            document.getElementById('handoff-instructions').value = '';
+            document.getElementById('handoff-message').value = '';
+            document.getElementById('smtp-host').value = '';
+            document.getElementById('smtp-port').value = '465';
+            document.getElementById('smtp-security').value = 'SSL';
+            document.getElementById('smtp-user').value = '';
+            document.getElementById('smtp-pass').value = '';
+            toggleHandoffUI();
+        }
+    } catch (e) {
+        console.error("Error loading handoff config:", e);
+    }
+}
+
+async function saveHandoffSettings() {
+    const tenantId = document.getElementById('handoff-tenant-select').value;
+    if (!tenantId) {
+        showNotification(false, 'Validación', 'Por favor selecciona un tenant primero.');
+        return;
+    }
+
+    const payload = {
+        tenant_id: tenantId,
+        enabled: document.getElementById('handoff-enabled').checked,
+        destination_email: document.getElementById('handoff-target-email').value,
+        handoff_instructions: document.getElementById('handoff-instructions').value,
+        handoff_message: document.getElementById('handoff-message').value,
+        smtp_host: document.getElementById('smtp-host').value,
+        smtp_port: parseInt(document.getElementById('smtp-port').value),
+        smtp_security: document.getElementById('smtp-security').value,
+        smtp_username: document.getElementById('smtp-user').value,
+        smtp_password: document.getElementById('smtp-pass').value,
+        triggers: {
+            rule_fitting: document.getElementById('rule-fitting').checked,
+            rule_reclamo: document.getElementById('rule-reclamo').checked,
+            rule_dolor: document.getElementById('rule-dolor').checked,
+            rule_talle: document.getElementById('rule-talle').checked,
+            rule_especial: document.getElementById('rule-especial').checked
+        },
+        email_context: {
+            ctx_name: document.getElementById('ctx-name').checked,
+            ctx_phone: document.getElementById('ctx-phone').checked,
+            ctx_history: document.getElementById('ctx-history').checked,
+            ctx_id: document.getElementById('ctx-id').checked
+        }
+    };
+
+    try {
+        const res = await adminFetch('/admin/handoff', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+
+        if (res) {
+            showNotification(true, 'Éxito', 'Configuración de derivación guardada correctamente.');
+            // Reload to mask password
+            await loadHandoffSettings();
+        }
+    } catch (e) {
+        showNotification(false, 'Error', 'No se pudo guardar la configuración.');
+    }
+}
+
+async function saveCredential(name, value, category, scope, tenantId) {
+    return await adminFetch('/admin/credentials', {
+        method: 'POST',
+        body: JSON.stringify({
+            name, value, category, scope, tenant_id: tenantId
+        })
+    });
 }
 
 // Analytics Management

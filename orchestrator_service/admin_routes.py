@@ -19,6 +19,22 @@ async def verify_admin_token(x_admin_token: str = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid Admin Token")
 
 # --- Models ---
+from .utils import encrypt_password, decrypt_password
+
+class HandoffConfigModel(BaseModel):
+    tenant_id: UUID
+    enabled: bool = True
+    destination_email: str
+    handoff_instructions: str = ""
+    handoff_message: str = ""
+    smtp_host: str
+    smtp_port: int
+    smtp_security: str # SSL | STARTTLS | NONE
+    smtp_username: str
+    smtp_password: str
+    triggers: Dict[str, bool] = {}
+    email_context: Dict[str, bool] = {}
+
 class TenantModel(BaseModel):
     store_name: str
     bot_phone_number: str
@@ -29,6 +45,15 @@ class TenantModel(BaseModel):
     store_catalog_knowledge: Optional[str] = None
     tiendanube_store_id: Optional[str] = None
     tiendanube_access_token: Optional[str] = None
+    handoff_enabled: Optional[bool] = False
+    handoff_instructions: Optional[str] = None
+    handoff_target_email: Optional[str] = None
+    handoff_message: Optional[str] = None
+    handoff_smtp_host: Optional[str] = None
+    handoff_smtp_user: Optional[str] = None
+    handoff_smtp_pass: Optional[str] = None
+    handoff_smtp_port: Optional[int] = 465
+    handoff_policy: Optional[dict] = None
 
 class CredentialModel(BaseModel):
     name: str
@@ -296,6 +321,61 @@ async def get_chat_history(conversation_id: str):
 
 # --- Multi-Tenancy Routes ---
 
+@router.get("/handoff/{tenant_id}", dependencies=[Depends(verify_admin_token)])
+async def get_handoff_config(tenant_id: uuid.UUID):
+    config = await db.pool.fetchrow("SELECT * FROM tenant_human_handoff_config WHERE tenant_id = $1", tenant_id)
+    if not config:
+        return None
+    
+    data = dict(config)
+    data['smtp_password'] = "********"
+    data['triggers'] = json.loads(data['triggers']) if isinstance(data['triggers'], str) else data['triggers']
+    data['email_context'] = json.loads(data['email_context']) if isinstance(data['email_context'], str) else data['email_context']
+    return data
+
+@router.post("/handoff", dependencies=[Depends(verify_admin_token)])
+async def upsert_handoff_config(config: HandoffConfigModel):
+    existing = await db.pool.fetchrow("SELECT smtp_password_encrypted FROM tenant_human_handoff_config WHERE tenant_id = $1", config.tenant_id)
+    
+    password_to_store = ""
+    if config.smtp_password == "********":
+        if existing:
+            password_to_store = existing['smtp_password_encrypted']
+        else:
+            raise HTTPException(status_code=400, detail="Password required for new configuration")
+    else:
+        password_to_store = encrypt_password(config.smtp_password)
+
+    q = """
+        INSERT INTO tenant_human_handoff_config (
+            tenant_id, enabled, destination_email, handoff_instructions, handoff_message,
+            smtp_host, smtp_port, smtp_security, smtp_username, smtp_password_encrypted, 
+            triggers, email_context, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+        ON CONFLICT (tenant_id) DO UPDATE SET
+            enabled = EXCLUDED.enabled,
+            destination_email = EXCLUDED.destination_email,
+            handoff_instructions = EXCLUDED.handoff_instructions,
+            handoff_message = EXCLUDED.handoff_message,
+            smtp_host = EXCLUDED.smtp_host,
+            smtp_port = EXCLUDED.smtp_port,
+            smtp_security = EXCLUDED.smtp_security,
+            smtp_username = EXCLUDED.smtp_username,
+            smtp_password_encrypted = EXCLUDED.smtp_password_encrypted,
+            triggers = EXCLUDED.triggers,
+            email_context = EXCLUDED.email_context,
+            updated_at = NOW()
+    """
+    await db.pool.execute(
+        q, 
+        config.tenant_id, config.enabled, config.destination_email, 
+        config.handoff_instructions, config.handoff_message,
+        config.smtp_host, config.smtp_port, config.smtp_security,
+        config.smtp_username, password_to_store, 
+        json.dumps(config.triggers), json.dumps(config.email_context)
+    )
+    return {"status": "ok"}
+
 @router.get("/tenants", dependencies=[Depends(verify_admin_token)])
 async def list_tenants():
     rows = await db.pool.fetch("SELECT * FROM tenants ORDER BY id DESC")
@@ -304,23 +384,55 @@ async def list_tenants():
 @router.post("/tenants", dependencies=[Depends(verify_admin_token)])
 async def create_tenant(tenant: TenantModel):
     q = """
-        INSERT INTO tenants (store_name, bot_phone_number, owner_email, store_location, store_website, store_description, store_catalog_knowledge, tiendanube_store_id, tiendanube_access_token)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (bot_phone_number) 
         DO UPDATE SET 
             store_name = EXCLUDED.store_name,
             owner_email = EXCLUDED.owner_email,
             store_location = EXCLUDED.store_location,
-            store_website = EXCLUDED.store_website,
-            store_description = EXCLUDED.store_description,
-            store_catalog_knowledge = EXCLUDED.store_catalog_knowledge,
-            tiendanube_store_id = EXCLUDED.tiendanube_store_id,
-            tiendanube_access_token = EXCLUDED.tiendanube_access_token,
-            updated_at = NOW()
+        INSERT INTO tenants (
+            store_name, bot_phone_number, owner_email, store_location, store_website, store_description, store_catalog_knowledge,
+            tiendanube_store_id, tiendanube_access_token, handoff_enabled, handoff_instructions, handoff_target_email, handoff_message,
+            handoff_smtp_host, handoff_smtp_user, handoff_smtp_pass, handoff_smtp_port, handoff_policy
+        ) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         RETURNING id
     """
-    row = await db.pool.fetchrow(q, tenant.store_name, tenant.bot_phone_number, tenant.owner_email, tenant.store_location, tenant.store_website, tenant.store_description, tenant.store_catalog_knowledge, tenant.tiendanube_store_id, tenant.tiendanube_access_token)
-    return {"status": "ok", "id": row['id']}
+    tenant_id = await db.pool.fetchval(
+        q, 
+        tenant.store_name, tenant.bot_phone_number, tenant.owner_email,
+        tenant.store_location, tenant.store_website, tenant.store_description,
+        tenant.store_catalog_knowledge, tenant.tiendanube_store_id, tenant.tiendanube_access_token,
+        tenant.handoff_enabled, tenant.handoff_instructions, tenant.handoff_target_email, tenant.handoff_message,
+        tenant.handoff_smtp_host, tenant.handoff_smtp_user, tenant.handoff_smtp_pass,
+        tenant.handoff_smtp_port, json.dumps(tenant.handoff_policy or {})
+    )
+    return {"status": "ok", "id": tenant_id}
+
+@router.put("/tenants/{tenant_id}", dependencies=[Depends(verify_admin_token)])
+async def update_tenant(tenant_id: int, tenant: TenantModel):
+    q = """
+        UPDATE tenants SET 
+            store_name = $1, owner_email = $2, store_location = $3, 
+            store_website = $4, store_description = $5, store_catalog_knowledge = $6,
+            tiendanube_store_id = $7, tiendanube_access_token = $8,
+            handoff_enabled = $9, handoff_instructions = $10, handoff_target_email = $11, handoff_message = $12,
+            handoff_smtp_host = $13, handoff_smtp_user = $14, handoff_smtp_pass = $15,
+            handoff_smtp_port = $16, handoff_policy = $17,
+            updated_at = NOW()
+        WHERE id = $18
+    """
+    await db.pool.execute(
+        q, 
+        tenant.store_name, tenant.owner_email, tenant.store_location,
+        tenant.store_website, tenant.store_description, tenant.store_catalog_knowledge,
+        tenant.tiendanube_store_id, tenant.tiendanube_access_token,
+        tenant.handoff_enabled, tenant.handoff_instructions, tenant.handoff_target_email, tenant.handoff_message,
+        tenant.handoff_smtp_host, tenant.handoff_smtp_user, tenant.handoff_smtp_pass,
+        tenant.handoff_smtp_port, json.dumps(tenant.handoff_policy or {}),
+        tenant_id
+    )
+    return {"status": "ok", "id": tenant_id}
 
 @router.get("/tenants/{phone}", dependencies=[Depends(verify_admin_token)])
 async def get_tenant(phone: str):
