@@ -709,12 +709,23 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
                     elif "text" in parsed_json:
                         final_messages = [OrchestratorMessage(text=str(parsed_json["text"]))]
                     else:
-                        # If it's a dict but we don't know the keys, just use the string version
-                        final_messages = [OrchestratorMessage(text=cleaned)]
+                        # If keys are unknown, try to use it as list or fallback
+                        final_messages = [OrchestratorMessage(text=json.dumps(parsed_json, ensure_ascii=False))]
+                elif isinstance(parsed_json, list):
+                     # If the LLM returned a direct list of messages
+                     final_messages = []
+                     for m in parsed_json:
+                        if isinstance(m, dict):
+                            txt = m.get("text") or m.get("content")
+                            img = m.get("imageUrl") or m.get("image_url")
+                            final_messages.append(OrchestratorMessage(text=txt, imageUrl=img))
                 else:
                     final_messages = [OrchestratorMessage(text=output)]
             except Exception as parse_err:
                 logger.debug("output_not_json", error=str(parse_err))
+                # Fallback: if it looked like JSON but failed to parse deeply, send as text
+                # But if it starts with { "messages": ... } and failed, we should try a cleaner regex extraction maybe?
+                # For now, let's just return the raw text to be safe
                 final_messages = [OrchestratorMessage(text=output)]
                 
         else:
