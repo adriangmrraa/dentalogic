@@ -140,7 +140,9 @@ async def transcribe_audio(audio_url: str, correlation_id: str) -> Optional[str]
 async def send_sequence(messages: List[OrchestratorMessage], user_number: str, business_number: str, inbound_id: str, correlation_id: str):
     client = YCloudClient(YCLOUD_API_KEY, business_number)
     
-    try: await client.mark_as_read(inbound_id, correlation_id)
+    try: 
+        await client.mark_as_read(inbound_id, correlation_id)
+        await client.typing_indicator(inbound_id, correlation_id)
     except: pass
 
     for msg in messages:
