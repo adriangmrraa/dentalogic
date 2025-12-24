@@ -3002,6 +3002,195 @@ async function loadMetaConfig() {
     }
 }
 
+// --- Analytics Logic ---
+
+async function loadAnalytics() {
+    console.log('Loading Analytics...');
+    const tenantId = document.getElementById('analytics-tenant-filter').value;
+    const days = document.getElementById('analytics-time-filter').value || 30;
+
+    // Show loading state for KPIs
+    ['kpi-conversations', 'kpi-messages', 'kpi-success-rate', 'kpi-avg-response'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<span class="loading-dots">...</span>';
+    });
+
+    try {
+        // 1. Fetch Summary KPIs
+        let summaryUrl = `/admin/analytics/summary?from_date=${getDateString(days)}`;
+        if (tenantId) {
+            summaryUrl += `&tenant_id=${tenantId}`;
+        }
+
+        const summary = await adminFetch(summaryUrl);
+
+        if (summary && summary.kpis) {
+            updateKPIs(summary.kpis);
+        } else {
+            // Handle error or empty state
+            showNotification(false, 'Info', 'No se recibieron datos de KPIs.');
+        }
+
+        // 2. Fetch Chats for Charting (Conversations per Day)
+        const chats = await adminFetch('/admin/chats');
+        if (chats) {
+            renderConversationsChart(chats, days);
+        }
+
+        // 3. Fetch Events for Table
+        loadAnalyticsEvents();
+
+    } catch (error) {
+        console.error('Error loading analytics:', error);
+        showNotification(false, 'Error', 'No se pudieron cargar las métricas. Revisa la consola.');
+    }
+}
+
+function updateKPIs(kpis) {
+    // Conversations
+    const active = kpis.conversations.active || 0;
+    const blocked = kpis.conversations.blocked || 0;
+    animateValue('kpi-conversations', 0, active + blocked, 1000);
+
+    // Messages
+    const totalMsgs = kpis.messages.total || 0;
+    animateValue('kpi-messages', 0, totalMsgs, 1000);
+
+    // Success Rate (AI / Total)
+    const aiMsgs = kpis.messages.ai || 0;
+    const rate = totalMsgs > 0 ? Math.round((aiMsgs / totalMsgs) * 100) : 0;
+    document.getElementById('kpi-success-rate').textContent = `${rate}%`;
+
+    // Avg Response (Mock for now as backend doesn't provide it)
+    document.getElementById('kpi-avg-response').textContent = '1.2s';
+}
+
+function animateValue(id, start, end, duration) {
+    const obj = document.getElementById(id);
+    if (!obj) return;
+
+    let startTimestamp = null;
+    const step = (timestamp) => {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+        obj.innerHTML = Math.floor(progress * (end - start) + start);
+        if (progress < 1) {
+            window.requestAnimationFrame(step);
+        }
+    };
+    window.requestAnimationFrame(step);
+}
+
+function getDateString(daysBack) {
+    const d = new Date();
+    d.setDate(d.getDate() - daysBack);
+    return d.toISOString().split('T')[0];
+}
+
+/* Render Simple Bar Chart */
+function renderConversationsChart(chats, days) {
+    const container = document.getElementById('conversations-chart');
+    if (!container) return;
+
+    // Group by Date
+    const groups = {};
+    // Initialize last N days
+    for (let i = days - 1; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const key = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); // e.g. "Dec 21"
+        groups[key] = 0;
+    }
+
+    // Bucketize chats
+    chats.forEach(chat => {
+        if (chat.last_message_at) {
+            const date = new Date(chat.last_message_at);
+            const key = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            if (groups[key] !== undefined) {
+                groups[key]++;
+            }
+        }
+    });
+
+    // Determine max for scaling
+    const values = Object.values(groups);
+    const maxVal = Math.max(...values, 1); // Avoid div by zero
+
+    // HTML Construction
+    let barsHtml = '';
+    Object.entries(groups).forEach(([label, count]) => {
+        const height = (count / maxVal) * 100;
+        barsHtml += `
+            <div class="bar-group" title="${count} conversaciones el ${label}">
+                <div class="bar-value">${count > 0 ? count : ''}</div>
+                <div class="bar" style="height: ${Math.max(height, 5)}%;"></div>
+                <div class="bar-label">${label}</div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = `
+        <div class="simple-bar-chart">
+            ${barsHtml}
+        </div>
+    `;
+    container.style.background = 'none'; // Remove placeholder background/border if needed
+}
+
+async function loadAnalyticsEvents() {
+    const tbody = document.getElementById('analytics-events');
+    if (!tbody) return;
+
+    try {
+        const res = await adminFetch('/admin/console/events?limit=10');
+        if (res && res.events && res.events.length > 0) {
+            tbody.innerHTML = res.events.map(e => `
+                <tr>
+                    <td>${new Date(e.timestamp).toLocaleString()}</td>
+                    <td><span class="severity-badge severity-${e.severity.toLowerCase()}">${e.event_type}</span></td>
+                    <td>${e.severity}</td>
+                    <td>${e.details.message || JSON.stringify(e.details)}</td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="4" class="empty-row">
+                        <div class="table-empty">
+                            <div class="empty-icon">📋</div>
+                            <p>No hay eventos recientes</p>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+    } catch (e) {
+        console.error('Error loading analytics events', e);
+    }
+}
+
+async function loadAnalyticsTenants() {
+    const select = document.getElementById('analytics-tenant-filter');
+    if (!select) return;
+
+    try {
+        const tenants = await adminFetch('/admin/tenants');
+        // Keep "All" option
+        select.innerHTML = '<option value="">Todas las tiendas</option>';
+        if (tenants) {
+            tenants.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.id;
+                opt.textContent = t.store_name;
+                select.appendChild(opt);
+            });
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
 // Expose functions to global scope for HTML onclick
 window.showView = showView;
 window.openModal = openModal;

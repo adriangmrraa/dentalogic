@@ -3130,3 +3130,103 @@ input:checked+.slider:before {
         background: var(--bg-dark);
     }
 }
+
+/* Simple CSS Bar Chart */
+.simple-bar-chart {
+    display: flex;
+    align-items: flex-end;
+    /* justify-content: space-around; REMOVED to allow scrolling */
+    height: 100%;
+    gap: 15px;
+    /* Increased gap */
+    padding-top: 20px;
+    padding-bottom: 30px;
+    position: relative;
+    overflow-x: auto;
+    /* Allow horizontal scroll */
+    padding-left: 10px;
+    padding-right: 10px;
+    width: 100%;
+    /* Ensure it takes full width */
+}
+
+/* Scrollbar for chart */
+.simple-bar-chart::-webkit-scrollbar {
+    height: 6px;
+}
+
+.simple-bar-chart::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.bar-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 0 0 auto;
+    /* Don't shrink, allow scroll */
+    width: 40px;
+    /* Fixed width per bar group */
+    height: 100%;
+    justify-content: flex-end;
+    position: relative;
+    cursor: pointer;
+}
+
+.bar {
+    width: 24px;
+    /* Fixed bar width */
+    background: var(--accent);
+    border-radius: 4px 4px 0 0;
+    transition: height 0.5s ease;
+    opacity: 0.8;
+    position: relative;
+}
+
+.bar:hover {
+    opacity: 1;
+    transform: scaleY(1.05);
+    transform-origin: bottom;
+}
+
+.bar-value {
+    position: absolute;
+    top: -25px;
+    font-size: 11px;
+    color: #fff;
+    font-weight: 600;
+}
+
+.bar-label {
+    position: absolute;
+    bottom: -25px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-align: center;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chart-legend {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 15px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
