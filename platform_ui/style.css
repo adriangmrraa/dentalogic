@@ -2298,6 +2298,110 @@ body {
         padding: 15px;
         margin: 20px 15px;
     }
+
+    /* --- Mobile Stores Table (Card Layout) --- */
+    /* Force table to be not a table */
+    .data-table,
+    .data-table tbody,
+    .data-table tr,
+    .data-table td {
+        display: block;
+        width: 100%;
+    }
+
+    /* Hide headers */
+    .data-table thead {
+        display: none;
+    }
+
+    /* Card Style for Rows */
+    .data-table tr {
+        margin-bottom: 20px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border-glass);
+        border-radius: 16px;
+        padding: 15px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Cell Style */
+    .data-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        text-align: right;
+        padding: 12px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        min-height: 40px;
+        font-size: 14px;
+        overflow-wrap: break-word;
+        word-break: break-all;
+        /* Safety for long IDs */
+    }
+
+    .data-table td:last-child {
+        border-bottom: none;
+        flex-direction: column;
+        gap: 10px;
+        justify-content: center;
+        padding-top: 20px;
+    }
+
+    /* Inject Labels via CSS */
+    .data-table td:nth-of-type(1)::before {
+        content: "Tienda";
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-align: left;
+        margin-right: 10px;
+        flex-shrink: 0;
+    }
+
+    .data-table td:nth-of-type(2)::before {
+        content: "WhatsApp";
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-align: left;
+        margin-right: 10px;
+        flex-shrink: 0;
+    }
+
+    .data-table td:nth-of-type(3)::before {
+        content: "Tienda Nube ID";
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-align: left;
+        margin-right: 10px;
+        flex-shrink: 0;
+    }
+
+    .data-table td:nth-of-type(4)::before {
+        content: "Status";
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-align: left;
+        margin-right: 10px;
+        flex-shrink: 0;
+    }
+
+    /* No label for Actions */
+
+    /* Action Buttons Adjustments */
+    .data-table td button {
+        width: 100%;
+        /* Full width buttons for touch targets */
+        margin: 5px 0;
+    }
+
+    /* Global Horizontal Overflow Protection for Mobile */
+    body,
+    .glass-container,
+    .content,
+    .view,
+    .stores-table-container {
+        overflow-x: hidden !important;
+        max-width: 100vw;
+    }
 }
 
 /* Service Selection Modal Styles */
