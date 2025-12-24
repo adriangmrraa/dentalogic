@@ -2805,6 +2805,10 @@ input:checked+.slider:before {
 .chat-messages {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
+    /* Fix: Prevent horizontal scroll */
+    width: 100%;
+    /* Fix: Constrain width */
     padding: 20px;
     display: flex;
     flex-direction: column;
@@ -2818,6 +2822,38 @@ input:checked+.slider:before {
     position: relative;
     font-size: 14px;
     line-height: 1.5;
+
+    /* Fix: Word break rules */
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+    hyphens: auto;
+    min-width: 0;
+    /* Flexbox safety */
+}
+
+/* Fix: Internal Content Safety */
+.bubble-content p,
+.bubble-content a {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.bubble-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    display: block;
+    /* Remove inline spacing */
+}
+
+/* Fix: Technical Text / Code Blocks */
+.bubble-content pre,
+.bubble-content code {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: hidden;
+    max-width: 100%;
 }
 
 .message-bubble.user {

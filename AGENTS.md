@@ -86,4 +86,13 @@ El dashboard administrativo en `platform_ui`. Es una aplicación **Vanilla JS**.
 -   Cualquier error en el envío de emails SMTP debe quedar registrado allí para debugging.
 
 ---
+
+## 🔮 Arquitectura "Next Gen" (En Desarrollo)
+El proyecto contiene carpetas para una futura migración a React:
+1.  **`frontend_react`**: Aplicación React (posiblemente Vite/Next) que reemplazará a `platform_ui`.
+2.  **`bff_service`**: "Backend for Frontend". Probablemente un servicio Nodejs/Express intermedio.
+    *   **Estado:** Experimental / En desarrollo.
+    *   **Precaución:** Los agentes actuales deben priorizar `platform_ui` (Vanilla) y `orchestrator_service` parar mantener la estabilidad del sistema productivo, a menos que se les instruya específicamente trabajar en la migración.
+
+---
 **Recuerda:** Este código está diseñado para ser multi-tenant. Siempre usa `tenant_id` en tus consultas para no mezclar datos de diferentes tiendas.
