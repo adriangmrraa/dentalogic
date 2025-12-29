@@ -931,6 +931,11 @@ REGLAS CRÍTICAS DE RESPUESTA:
 
 CONOCIMIENTO DE TIENDA:
 {{STORE_CATALOG_KNOWLEDGE}}
+
+FORMAT INSTRUCTIONS:
+{{format_instructions}}
+
+IMPORTANT: Output strict JSON only. Do not wrap in markdown '```json' blocks.
 """
     # Inject Knowledge
     sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", store_catalog if store_catalog else "No catalog data available")
