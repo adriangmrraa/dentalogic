@@ -1375,15 +1375,34 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
                 # 2. Try JSON Load (Robust)
                 parsed_json = json.loads(cleaned)
                 
+                # HELPER: Text Sanitizer
+                def sanitize_text(text: str) -> str:
+                    if not text: return ""
+                    import re
+                    # 1. Remove Image Markdown ![...](...)
+                    text = re.sub(r'!\[.*?\]\(.*?\)', '', text)
+                    # 2. Remove Headers ###
+                    text = re.sub(r'#+\s*', '', text)
+                    # 3. Remove Bold/Italic ** *
+                    text = re.sub(r'\*\*|__', '', text)
+                    # 4. Remove unwanted labels
+                    text = re.sub(r'(?i)descripci[óo]n:', '', text)
+                    text = re.sub(r'(?i)precio:', '', text)
+                    # 5. Remove URL wrapping parens (url) -> url
+                    text = re.sub(r'\((https?://[^\s]+)\)', r'\1', text)
+                    # 6. Trim lines
+                    lines = [line.strip() for line in text.split('\n')]
+                    return '\n'.join([l for l in lines if l]).strip()
+
                 # 3. Process as Dict
                 if isinstance(parsed_json, dict) and "messages" in parsed_json and isinstance(parsed_json["messages"], list):
                     final_messages = []
                     for m in parsed_json["messages"]:
-                        # Extract fields safely
                         p_part = m.get("part")
                         p_total = m.get("total")
-                        p_text = m.get("text")
-                        p_image = m.get("imageUrl") or m.get("image_url") # Handle common typo
+                        # SANITIZE TEXT
+                        p_text = sanitize_text(m.get("text"))
+                        p_image = m.get("imageUrl") or m.get("image_url")
                         
                         final_messages.append(OrchestratorMessage(
                             part=p_part,
@@ -1392,27 +1411,25 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
                             imageUrl=p_image
                         ))
                 elif isinstance(parsed_json, dict) and any(k in parsed_json for k in ["message", "response", "text"]):
-                     # Single message hallucination handling
+                     # Single message handling
                      txt = parsed_json.get("message") or parsed_json.get("response") or parsed_json.get("text")
-                     final_messages = [OrchestratorMessage(text=str(txt) if txt else "", part=1, total=1)]
+                     final_messages = [OrchestratorMessage(text=sanitize_text(str(txt)) if txt else "", part=1, total=1)]
                 elif isinstance(parsed_json, list):
                      # Direct list handling
                      final_messages = []
                      for m in parsed_json:
                         if isinstance(m, dict):
                              final_messages.append(OrchestratorMessage(
-                                text=m.get("text"), 
+                                text=sanitize_text(m.get("text")),
                                 imageUrl=m.get("imageUrl") or m.get("image_url")
                              ))
                 else:
-                    # JSON valid but structure unknown -> Send as text (debug indent)
                     final_messages = [OrchestratorMessage(text=json.dumps(parsed_json, indent=2, ensure_ascii=False))]
 
             except json.JSONDecodeError:
                 # 4. JSON Failed -> It's just text
                 final_messages = [OrchestratorMessage(text=cleaned)]
             except Exception as e:
-                # 5. Validation/Logic Error -> Log and Fallback
                 logger.error("output_parsing_failed", error=str(e), output_sample=cleaned[:100])
                 final_messages = [OrchestratorMessage(text=cleaned)]
                 
