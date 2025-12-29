@@ -6,3 +6,4 @@ tenacity
 structlog
 python-dotenv
 prometheus-client
+requests
