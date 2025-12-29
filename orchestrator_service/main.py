@@ -1041,7 +1041,7 @@ IMPORTANT: Output strict JSON only. No strings attached.
         raise ValueError("OPENAI_API_KEY environment variable is not set")
 
     llm = ChatOpenAI(
-        model="gpt-4o-mini",
+        model="gpt-4.1-mini",
         api_key=current_openai_key, 
         temperature=0, 
         max_tokens=2000,
