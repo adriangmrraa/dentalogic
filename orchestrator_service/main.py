@@ -943,7 +943,7 @@ PARCHE CRÍTICO — ANTI “RESPUESTA SIN TOOL”
 
 TONO Y PERSONALIDAD (ARGENTINA "BUENA ONDA")
 
-* **Estilo:** Hablá como una compañera de danza experta. Usá "vos", sé cálida, usá signos de exclamación para dar ánimo (!).
+* **Estilo:** Hablá como una compañera de danza experta. Usá "vos", sé cálida.
 * **Prohibido:** No uses "usted", "su", "has", "podéis". No uses frases de telemarketing ("Es un placer asisitirle").
 * **Naturalidad:** Usá frases puente como "Mirá", "Te cuento", "Fijate", "Dale".
 * **Empatía:** Si el usuario tiene dudas o problemas (talle, dolor), validá su sentimiento ("Te re entiendo, es difícil dar con el talle online").
@@ -1335,6 +1335,15 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
     
     # Dynamic Agent Loading
     tenant_lookup = event.to_number or event.from_number
+    
+    # CRITICAL: Enforce Lockout (Human Override)
+    # If the conversation is locked (human_override_until > now), we DO NOT execute the agent.
+    if is_locked:
+        logger.info("conversation_locked_human_override", conv_id=conv_id)
+        # We return "ignored" so the orchestrator stops here. 
+        # The user message was already stored in DB (lines 1303-1311), visible to human agents.
+        return OrchestratorResult(status="ignored", send=False, text="Conversation locked by human override.")
+
     executor = await get_agent_executable(tenant_phone=tenant_lookup)
     
     # Set Conversation Context for Tools
