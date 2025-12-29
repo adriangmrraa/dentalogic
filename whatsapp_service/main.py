@@ -408,7 +408,7 @@ async def ycloud_webhook(request: Request):
 
     # --- 2. Handle Echoes (Manual Messages) ---
     elif event_type == "whatsapp.message.echo" or event_type == "whatsapp.smb.message.echoes":
-        logger.info("echo_received", correlation_id=correlation_id, event=event_type)
+        logger.info("echo_received", correlation_id=correlation_id, evt_type=event_type)
         msg = event.get("whatsappMessage", {}) or event.get("message", {})
         
         user_phone = msg.get("to")
