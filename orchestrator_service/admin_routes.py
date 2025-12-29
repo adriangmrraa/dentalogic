@@ -786,11 +786,12 @@ async def get_internal_credential(name: str, x_internal_token: str = Header(None
     if x_internal_token != os.getenv("INTERNAL_API_TOKEN"):
          raise HTTPException(status_code=401, detail="Unauthorized internal call")
     
-    # 1. Check DB
-    val = await db.pool.fetchval("SELECT value FROM credentials WHERE name = $1 LIMIT 1", name)
-    # 2. Check ENV if not in DB
+    # 1. Check ENV (STRICT PRIORITY)
+    val = os.getenv(name)
+    
+    # 2. Legacy Fallback to DB (Only if absolutely necessary, but generally discouraged)
     if not val:
-        val = os.getenv(name)
+        val = await db.pool.fetchval("SELECT value FROM credentials WHERE name = $1 LIMIT 1", name)
         
     if not val:
         raise HTTPException(status_code=404, detail="Credential not found")

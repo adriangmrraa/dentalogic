@@ -893,9 +893,10 @@ async def get_agent_executable(tenant_phone: str = None):
     store_url = os.getenv("STORE_WEBSITE", "https://www.pointecoach.shop")
     
     # 3. Resolve Credentials from Environment Variables
+    # 3. Resolve Credentials from Environment Variables
     current_openai_key = os.getenv("OPENAI_API_KEY")
-    current_tn_store_id = os.getenv("TIENDANUBE_STORE_ID")
-    current_tn_access_token = os.getenv("TIENDANUBE_ACCESS_TOKEN")
+    current_tn_store_id = GLOBAL_TN_STORE_ID
+    current_tn_access_token = GLOBAL_TN_ACCESS_TOKEN
 
     # Set context variables for tools to consume
     if current_tn_store_id and current_tn_access_token:
@@ -1222,6 +1223,18 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
     # Set Conversation Context for Tools
     current_conversation_id.set(conv_id)
     current_customer_phone.set(event.from_number)
+    
+    # Distributed Lock (Prevent Race Conditions per number)
+    lock_key = f"lock:{event.from_number}"
+    lock = redis_client.lock(lock_key, timeout=20)
+    acquired = False
+    
+    # Early check for lock availability
+    if not lock.acquire(blocking=False):
+        logger.info("message_locked_processing", from_number=event.from_number)
+        return OrchestratorResult(status="processing", send=False, text="Message being processed")
+    
+    acquired = True
     
     try:
         inputs = {"input": event.text, "chat_history": chat_history}
