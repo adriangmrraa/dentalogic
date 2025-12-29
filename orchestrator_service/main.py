@@ -840,25 +840,23 @@ Tienda: {store_name}
                 server.login(h_smtp_user, h_smtp_pass)
                 server.send_message(msg)
         
-        logger.info("handoff_email_sent_smtp", to=target_email, host=h_smtp_host)
+        # 4. Lock Conversation (24h)
+        if cid:
+             await db.pool.execute("""
+                 UPDATE chat_conversations 
+                 SET human_override_until = NOW() + INTERVAL '24 hours',
+                     status = 'human_handling'
+                 WHERE id = $1
+             """, cid)
+        
+        logger.info("handoff_email_sent_smtp", to=target_email, host=h_smtp_host, locking_cid=cid)
 
-        return OrchestratorMessage(
-            text=handoff_msg,
-            part=1, total=1,
-            needs_handoff=True,
-            handoff="assigned",
-            meta={"reason": reason, "target_email": target_email}
-        )
+        return f"Email sent to human agent. Conversation locked for 24h. Tell the user: '{handoff_msg}'"
             
     except Exception as e:
         logger.error("handoff_email_failed", error=str(e))
         await log_db("error", "handoff_email_failed", str(e), {"tid": tid, "cid": str(cid)})
         return f"Error sending handoff email: {str(e)}"
-
-    # 4. Lock Conversation (24h)
-    await db.pool.execute("UPDATE chat_conversations SET human_override_until = NOW() + INTERVAL '24 hours' WHERE id = $1", cid)
-    
-    return handoff_msg
 
 tools = [search_specific_products, search_by_category, browse_general_storefront, cupones_list, orders, derivhumano]
 
@@ -1234,46 +1232,23 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
              await db.pool.execute("""
                  UPDATE chat_conversations 
                  SET human_override_until = NOW() + INTERVAL '24 hours',
-                     status = 'human_handling'
+                     status = 'human_handling',
+                     last_message_at = NOW(),
+                     updated_at = NOW()
                  WHERE id = $1
              """, conv_id)
              
-             # 2. Log message to history (marked as assistant/human_echo to show in UI but not trigger AI)
-             # We use 'assistant' role so it appears on the right side (or 'system'?)
-             # User wants to know "human handled". 
-             # Let's use 'assistant' but maybe add metadata? For now standard 'assistant'.
+             # 2. Log message to history (marked as human_supervisor)
              if event.text:
                  await db.pool.execute("""
-                     INSERT INTO chat_messages (id, conversation_id, role, content, created_at)
-                     VALUES ($1, $2, 'assistant', $3, NOW())
-                 """, str(uuid.uuid4()), conv_id, event.text)
+                     INSERT INTO chat_messages (
+                         id, tenant_id, conversation_id, role, content, 
+                         human_override, sent_from, sent_context, created_at
+                     )
+                     VALUES ($1, $2, $3, 'human_supervisor', $4, TRUE, 'webhook', 'whatsapp_echo', NOW())
+                 """, str(uuid.uuid4()), tenant_id, conv_id, event.text)
 
          return OrchestratorResult(status="ok", send=False, text="Echo processed, AI paused.")
-    # We will assume if event_type is 'echo' or similar custom logic.
-    if event.event_type == "whatsapp.message.echo": 
-        is_echo = True
-        
-    if is_echo:
-        # 2.1 Update Lockout
-        lockout_time = datetime.now() + timedelta(hours=24)
-        await db.pool.execute("""
-            UPDATE chat_conversations 
-            SET human_override_until = $1, status = 'human_override', updated_at = NOW(), last_message_at = NOW(), last_message_preview = $2
-            WHERE id = $3
-        """, lockout_time, event.text[:50], conv_id)
-        
-        # 2.2 Insert Message
-        await db.pool.execute("""
-            INSERT INTO chat_messages (
-                id, tenant_id, conversation_id, role, content, 
-                human_override, sent_from, sent_context, created_at
-            ) VALUES (
-                $1, (SELECT tenant_id FROM chat_conversations WHERE id=$2), $2, 'human_supervisor', $3,
-                TRUE, 'webhook', 'whatsapp_echo', NOW()
-            )
-        """, str(uuid.uuid4()), conv_id, event.text)
-        
-        return OrchestratorResult(status="ignored", send=False, text="Echo handled")
         
     # --- 3. Handle User Message (Inbound) ---
     
