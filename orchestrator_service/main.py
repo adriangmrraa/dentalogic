@@ -57,9 +57,17 @@ GLOBAL_TN_STORE_ID = os.getenv("TIENDANUBE_STORE_ID") or os.getenv("GLOBAL_TN_ST
 GLOBAL_TN_ACCESS_TOKEN = os.getenv("TIENDANUBE_ACCESS_TOKEN") or os.getenv("GLOBAL_TN_ACCESS_TOKEN")
 
 # Global Fallback Content (only used if DB has no specific tenant config)
-GLOBAL_STORE_DESCRIPTION = os.getenv("GLOBAL_STORE_DESCRIPTION")
 GLOBAL_CATALOG_KNOWLEDGE = os.getenv("GLOBAL_CATALOG_KNOWLEDGE")
 GLOBAL_SYSTEM_PROMPT = os.getenv("GLOBAL_SYSTEM_PROMPT")
+GLOBAL_STORE_WEBSITE = os.getenv("STORE_WEBSITE", "https://www.pointecoach.shop")
+
+# Handoff Configuration (ENV)
+HANDOFF_EMAIL = os.getenv("HANDOFF_EMAIL") or os.getenv("HANDOFF_TARGET_EMAIL")
+SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+SMTP_USER = os.getenv("SMTP_USER") or os.getenv("SMTP_USERNAME")
+SMTP_PASS = os.getenv("SMTP_PASS") or os.getenv("SMTP_PASSWORD")
+SMTP_SEC = os.getenv("SMTP_SECURITY", "SSL").upper()
 
 # --- Initialize Structlog ---
 
@@ -680,7 +688,7 @@ async def call_tiendanube_api(endpoint: str, params: dict = None):
 
     headers = {
         "Authentication": f"bearer {token}",
-        "User-Agent": "n8n (santiago@atendo.agency)",
+        "User-Agent": os.getenv("TIENDANUBE_USER_AGENT", "Orchestrator-Agent/1.0"),
         "Content-Type": "application/json"
     }
     try:
@@ -769,84 +777,95 @@ async def derivhumano(reason: str, contact_name: Optional[str] = None, contact_p
     if not tid or not cid:
         return "Error: Context not initialized for handoff."
 
-    # 1. Fetch Tenant Handoff Settings
-    config = await db.pool.fetchrow("""
-        SELECT c.*, t.store_name 
-        FROM tenant_human_handoff_config c
-        JOIN tenants t ON c.tenant_id = t.id
-        WHERE c.tenant_id = $1
-    """, tid)
+    # 1. Resolve Handoff Settings (ENV First, then DB)
+    target_email = HANDOFF_EMAIL
+    h_smtp_host = SMTP_HOST
+    h_smtp_port = SMTP_PORT
+    h_smtp_user = SMTP_USER
+    h_smtp_pass = SMTP_PASS
+    h_smtp_sec = SMTP_SEC
     
-    if not config or not config['enabled']:
-        return "Error: Handoff is currently disabled or not configured for this tenant."
-    
-    target_email = config['destination_email']
-    handoff_msg = config['handoff_message'] or "Te derivo con una persona del equipo para ayudarte mejor 😊"
+    store_name = os.getenv("STORE_NAME", "Pointe Coach")
+    handoff_msg = "Te derivo con una persona del equipo para ayudarte mejor 😊"
 
-    # 2. Build Email Content based on email_context flags
-    ctx = config['email_context'] or {}
-    if isinstance(ctx, str):
-        try:
-            ctx = json.loads(ctx)
-        except:
-            ctx = {}
-            
-    wa_id = (cphone or contact_phone) if ctx.get('ctx-phone') else "Oculto"
-    user_name = (contact_name or 'No especificado') if ctx.get('ctx-name') else "Oculto"
+    if tid:
+        # Try to pull from DB if tenant exists (for customizations), but ENV is already loaded as fallback
+        config = await db.pool.fetchrow("""
+            SELECT c.*, t.store_name 
+            FROM tenant_human_handoff_config c
+            JOIN tenants t ON c.tenant_id = t.id
+            WHERE c.tenant_id = $1
+        """, tid)
+        
+        if config and config['enabled']:
+             target_email = config['destination_email'] or target_email
+             h_smtp_host = config['smtp_host'] or h_smtp_host
+             h_smtp_port = config['smtp_port'] or h_smtp_port
+             h_smtp_user = config['smtp_username'] or h_smtp_user
+             if config['smtp_password_encrypted']:
+                 try:
+                     h_smtp_pass = decrypt_password(config['smtp_password_encrypted'])
+                 except: pass
+             h_smtp_sec = (config['smtp_security'] or h_smtp_sec).upper()
+             store_name = config['store_name'] or store_name
+             handoff_msg = config['handoff_message'] or handoff_msg
+
+    if not target_email or not h_smtp_host or not h_smtp_user or not h_smtp_pass:
+        logger.warning("handoff_config_incomplete", email=bool(target_email), host=bool(h_smtp_host))
+        return "Error: Handoff configuration (SMTP or Target Email) is incomplete. Please check environment variables (HANDOFF_EMAIL, SMTP_HOST, etc.)."
+
+    # 2. Build Content
+    wa_id = cphone or contact_phone or "Oculto"
+    user_name = contact_name or 'No especificado'
     wa_link = f"https://wa.me/{wa_id}" if wa_id != "Oculto" else "No disponible"
     
-    history_section = ""
-    if ctx.get('ctx-history'):
-        history_section = f"\nRESUMEN RECIENTE:\n{summary or 'Sin resumen de historial'}\n"
-
-    metadata_section = ""
-    if ctx.get('ctx-id'):
-        metadata_section = f"Conversation ID: {cid}\nTimestamp: {formatdate(localtime=True)}\n"
-
     subject = f"Derivación Humana: {reason} - {user_name}"
-    body = f"""DETALLE DE DERIVACIÓN (EQUIPO {config['store_name'].upper()})
-
+    body = f"""DETALLE DE DERIVACIÓN (EQUIPO {store_name.upper()})
+ 
 Motivo: {reason}
 Cliente: {user_name}
 Teléfono: {wa_id}
 Link WhatsApp: {wa_link}
-{history_section}
+
+RESUMEN RECIENTE:
+{summary or 'Sin resumen de historial'}
+
 ACCIÓN REQUERIDA:
 {action_required or 'Atención inmediata'}
 
-{metadata_section}Tienda: {config['store_name']}
+Conversation ID: {cid}
+Tienda: {store_name}
 """
 
     # 3. SMTP Send
     try:
-        smtp_host = str(config['smtp_host']).strip().replace("http://", "").replace("https://", "") if config['smtp_host'] else ""
-        smtp_user = str(config['smtp_username']).strip() if config['smtp_username'] else ""
-        smtp_pass = decrypt_password(config['smtp_password_encrypted'])
-        smtp_port = config['smtp_port']
-        smtp_sec = str(config['smtp_security']).strip().upper() if config['smtp_security'] else "SSL"
-        
-        target_email = str(config['destination_email']).strip() if config['destination_email'] else ""
+        msg = MIMEText(body)
+        msg['Subject'] = subject
+        msg['From'] = h_smtp_user
+        msg['To'] = target_email
+        msg['Date'] = formatdate(localtime=True)
 
-        if smtp_user and smtp_pass and smtp_host and target_email:
-            msg = MIMEText(body)
-            msg['Subject'] = subject
-            msg['From'] = smtp_user
-            msg['To'] = target_email
-            msg['Date'] = formatdate(localtime=True)
-
-            if smtp_sec == 'SSL':
-                with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
-                    server.login(smtp_user, smtp_pass)
-                    server.send_message(msg)
-            elif smtp_sec == 'STARTTLS':
-                with smtplib.SMTP(smtp_host, smtp_port) as server:
-                    server.starttls()
-                    server.login(smtp_user, smtp_pass)
-                    server.send_message(msg)
-            else: # NONE or fallback
-                with smtplib.SMTP(smtp_host, smtp_port) as server:
-                    server.login(smtp_user, smtp_pass)
-                    server.send_message(msg)
+        if h_smtp_sec == 'SSL':
+            with smtplib.SMTP_SSL(h_smtp_host, h_smtp_port) as server:
+                server.login(h_smtp_user, h_smtp_pass)
+                server.send_message(msg)
+        elif h_smtp_sec == 'STARTTLS':
+            with smtplib.SMTP(h_smtp_host, h_smtp_port) as server:
+                server.starttls()
+                server.login(h_smtp_user, h_smtp_pass)
+                server.send_message(msg)
+        else: # NONE or fallback
+            with smtplib.SMTP(h_smtp_host, h_smtp_port) as server:
+                server.login(h_smtp_user, h_smtp_pass)
+                server.send_message(msg)
+                
+        return OrchestratorMessage(
+            text=handoff_msg,
+            part=1, total=1,
+            needs_handoff=True,
+            handoff="assigned",
+            meta={"reason": reason, "target_email": target_email}
+        )
             
             logger.info("handoff_email_sent_smtp", to=target_email, host=smtp_host, port=smtp_port, security=smtp_sec)
         else:
@@ -877,101 +896,36 @@ parser = PydanticOutputParser(pydantic_object=OrchestratorResponse)
 
 # Agent Initialization
 # --- Agent Factory (Dynamic per Tenant) ---
-async def get_agent_executable(tenant_phone: str = "5491100000000"):
+async def get_agent_executable(tenant_phone: str = None):
     """
-    Creates an AgentExecutor dynamically based on the Tenant's System Prompt in DB.
+    Creates an AgentExecutor dynamically.
+    PRIORITY: Always use Environment Variables for this single-tenant deployment. 
+    The DB is only used for chat memory consistency.
     """
-    # 1. Fetch Tenant Context
+    # 1. Ensure DB connection (for memory, though this function doesn't use it directly, LLM might later)
     if not db.pool:
-        try:
-            await db.connect()
-        except:
-            raise HTTPException(status_code=503, detail="Database connection pool not initialized (Check DSN/Connectivity)")
+        await db.connect()
 
-    # Normalize phone numbers for lookup
-    # Heuristic: Match matches if the DB number Ends With the user's last 8 digits (ignoring area codes/prefixes)
-    # This solves +549 vs 549 vs 09 issues.
-    short_phone = tenant_phone.strip()[-8:] 
+    # 2. Resolve Configuration from Environment Variables (SINGLE TENANT)
+    store_name = os.getenv("STORE_NAME", "Pointe Coach")
+    store_description = os.getenv("STORE_DESCRIPTION", "tienda de artículos de danza clásica y contemporánea")
+    store_catalog = os.getenv("STORE_CATALOG_KNOWLEDGE", "")
+    store_url = os.getenv("STORE_WEBSITE", "https://www.pointecoach.shop")
     
-    logger.info("tenant_lookup_attempt", raw=tenant_phone, search_suffix=short_phone)
+    # 3. Resolve Credentials from Environment Variables
+    current_openai_key = os.getenv("OPENAI_API_KEY")
+    current_tn_store_id = os.getenv("TIENDANUBE_STORE_ID")
+    current_tn_access_token = os.getenv("TIENDANUBE_ACCESS_TOKEN")
 
-    tenant = await db.pool.fetchrow(
-        """SELECT t.id, t.store_name, t.system_prompt_template, t.store_catalog_knowledge, t.store_description, 
-                  t.tiendanube_store_id, t.tiendanube_access_token,
-                  h.enabled as handoff_enabled, h.handoff_instructions, h.triggers as handoff_policy
-           FROM tenants t
-           LEFT JOIN tenant_human_handoff_config h ON t.id = h.tenant_id
-           WHERE t.bot_phone_number LIKE $1""", 
-        f"%{short_phone}"
-    )
-    if not tenant:
-        logger.warning("tenant_lookup_failed", searched=[tenant_phone, f"+{tenant_phone}"], note="Verify DB entry matches YCloud 'to' number")
-    else:
-        logger.info("tenant_lookup_success", store=tenant['store_name'])
-
-    # Set context variables for this execution
-    # USER PRIORITY: DB First > Global Env Fallback
+    # Set context variables for tools to consume
+    if current_tn_store_id and current_tn_access_token:
+        tenant_store_id.set(current_tn_store_id)
+        tenant_access_token.set(current_tn_access_token)
     
-    conn_success = False
-    
-    # 1. Try DB Credentials
-    if tenant:
-        local_store_id = tenant['tiendanube_store_id']
-        local_token = tenant['tiendanube_access_token']
-        if local_store_id and local_token:
-            logger.info("tenant_found_in_db", store_name=tenant['store_name'], store_id=local_store_id)
-            tenant_store_id.set(local_store_id)
-            tenant_access_token.set(local_token)
-            current_tenant_id.set(tenant['id']) # Set Tenant ID context
-            conn_success = True
-    
-    # 2. Fallback to Global Env if DB failed/missing
-    if not conn_success and GLOBAL_TN_STORE_ID and GLOBAL_TN_ACCESS_TOKEN:
-         logger.info("using_global_env_fallback", store_id=GLOBAL_TN_STORE_ID, reason="db_credentials_missing_or_tenant_not_found")
-         tenant_store_id.set(GLOBAL_TN_STORE_ID)
-         tenant_access_token.set(GLOBAL_TN_ACCESS_TOKEN)
-         conn_success = True
-         
-    if not conn_success:
-        logger.warning("no_credentials_found", searched_phone=tenant_phone, note="Check both DB 'tenants' table and Global Env Vars")
-    
-    # Default Prompt if DB is empty or tenant not found
-    sys_template = ""
-    knowledge = ""
-    description = ""
-    
-    store_name = "Pointe Coach"
-    store_url = "https://www.pointecoach.shop"
-    
-    # Resolve Name/URL
-    if tenant:
-        store_name = tenant.get('store_name') or store_name
-        # store_website logic here if needed
-        
-    # Resolve Knowledge/Description/Prompt (DB > Global Env > Default)
-    
-    # 1. Knowledge
-    if tenant and tenant['store_catalog_knowledge']:
-        knowledge = tenant['store_catalog_knowledge']
-    elif GLOBAL_CATALOG_KNOWLEDGE:
-        knowledge = GLOBAL_CATALOG_KNOWLEDGE
-        
-    # 2. Description
-    if tenant and tenant['store_description']:
-        description = tenant['store_description']
-    elif GLOBAL_STORE_DESCRIPTION:
-        description = GLOBAL_STORE_DESCRIPTION
-    
-    # 3. System Template
-    if tenant and tenant['system_prompt_template']:
-        sys_template = tenant['system_prompt_template']
-    elif GLOBAL_SYSTEM_PROMPT:
-        sys_template = GLOBAL_SYSTEM_PROMPT
-    else:
-        # Dynamic Fallback Prompt
-        sys_template = f"""Eres el asistente virtual de {store_name}.
+    # 4. Construct System Prompt
+    sys_template = f"""Eres el asistente virtual de {store_name}.
 CONTEXTO DE LA TIENDA:
-{{description}}
+{store_description}
 
 REGLAS CRÍTICAS DE RESPUESTA:
 1. SALIDA: Responde SIEMPRE con el formato JSON de OrchestratorResponse (una lista de objetos "messages").
@@ -985,71 +939,22 @@ REGLAS CRÍTICAS DE RESPUESTA:
    - Burbuja 5: DESCRIPCIÓN (breve y fiel). Luego un salto de línea. Nombre, precio, VARIANTES. Luego URL producto.
    - Burbuja 6: SOLO la imageUrl del producto 3 (si hay).
    - Burbuja 7: DESCRIPCIÓN (breve y fiel). Luego un salto de línea. Nombre, precio, VARIANTES. Luego URL producto.
-   - Burbuja 8: CTA Final con la URL general ({store_url}) en una línea nueva.
+    - Burbuja 8: CTA Final con la URL general ({store_url}) en una línea nueva.
+5. FITTING: Si el usuario pregunta por "zapatillas de punta", recomienda siempre coordinar un fitting.
 6. NO inventes enlaces. Usa los devueltos por las tools. NUNCA inventes descripción, usa la provista.
 7. USO DE CATALOGO: Tu variable {{STORE_CATALOG_KNOWLEDGE}} contiene las categorías y marcas reales.
    - Antes de llamar a `search_specific_products`, REVISA el catálogo.
-   - Si el usuario pide "bolsos", mira que marcas de bolsos hay y busca por marca o categoría exacta (ej: `search_specific_products("Bolsos")`).
+   - Si el usuario pide algo genérico (ej: "bolsos"), mira qué marcas o categorías específicas hay en el catálogo y busca por esos términos.
    - Evita `browse_general_storefront` si hay un término de búsqueda claro.
-   - Evita búsquedas genéricas que traigan "Zapatillas" cuando piden "Bolsos" (por coincidencias en descripción).
+   - Evita búsquedas genéricas que traigan resultados irrelevantes.
+
 CONOCIMIENTO DE TIENDA:
 {{STORE_CATALOG_KNOWLEDGE}}
 """
+    # Inject Knowledge
+    sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", store_catalog if store_catalog else "No catalog data available")
 
-    # 4. POLÍTICA DE DERIVACIÓN A HUMANO (HI-PRIORITY)
-    if tenant and tenant.get('handoff_enabled'):
-        policy = tenant.get('handoff_policy') or {}
-        if isinstance(policy, str):
-            try:
-                policy = json.loads(policy)
-            except:
-                policy = {}
-        handoff_rules = tenant.get('handoff_instructions') or ""
-        
-        # Build rules string from checkboxes
-        granular_rules = []
-        if policy.get('rule_fitting'): granular_rules.append("- Fitting para ZAPATILLAS DE PUNTA: Si el usuario busca o pregunta por zapatillas de punta, OFRECER primero una asesoría personalizada de fitting. SOLO si el usuario acepta o pregunta específicamente por un turno/especialista, derivar inmediatamente.")
-        if policy.get('rule_reclamo'): granular_rules.append("- Reclamos o tono negativo/enojado")
-        if policy.get('rule_dolor'): granular_rules.append("- Mensajes sobre dolor, lesión o incomodidad fuerte")
-        if policy.get('rule_talle'): granular_rules.append("- Ambigüedad de talle o modelo no resuelta en 1-2 preguntas")
-        if policy.get('rule_especial'): granular_rules.append("- Coordinación especial, retiros o pedidos complejos")
-        
-        rules_text = "\n".join(granular_rules) if granular_rules else "Actuar según criterio profesional de derivación."
-        
-        sys_template += f"""
-=== POLÍTICA DE DERIVACIÓN A HUMANO (PRIORIDAD MÁXIMA) ===
-El siguiente conjunto de REGLAS es OBLIGATORIO y tiene prioridad sobre ventas o catálogo:
-
-CASOS DE DERIVACIÓN:
-{rules_text}
-
-INSTRUCCIONES ADICIONALES:
-"{handoff_rules}"
-
-ACCIONES OBLIGATORIAS:
-1. Para reclamos, errores o casos críticos: DETENER toda otra acción y ejecutar `derivhumano` inmediatamente.
-2. Para casos de FITTING o Dudas de Talle: El procedimiento es OFRECER o sugerir la derivación primero. Si el usuario acepta o lo pide, ejecutar `derivhumano`.
-3. Informar al usuario de forma amigable que será contactado por el equipo humano.
-4. No mostrar productos ni enlaces comerciales en este caso.
-"""
-
-
-    # Inject variables if they exist in the template string (simple replacement)
-    if "{STORE_CATALOG_KNOWLEDGE}" in sys_template:
-        sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", knowledge if knowledge else "No catalog data available")
-    if "{STORE_DESCRIPTION}" in sys_template:
-        sys_template = sys_template.replace("{STORE_DESCRIPTION}", description if description else "No shop description available")
-    if "{STORE_NAME}" in sys_template:
-        sys_template = sys_template.replace("{STORE_NAME}", store_name)
-    if "{STORE_URL}" in sys_template:
-        sys_template = sys_template.replace("{STORE_URL}", store_url)
-
-    # Ensure format instructions are present if not already in template
-    if "messages" not in sys_template.lower() or "json" not in sys_template.lower():
-        sys_template += "\n\nCRITICAL: You must answer in JSON format following this schema: " + parser.get_format_instructions()
-
-    # 2. Construct Prompt Object
-    # Use SystemMessage literal to avoid LangChain parsing curly braces in JSON/Names as variables
+    # 5. Initialize Prompt and LLM
     prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content=sys_template),
         MessagesPlaceholder(variable_name="chat_history"),
@@ -1057,23 +962,12 @@ ACCIONES OBLIGATORIAS:
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ]).partial(format_instructions=parser.get_format_instructions())
 
-    # 3. Create Agent
-    # DYNAMIC CREDENTIALS: Prefer DB over Env for OpenAI Key
-    effective_api_key = OPENAI_API_KEY
-    try:
-        cred_row = await db.pool.fetchrow("SELECT value FROM credentials WHERE name = 'OPENAI_API_KEY' AND scope = 'global'")
-        if cred_row and cred_row['value']:
-            effective_api_key = cred_row['value']
-            # logger.info("using_openai_key_from_db")
-    except Exception as e:
-        logger.warning("failed_to_fetch_openai_key_from_db", error=str(e))
-
-    if not effective_api_key:
-        raise ValueError("OPENAI_API_KEY missing")
+    if not current_openai_key:
+        raise ValueError("OPENAI_API_KEY environment variable is not set")
 
     llm = ChatOpenAI(
         model="gpt-4o-mini",
-        api_key=effective_api_key, 
+        api_key=current_openai_key, 
         temperature=0, 
         max_tokens=2000
     )
@@ -1197,26 +1091,29 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
             is_locked = True
     else:
         # Create new conversation
-        # Resolve Tenant ID robustly
-        tenant_row = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number = $1", event.to_number)
+        # Resolve Tenant ID robustly (Single Tenant Logic)
+        # We try to find the tenant by phone, but if it fails, we use the first available one 
+        # or create a default one to ensure memory (FK) works.
+        tenant_row = await db.pool.fetchrow("SELECT id FROM tenants ORDER BY id ASC LIMIT 1")
         
         if not tenant_row:
-            # Fallback 1: Try prefix removal/addition
-            clean_to = event.to_number.strip().replace("+", "") if event.to_number else ""
-            tenant_row = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number LIKE $1", f"%{clean_to[-8:]}")
+             # CREATE DEFAULT TENANT if DB is truly empty
+             logger.info("creating_default_tenant_for_single_tenant_mode")
+             store_name = os.getenv("STORE_NAME", "Default Store")
+             bot_phone = event.to_number or os.getenv("BOT_PHONE_NUMBER", "5491100000000")
+             
+             tenant_id = await db.pool.fetchval("""
+                INSERT INTO tenants (store_name, bot_phone_number)
+                VALUES ($1, $2)
+                ON CONFLICT (bot_phone_number) DO UPDATE SET updated_at = NOW()
+                RETURNING id
+             """, store_name, bot_phone)
+        else:
+            tenant_id = tenant_row['id']
             
-        if not tenant_row:
-            # Fallback 2: Grab the first available tenant (common for single-tenant users)
-            tenant_row = await db.pool.fetchrow("SELECT id FROM tenants ORDER BY id ASC LIMIT 1")
-            
-        if not tenant_row:
-             logger.error("no_tenant_found_and_db_empty", to_number=event.to_number)
-             # At this point we are stuck. This usually means sync_environment failed or env vars are missing.
-             raise HTTPException(status_code=500, detail="Tenant not configured in database. Verify BOT_PHONE_NUMBER env var.")
-        
-        tenant_id = tenant_row['id']
-        logger.info("resolved_tenant", tenant_id=tenant_id, to_number=event.to_number)
-        
+        logger.info("using_tenant_for_memory", tenant_id=tenant_id)
+        current_tenant_id.set(tenant_id)
+
         new_conv_id = str(uuid.uuid4())
         conv_id = await db.pool.fetchval("""
             INSERT INTO chat_conversations (
