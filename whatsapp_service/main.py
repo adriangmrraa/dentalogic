@@ -384,8 +384,25 @@ async def ycloud_webhook(request: Request):
              headers = {"X-Correlation-Id": correlation_id}
              if INTERNAL_API_TOKEN: headers["X-Internal-Token"] = INTERNAL_API_TOKEN
              
-             await forward_to_orchestrator(payload, headers)
-             return {"status": "media_forwarded", "count": len(media_list)}
+             # Send to Orchestrator and Process Response
+             try:
+                 raw_res = await forward_to_orchestrator(payload, headers)
+                 
+                 orch_res = OrchestratorResult(**raw_res)
+                 if orch_res.send:
+                     if not YCLOUD_API_KEY:
+                         logger.error("missing_ycloud_api_key_media_reply")
+                     else:
+                         msgs = orch_res.messages
+                         if not msgs and orch_res.text:
+                             msgs = [OrchestratorMessage(text=orch_res.text)]
+                         
+                         if msgs:
+                             await send_sequence(msgs, from_n, to_n, event.get("id"), correlation_id)
+             except Exception as e:
+                 logger.error("media_response_processing_error", error=str(e))
+                 
+             return {"status": "media_and_response_processed", "count": len(media_list)}
              
         return {"status": "ignored_type_or_empty", "type": msg_type}
 
