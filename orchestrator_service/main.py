@@ -674,9 +674,9 @@ def simplify_product(p):
     }
 
 async def call_tiendanube_api(endpoint: str, params: dict = None):
-    # Retrieve current tenant credentials from ContextVar
-    store_id = tenant_store_id.get()
-    token = tenant_access_token.get()
+    # Retrieve current tenant credentials from ContextVar OR Global Fallback (Env-First)
+    store_id = tenant_store_id.get() or GLOBAL_TN_STORE_ID
+    token = tenant_access_token.get() or GLOBAL_TN_ACCESS_TOKEN
 
     if not store_id or not token:
         # Debug: Check if vars are actually empty
@@ -1218,16 +1218,6 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
         WHERE id = $2
     """, preview_text, conv_id)
 
-    # CHECK LOCKOUT: If locked, Abort AI
-    if is_locked:
-        logger.info("ai_locked_by_human_override", conversation_id=str(conv_id))
-        return OrchestratorResult(status="ignored", send=False, text="Conversation locked by human override")
-
-
-
-    # --- 4. Invoke Agent (Unified PostgreSQL Memory) ---
-    
-    # Load History from PostgreSQL
     history_rows = await db.pool.fetch("""
         SELECT role, content 
         FROM chat_messages 
