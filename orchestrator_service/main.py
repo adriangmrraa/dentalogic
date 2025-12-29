@@ -61,15 +61,7 @@ GLOBAL_STORE_DESCRIPTION = os.getenv("GLOBAL_STORE_DESCRIPTION")
 GLOBAL_CATALOG_KNOWLEDGE = os.getenv("GLOBAL_CATALOG_KNOWLEDGE")
 GLOBAL_SYSTEM_PROMPT = os.getenv("GLOBAL_SYSTEM_PROMPT")
 
-# CORS Configuration
-CORS_ALLOWED_ORIGINS_RAW = os.getenv("CORS_ALLOWED_ORIGINS", "")
-CORS_ALLOWED_ORIGINS = [
-    origin.strip() for origin in CORS_ALLOWED_ORIGINS_RAW.split(",") if origin.strip()
-] or [
-    "https://docker-platform-ui.yn8wow.easypanel.host",
-    "http://localhost:3000",
-    "http://localhost:8000"
-]
+# --- Initialize Structlog ---
 
 if not OPENAI_API_KEY:
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -427,20 +419,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Configuration - Broadly permissive
-# This MUST be the first middleware added
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Root Endpoint for basic health checks (Traefik/EasyPanel)
 @app.get("/")
 async def root():
     return {"status": "ok", "service": "orchestrator", "version": "1.1.0"}
+
+# Health check (Standard)
+@app.get("/health")
+async def health_check_std():
+    return {"status": "ok", "service": "orchestrator"}
 
 class ToolResponse(BaseModel):
     ok: bool
@@ -482,10 +469,6 @@ class OrchestratorResult(BaseModel):
 
 
 # (Middleware and app instance moved to top)
-
-@app.get("/health")
-async def health_check():
-    return {"status": "ok", "service": "orchestrator"}
 
 # --- Include Admin Router ---
 app.include_router(admin_router)
@@ -1169,9 +1152,7 @@ async def ready():
         raise HTTPException(status_code=503, detail="Dependencies unavailable")
     return {"status": "ok"}
 
-@app.get("/health")
-def health(): return {"status": "ok"}
-
+# Standard verify internal token helper
 async def verify_internal_token(x_internal_token: str = Header(...)):
     if INTERNAL_API_TOKEN and x_internal_token != INTERNAL_API_TOKEN:
          raise HTTPException(status_code=401, detail="Invalid Internal Token")
@@ -1512,6 +1493,35 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
         )
             
     except Exception as e:
-        logger.error("agent_execution_failed", error=str(e))
-        await log_db("error", "agent_crash", f"Agent failed for {event.from_number}: {str(e)}", {"trace": str(e)})
-        return OrchestratorResult(status="error", send=False, text="Error processing request")
+        log.error("unexpected_error", error=str(e))
+        await db.mark_inbound_failed(event.provider, event.provider_message_id, str(e))
+        return OrchestratorResult(status="error", send=False, meta={"error": str(e)})
+    finally:
+        if acquired: lock.release()
+
+# --- CORS CONFIGURATION (OUTERMOST LAYER) ---
+# Middlewares in FastAPI are processed in reverse order of addition.
+# Adding CORSMiddleware last makes it the first to handle requests (outermost).
+CORS_ALLOWED_ORIGINS_RAW = os.getenv("CORS_ALLOWED_ORIGINS", "")
+CORS_ALLOWED_ORIGINS = [
+    origin.strip() for origin in CORS_ALLOWED_ORIGINS_RAW.split(",") if origin.strip()
+] or [
+    "https://docker-platform-ui.yn8wow.easypanel.host",
+    "http://localhost:3000",
+    "http://localhost:8000"
+]
+
+# When using allow_credentials=True, allow_origins cannot be ["*"]
+USE_CREDENTIALS = True
+if "*" in CORS_ALLOWED_ORIGINS:
+    USE_CREDENTIALS = False # CORS spec requirement
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOWED_ORIGINS,
+    allow_credentials=USE_CREDENTIALS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+print(f"INFO: CORS initialized with origins: {CORS_ALLOWED_ORIGINS}")
