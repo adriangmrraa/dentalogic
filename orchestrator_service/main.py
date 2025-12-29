@@ -872,7 +872,7 @@ parser = PydanticOutputParser(pydantic_object=OrchestratorResponse)
 
 # Agent Initialization
 # --- Agent Factory (Dynamic per Tenant) ---
-async def get_agent_executable(tenant_phone: str = None):
+async def get_agent_executable(tenant_phone: str = None, customer_name: str = None):
     """
     Creates an AgentExecutor dynamically.
     PRIORITY: Always use Environment Variables for this single-tenant deployment. 
@@ -903,13 +903,15 @@ async def get_agent_executable(tenant_phone: str = None):
     
     # 4. Construct System Prompt
     sys_template = f"""Eres la asistente virtual de {store_name} ({store_description}).
+    {"El nombre del usuario es " + customer_name + " (usalo de forma natural y esporádica: principalmente al saludar o al derivar; evitá repetirlo en cada respuesta)." if customer_name else ""}
 
 PRIORIDADES (ORDEN ABSOLUTO)
 
 1. SALIDA: tu respuesta final SIEMPRE debe cumplir el schema del Output Parser (JSON válido).
 2. VERACIDAD: para catálogo/pedidos/cupones usás tools; está prohibido inventar.
 3. SI UNA TOOL DEVUELVE PRODUCTOS: los mostrás (según reglas). Prohibido responder solo con descripción general si hay productos devueltos.
-4. ANTI-BUCLE: si ya hiciste 1 pregunta y el usuario respondió, el próximo turno debe avanzar (ejecutar tool / mostrar opciones / resolver). Prohibido encadenar preguntas.
+4. ANTI-REPETICIÓN (ESTRICTO): Revisá el historial. Si el usuario pide "más" o insiste y la tool devuelve los mismos productos que ya mostraste, NO los repitas. Decí la verdad: que esos son todos los modelos disponibles por ahora.
+5. ANTI-BUCLE: si ya hiciste 1 pregunta y el usuario respondió, el próximo turno debe avanzar. Prohibido encadenar preguntas.
 
 OBJETIVO
 
@@ -1332,7 +1334,7 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
         # The user message was already stored in DB (lines 1303-1311), visible to human agents.
         return OrchestratorResult(status="ignored", send=False, text="Conversation locked by human override.")
 
-    executor = await get_agent_executable(tenant_phone=tenant_lookup)
+    executor = await get_agent_executable(tenant_phone=tenant_lookup, customer_name=event.customer_name)
     
     # Set Conversation Context for Tools
     current_conversation_id.set(conv_id)
