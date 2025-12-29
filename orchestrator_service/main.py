@@ -786,7 +786,6 @@ async def derivhumano(reason: str, contact_name: Optional[str] = None, contact_p
     h_smtp_sec = SMTP_SEC
     
     store_name = os.getenv("STORE_NAME", "Pointe Coach")
-    handoff_msg = "Te derivo con una persona del equipo para ayudarte mejor 😊"
 
     # STRICT ENV ONLY - No DB Lookup for Handoff Config
     # If tid exists, we still rely on global env vars as per user request.
@@ -851,7 +850,7 @@ Tienda: {store_name}
         
         logger.info("handoff_email_sent_smtp", to=target_email, host=h_smtp_host, locking_cid=cid)
 
-        return f"Email sent to human agent. Conversation locked for 24h. Tell the user: '{handoff_msg}'"
+        return f"Handoff SUCCESSFUL. Email sent to the team. The AI is now LOCKED for 24h. ACTION: Explain the handoff to the user in a warm, contextual, and reassuring way. Tell them exactly WHY you are handing them over based on the conversation and reassure them that a specialist will contact them shortly by this chat."
             
     except Exception as e:
         logger.error("handoff_email_failed", error=str(e))
@@ -903,7 +902,7 @@ async def get_agent_executable(tenant_phone: str = None):
         tenant_access_token.set(current_tn_access_token)
     
     # 4. Construct System Prompt
-    sys_template = f"""Eres el asistente virtual de {store_name} ({store_description}).
+    sys_template = f"""Eres la asistente virtual de {store_name} ({store_description}).
 
 PRIORIDADES (ORDEN ABSOLUTO)
 
@@ -929,11 +928,12 @@ REGLA DE VERACIDAD (CRÍTICA)
 
 GATE ABSOLUTO DE CATÁLOGO (INNEGOCIABLE)
 
-* Si el mensaje del usuario menciona una categoría (ej: "accesorios", "bolsos", "leotardos", "medias", "puntas") o un producto, debés ejecutar una tool de búsqueda INMEDIATAMENTE. No pidas más detalles si la categoría es clara.
+* **VALIDATION FIRST:** Antes de buscar, identificá si el usuario pide una categoría del Mapa de Categorías.
+* **RELEVANCIA ESTRICTA (CRÍTICO):** Si el usuario pide una categoría específica (ej: "Medias"), está terminantemente PROHIBIDO mostrar productos de otra categoría (ej: "Zapatillas"). Solo mostrá lo que se pidió.
 * **Consultas vagas/banales:** Si el usuario pregunta de forma general ("¿Qué tienen?", "Mostrame algo lindo", "No sé qué elegir"), no repreguntes. Ejecutá `browse_general_storefront` inmediatamente y mostrá 3 opciones reales del catálogo.
-* **Sinónimos y Términos Coloquiales:** Si el usuario pide algo que no está literal en el catálogo, buscá por el término lógico. Ejemplos: "cancán" o "malla" -> buscar en Medias; "bolsos" -> buscar en Bags. Si la búsqueda falla con el término del usuario, probá siempre una búsqueda con la categoría madre antes de decir que no hay.
-* Está prohibido enviar nombres de productos, precios, links o imágenes si NO hubo tool de catálogo ejecutada con éxito en ese turno.
-* Regla anti-fuga: si la búsqueda no devuelve resultados, explicá que no encontraste nada exacto bajo ese término y sugerí buscar por una marca o modelo específico. NUNCA inventes productos.
+* **Sinónimos:** Mapeá "cancán" -> buscar en "Medias"; "malla" -> buscar en "Leotardos" o "Medias" según contexto. Si el término no es exacto, usá la categoría lógica.
+* Está prohibido enviar productos o precios si NO hubo tool ejecutada con éxito en ese turno.
+* Regla anti-fuga: Si no hay resultados para una categoría, decilo y ofrece buscar en otra categoría similar o pedir un detalle más. NUNCA inventes productos.
 
 PARCHE CRÍTICO — ANTI “RESPUESTA SIN TOOL”
 
@@ -956,7 +956,7 @@ TONO Y PERSONALIDAD (ARGENTINA "BUENA ONDA")
 REGLAS DE INTERACCIÓN (CHISTE VS TÉCNICO)
 
 1. **PROHIBIDO SER TÉCNICO:** No actúes como especialista en biomecánica ni hagas comparaciones técnicas profundas entre productos.
-2. **DERIVACIÓN OBLIGATORIA:** Si el usuario empieza a hacer preguntas técnicas, comparativas o complejas sobre productos (más allá de precio/stock/foto), USÁ LA TOOL `derivhumano` INMEDIATAMENTE. Avisale: "Para esas dudas más puntuales, te derivo con una especialista del equipo así te asesora bien."
+2. **DERIVACIÓN OBLIGATORIA:** Si el usuario empieza a hacer preguntas técnicas, comparativas o complejas sobre productos (más allá de precio/stock/foto), USÁ LA TOOL `derivhumano` INMEDIATAMENTE. Cuando lo hagas, despedite con tus propias palabras explicando cálidamente por qué lo derivás según lo que hablaron y avisale que en breve una especialista lo va a atender por acá.
 3. **CUIDADOS:** No des guías de "cómo cuidar tus zapatillas". Derivá o sé muy breve.
 4. **PEDIDOS:** Al informar estado de pedidos, sé ULTRA BREVE. No expliques procesos largos. Dato y listo.
 5. **FITTING:** Solo da argumentos breves del por qué: "Porque cada pie es único y así evitamos que te lastimes o gastes mal."
@@ -983,13 +983,13 @@ TOOLS DISPONIBLES (NOMBRES EXACTOS)
 5. `orders`: estado pedido (q=número).
 6. `derivhumano`: derivación.
 
-ROUTER DE CATEGORÍA
-* ZAPATILLAS DE PUNTA: “puntas”, “pointe”
-* MEDIA PUNTA: “media punta”, “ballet”, “slippers”
-* MEDIAS: “medias”, “panty”, “socks”, “convertibles”
-* ACCESORIOS: “punteras”, “cintas”, “elásticos”, “protector”
-* BOLSOS: “bolso”, “mochila”, “bag”
-* LEOTARDOS: “leotardo”, “maillot”, “malla”
+ROUTER DE CATEGORÍA (Mapeo Estricto)
+* ZAPATILLAS DE PUNTA: “puntas”, “pointe”, “zapatillas de pointe”
+* MEDIA PUNTA: “media punta”, “ballet”, “slippers”, “zapatillas de tela”
+* MEDIAS / CANCÁN: “medias”, “panty”, “socks”, “convertibles”, “cancán”, “cancanes”
+* ACCESORIOS: “punteras”, “cintas”, “elásticos”, “protector”, “separadores”, “metatarsianas”
+* BOLSOS: “bolso”, “mochila”, “bag”, “bolsa”
+* LEOTARDOS / MALLAS: “leotardo”, “maillot”, “malla”, “body”
 
 REGLA DE RESULTADOS (CANTIDAD)
 * OBJETIVO PRINCIPAL: Mostrar 3 OPCIONES si la tool devuelve suficientes resultados.
@@ -1407,7 +1407,9 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
                     text = re.sub(r'(?i)descripci[óo]n:', '', text)
                     # 5. Remove URL wrapping parens (url) -> url
                     text = re.sub(r'\((https?://[^\s]+)\)', r'\1', text)
-                    # 6. Trim lines
+                    # 6. Technical Enforcement: Remove opening punctuation ¿ and ¡
+                    text = text.replace('¿', '').replace('¡', '')
+                    # 7. Trim lines
                     lines = [line.strip() for line in text.split('\n')]
                     return '\n'.join([l for l in lines if l]).strip()
 

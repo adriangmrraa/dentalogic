@@ -215,7 +215,7 @@ async def send_sequence(messages: List[OrchestratorMessage], user_number: str, b
                 for part in refined_parts:
                     try: await client.typing_indicator(inbound_id, correlation_id)
                     except: pass
-                    await asyncio.sleep(4)
+                    await asyncio.sleep(1.5)
                     await client.send_text(user_number, part, correlation_id)
                     try: await client.mark_as_read(inbound_id, correlation_id)
                     except: pass
@@ -319,7 +319,7 @@ async def ycloud_webhook(request: Request):
             if text:
                 buffer_key, timer_key, lock_key = f"buffer:{from_n}", f"timer:{from_n}", f"active_task:{from_n}"
                 redis_client.rpush(buffer_key, text)
-                redis_client.setex(timer_key, 16, "1")
+                redis_client.setex(timer_key, 12, "1")
                 
                 if not redis_client.get(lock_key):
                     redis_client.setex(lock_key, 60, "1")
