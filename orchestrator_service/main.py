@@ -991,13 +991,22 @@ REGLA DE CALL TO ACTION (CIERRE)
 * CASO A: Si el usuario buscó ZAPATILLAS DE PUNTA -> CTA: Ofrecer "Fitting" (virtual o presencial). Explicar que para puntas es clave probarse.
 * CASO B: Cualquier otra búsqueda (o si hay pocos resultados) -> CTA: Invitar a ver más en la web: "{store_website}".
 
-FORMATO DE PRESENTACIÓN (WHATSAPP)
-* Secuencia OBLIGATORIA:
-  1. Intro (1 burbuja texto)
-  2. Producto 1 (1 objeto combinado)
-  3. Producto 2 (1 objeto combinado, si existe)
-  4. Producto 3 (1 objeto combinado, si existe)
-  5. Cierre CTA (1 burbuja texto)
+FORMATO DE PRESENTACIÓN (WHATSAPP - LIMPIO)
+* Secuencia OBLIGATORIA: Intro -> Prod 1 -> Prod 2 -> Prod 3 -> CTA.
+* Estructura del campo `text` para productos (TODO EN UNO):
+  [NOMBRE DEL PRODUCTO]
+  [PRECIO (solo el número, ej: $210,000.00)]
+  Variantes: [LISTA DE VARIANTES]
+  [DESCRIPCIÓN: FIDEDIGNA A LA DEL PRODUCTO PERO BREVE/RESUMIDA]
+  [URL SIN ADORNOS]
+
+REGLAS DE CONTENIDO (CRÍTICO: TEXTO PLANO)
+1. PROHIBIDO MARKDOWN: No uses `###`, `**bold**`, `*italics*`, `![img]()`, `[link](url)`.
+2. PROHIBIDO ETIQUETAS "DESCRIPCIÓN" O "PRECIO": No escribas "Descripción:" ni "Precio:". Pon el dato directo.
+3. ETIQUETA "VARIANTES": SÍ debés usar la etiqueta "Variantes:" antes de la lista de talles/colores.
+4. PROHIBIDO INCLUIR IMAGEN EN EL TEXTO: JAMÁS pongas `![...](...)` en el campo `text`. La imagen se envía SOLO poniendo la URL en el campo `imageUrl`. Si la pones en el texto, rompés el formato.
+5. URLS LIMPIAS: NUNCA pongas la URL entre paréntesis `(https://...)`. Ponela suelta: `https://...`
+6. CALL TO ACTION: El mensaje final de cierre (CTA) es OBLIGATORIO.
 
 CONOCIMIENTO DE TIENDA:
 {{STORE_CATALOG_KNOWLEDGE}}
@@ -1008,15 +1017,14 @@ FORMAT INSTRUCTIONS:
 EXAMPLE JSON OUTPUT (Do not deviate):
 {{{{
     "messages": [
-        {{{{ "text": "Hola, te muestro opciones encontradas:", "imageUrl": null }}}},
-        {{{{ "text": "Zapatillas Grishko 2007\n$55000\nVariantes: 4, 5, 6\nIdeales para pie griego.\nhttps://...", "imageUrl": "https://dcdn-us..." }}}},
-        {{{{ "text": "Zapatillas Sansha Etoile\n$45000\nVariantes: 7, 8\nSuela dividida.\nhttps://...", "imageUrl": "https://dcdn-us..." }}}},
-        {{{{ "text": "Zapatillas Capezio Hanami\n$60000\nVariantes: 6, 7\nTela elástica.\nhttps://...", "imageUrl": "https://dcdn-us..." }}}},
-        {{{{ "text": "Si buscabas otra cosa, en nuestra web {store_website} tenés el catálogo completo. ¡Avisame si te ayudo con la compra!", "imageUrl": null }}}}
+        {{{{ "text": "Hola, acá tenés opciones lindas:", "imageUrl": null }}}},
+        {{{{ "text": "Zapatillas Grishko 2007\n$55.000\nVariantes: 4, 5, 6, 7\nSon ideales para pie griego y brindan excelente soporte gracias a su tecnología de arco.\nhttps://www.pointecoach.shop/productos/grishko-2007", "imageUrl": "https://dcdn-us..." }}}},
+        {{{{ "text": "Zapatillas Sansha Etoile\n$45.000\nVariantes: 7, 8\nSuela dividida, muy cómodas para estudiantes avanzadas.\nhttps://www.pointecoach.shop/productos/sansha-etoile", "imageUrl": "https://dcdn-us..." }}}},
+        {{{{ "text": "Si buscabas otro modelo, en la web {store_website} tenés todo el catálogo. ¡Avisame cualquier duda!", "imageUrl": null }}}}
     ]
 }}}}
 
-IMPORTANT: Output strict JSON only. Do not wrap in markdown '```json' blocks. No introductory text.
+IMPORTANT: Output strict JSON only. No strings attached.
 """
     # Inject Knowledge
     sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", store_catalog if store_catalog else "No catalog data available")
