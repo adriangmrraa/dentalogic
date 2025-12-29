@@ -1103,7 +1103,7 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
              tenant_id = await db.pool.fetchval("""
                 INSERT INTO tenants (store_name, bot_phone_number)
                 VALUES ($1, $2)
-                ON CONFLICT (bot_phone_number) DO UPDATE SET updated_at = NOW()
+                ON CONFLICT (bot_phone_number) DO UPDATE SET store_name = EXCLUDED.store_name
                 RETURNING id
              """, store_name, bot_phone)
         else:
