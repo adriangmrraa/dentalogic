@@ -858,7 +858,9 @@ Tienda: {store_name}
             with smtplib.SMTP(h_smtp_host, h_smtp_port) as server:
                 server.login(h_smtp_user, h_smtp_pass)
                 server.send_message(msg)
-                
+        
+        logger.info("handoff_email_sent_smtp", to=target_email, host=h_smtp_host)
+
         return OrchestratorMessage(
             text=handoff_msg,
             part=1, total=1,
@@ -867,14 +869,10 @@ Tienda: {store_name}
             meta={"reason": reason, "target_email": target_email}
         )
             
-            logger.info("handoff_email_sent_smtp", to=target_email, host=smtp_host, port=smtp_port, security=smtp_sec)
-        else:
-            await call_mcp_tool("sendemail", {"Subject": subject, "Text": body})
-            logger.info("handoff_email_sent_mcp_fallback", to=target_email)
-            
     except Exception as e:
         logger.error("handoff_email_failed", error=str(e))
         await log_db("error", "handoff_email_failed", str(e), {"tid": tid, "cid": str(cid)})
+        return f"Error sending handoff email: {str(e)}"
 
     # 4. Lock Conversation (24h)
     await db.pool.execute("UPDATE chat_conversations SET human_override_until = NOW() + INTERVAL '24 hours' WHERE id = $1", cid)

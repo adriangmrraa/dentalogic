@@ -38,6 +38,12 @@ LATENCY = Histogram("http_request_latency_seconds", "Request Latency", ["service
 
 SERVICE_NAME = "tiendanube_service"
 
+# FastAPI App
+app = FastAPI(
+    title="TiendaNube Service",
+    description="Tool execution service for TiendaNube API.",
+)
+
 @app.middleware("http")
 async def add_metrics_and_logs(request: Request, call_next):
     start_time = time.time()
