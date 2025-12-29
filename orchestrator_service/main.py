@@ -935,7 +935,15 @@ CONOCIMIENTO DE TIENDA:
 FORMAT INSTRUCTIONS:
 {{format_instructions}}
 
-IMPORTANT: Output strict JSON only. Do not wrap in markdown '```json' blocks.
+EXAMPLE JSON OUTPUT (Do not deviate):
+{
+    "messages": [
+        { "part": 1, "total": 2, "text": "Here is the product", "imageUrl": null },
+        { "part": 2, "total": 2, "text": "Product definitions...", "imageUrl": "https://url.com/img.jpg" }
+    ]
+}
+
+IMPORTANT: Output strict JSON only. Do not wrap in markdown '```json' blocks. No introductory text.
 """
     # Inject Knowledge
     sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", store_catalog if store_catalog else "No catalog data available")
@@ -1277,36 +1285,49 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
         # Case C: String (maybe JSON string)
         elif isinstance(output, str):
             try:
-                # Try to parse string as JSON first
-                # Multi-pass decoding to handle double-encoded JSON strings
-                parsed = output
-                for _ in range(3):
-                    if isinstance(parsed, str):
-                        cleaned = parsed.strip()
-                        # Clean Markdown if present
-                        if cleaned.startswith("```json"): cleaned = cleaned[7:].split("```")[0]
-                        if cleaned.startswith("```"): cleaned = cleaned[3:].split("```")[0]
-                        
-                        try:
-                            parsed = json.loads(cleaned)
-                        except json.JSONDecodeError:
-                            # Handle common LLM hallucinations like trailing backslashes/quotes
-                            # e.g. }\" or }\ 
-                            cleaned_harden = re.sub(r'\\"?\s*$', '', cleaned.strip())
+                # 1. Try Validating Parser first (Best for well-formed outputs)
+                try:
+                    # Clean markdown if present to help the parser
+                    cleaned_initial = output.strip()
+                    if cleaned_initial.startswith("```json"): cleaned_initial = cleaned_initial[7:].split("```")[0].strip()
+                    elif cleaned_initial.startswith("```"): cleaned_initial = cleaned_initial[3:].split("```")[0].strip()
+                    
+                    # Use the official LangChain parser
+                    parsed_obj = parser.parse(cleaned_initial)
+                    # If successful, we have an OrchestratorResponse object
+                    final_messages = parsed_obj.messages
+                    
+                except Exception:
+                    # Fallback to manual decoding if strict parser fails (e.g. partial json)
+                    # Multi-pass decoding to handle double-encoded JSON strings
+                    parsed = output
+                    for _ in range(3):
+                        if isinstance(parsed, str):
+                            cleaned = parsed.strip()
+                            # Clean Markdown if present
+                            if cleaned.startswith("```json"): cleaned = cleaned[7:].split("```")[0]
+                            if cleaned.startswith("```"): cleaned = cleaned[3:].split("```")[0]
+                            
                             try:
-                                parsed = json.loads(cleaned_harden)
-                            except:
-                                # If direct parse fails, try regex extraction for embedded JSON
-                                match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-                                if match:
-                                    try: parsed = json.loads(match.group(0))
-                                    except: break
-                                else:
-                                    break
-                    else:
-                        break
-                
-                parsed_json = parsed
+                                parsed = json.loads(cleaned)
+                            except json.JSONDecodeError:
+                                # Handle common LLM hallucinations like trailing backslashes/quotes
+                                # e.g. }\" or }\ 
+                                cleaned_harden = re.sub(r'\\"?\s*$', '', cleaned.strip())
+                                try:
+                                    parsed = json.loads(cleaned_harden)
+                                except:
+                                    # If direct parse fails, try regex extraction for embedded JSON
+                                    match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+                                    if match:
+                                        try: parsed = json.loads(match.group(0))
+                                        except: break
+                                    else:
+                                        break
+                        else:
+                            break
+                    
+                    parsed_json = parsed
                 
                 # Recursively apply Case B logic
                 if isinstance(parsed_json, dict):
