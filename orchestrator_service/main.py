@@ -995,26 +995,27 @@ FORMATO DE PRESENTACIÓN (WHATSAPP - LIMPIO)
 * Secuencia OBLIGATORIA: Intro -> Prod 1 -> Prod 2 -> Prod 3 -> CTA.
 * Estructura del campo `text` para productos (TODO EN UNO):
   [NOMBRE DEL PRODUCTO]
-  [PRECIO (solo el número, ej: $210,000.00)]
+  Precio: $[PRECIO NUMÉRICO]
   Variantes: [LISTA DE VARIANTES]
-  [DESCRIPCIÓN: FIDEDIGNA A LA DEL PRODUCTO PERO BREVE/RESUMIDA]
+  [DESCRIPCIÓN: FIDEDIGNA PERO RESUMIDA A MÁXIMO 2 LÍNEAS. NO TE EXCEDAS.]
   [URL SIN ADORNOS]
 
 GUÍA DE USO DE DATOS (MAPPING EXACTO):
 * Tool `name` -> Nombre del producto.
-* Tool `price` -> Precio. Si `promotional_price` existe, mostrá ese.
-* Tool `variants` -> Variantes. Copia la lista de talles/colores que te da la tool.
-* Tool `description` -> Descripción. Usá la info técnica provista por la tool. NO INVENTES PROPIEDADES. Resumí si es muy largo.
-* Tool `url` -> Link al final del texto.
-* Tool `imageUrl` -> Campo `imageUrl` del JSON.
+* Tool `price` -> "Precio: $" + precio. Priorizá `promotional_price`.
+* Tool `variants` -> Variantes. Copia la lista.
+* Tool `description` -> Descripción. FIDEDIGNA (TÉCNICA) PERO MUY RESUMIDA (Max 2 renglones) para que entre en un solo mensaje.
+* Tool `url` -> Link al final.
+* Tool `imageUrl` -> Campo `imageUrl`.
 
 REGLAS DE CONTENIDO (CRÍTICO: TEXTO PLANO)
 1. PROHIBIDO MARKDOWN: No uses `###`, `**bold**`, `*italics*`, `![img]()`, `[link](url)`.
-2. PROHIBIDO ETIQUETAS "DESCRIPCIÓN" O "PRECIO": No escribas "Descripción:" ni "Precio:". Pon el dato directo.
-3. ETIQUETA "VARIANTES": SÍ debés usar la etiqueta "Variantes:" antes de la lista de talles/colores.
-4. PROHIBIDO INCLUIR IMAGEN EN EL TEXTO: JAMÁS pongas `![...](...)` en el campo `text`. La imagen se envía SOLO poniendo la URL en el campo `imageUrl`. Si la pones en el texto, rompés el formato.
-5. URLS LIMPIAS: NUNCA pongas la URL entre paréntesis `(https://...)`. Ponela suelta: `https://...`
-6. CALL TO ACTION: El mensaje final de cierre (CTA) es OBLIGATORIO.
+2. PROHIBIDO ETIQUETA "DESCRIPCIÓN": No escribas "Descripción:".
+3. ETIQUETAS "PRECIO" Y "VARIANTES": Estas SÍ van. "Precio: $..." y "Variantes: ...".
+4. PROHIBIDO INCLUIR IMAGEN EN EL TEXTO: JAMÁS pongas `![...](...)` en el campo `text`.
+5. LONGITUD MÁXIMA: Resumí la descripción. Si el texto es muy largo, WhatsApp lo corta. Mantenelo corto y conciso.
+6. URLS LIMPIAS: NUNCA pongas la URL entre paréntesis.
+7. CALL TO ACTION: El mensaje final de cierre (CTA) es OBLIGATORIO.
 
 CONOCIMIENTO DE TIENDA:
 {{STORE_CATALOG_KNOWLEDGE}}
@@ -1170,6 +1171,8 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
     
     if conv:
         conv_id = conv['id']
+        tenant_id = conv['tenant_id']
+        current_tenant_id.set(tenant_id) # Fix: Ensure tenant context is set for existing convs
         # Check Lockout
         if conv['human_override_until'] and conv['human_override_until'] > datetime.now().astimezone():
             is_locked = True
@@ -1206,6 +1209,9 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
                 $1, $2, $3, $4, $5, 'open', NOW(), NOW()
             ) RETURNING id
         """, new_conv_id, tenant_id, channel, event.from_number, event.customer_name or event.from_number)
+
+    # Set Conversation Context (CRITICAL for tools)
+    current_conversation_id.set(conv_id)
 
     # --- 2. Handle Echoes (Human Messages from App) ---
     is_echo = False
@@ -1395,7 +1401,6 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
                     text = re.sub(r'\*\*|__', '', text)
                     # 4. Remove unwanted labels
                     text = re.sub(r'(?i)descripci[óo]n:', '', text)
-                    text = re.sub(r'(?i)precio:', '', text)
                     # 5. Remove URL wrapping parens (url) -> url
                     text = re.sub(r'\((https?://[^\s]+)\)', r'\1', text)
                     # 6. Trim lines
