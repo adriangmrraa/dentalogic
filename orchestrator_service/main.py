@@ -1394,15 +1394,27 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
                     lines = [line.strip() for line in text.split('\n')]
                     return '\n'.join([l for l in lines if l]).strip()
 
+                # HELPER: URL Sanitizer
+                def sanitize_url(url: str) -> str:
+                    if not url: return None
+                    url = str(url).strip()
+                    # 1. Un-markdown: ![alt](url) -> url
+                    import re
+                    match = re.search(r'\((https?://[^\)]+)\)', url)
+                    if match: return match.group(1)
+                    # 2. Un-parens: (url) -> url
+                    if url.startswith("(") and url.endswith(")"): return url[1:-1]
+                    return url
+
                 # 3. Process as Dict
                 if isinstance(parsed_json, dict) and "messages" in parsed_json and isinstance(parsed_json["messages"], list):
                     final_messages = []
                     for m in parsed_json["messages"]:
                         p_part = m.get("part")
                         p_total = m.get("total")
-                        # SANITIZE TEXT
+                        # SANITIZE TEXT & IMAGE
                         p_text = sanitize_text(m.get("text"))
-                        p_image = m.get("imageUrl") or m.get("image_url")
+                        p_image = sanitize_url(m.get("imageUrl") or m.get("image_url"))
                         
                         final_messages.append(OrchestratorMessage(
                             part=p_part,
@@ -1421,7 +1433,7 @@ async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_to
                         if isinstance(m, dict):
                              final_messages.append(OrchestratorMessage(
                                 text=sanitize_text(m.get("text")),
-                                imageUrl=m.get("imageUrl") or m.get("image_url")
+                                imageUrl=sanitize_url(m.get("imageUrl") or m.get("image_url"))
                              ))
                 else:
                     final_messages = [OrchestratorMessage(text=json.dumps(parsed_json, indent=2, ensure_ascii=False))]
