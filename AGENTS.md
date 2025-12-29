@@ -1,98 +1,68 @@
-# 🤖 AGENTS.md: La Guía Suprema para el Mantenimiento del Proyecto
+# 🤖 AGENTS.md: La Guía Suprema para el Mantenimiento del Proyecto (Nexus v3)
 
-Este documento es el manual de instrucciones definitivo para cualquier IA (LLM) que necesite modificar o extender este sistema. Sigue estas reglas y descripciones técnicas para evitar regresiones y errores fatales.
+Este documento es el manual de instrucciones definitivo para cualquier IA o desarrollador que necesite modificar o extender este sistema. Sigue estas reglas para evitar regresiones.
 
 ---
 
-## 🏗️ Arquitectura de Microservicios
+## 🏗️ Arquitectura de Microservicios (Nexus v3)
 
-### 📡 Core Intelligence (Orchestrator)
-El cerebro central es `orchestrator_service`. Gestiona la lógica de la IA, el ruteo administrativo y la base de datos principal.
+### 📡 Core Intelligence (Orchestrator) - `orchestrator_service`
+El cerebro central. Gestiona el agente LangChain, la memoria y la base de datos.
+- **Cambio Crítico v3:** Las herramientas de **Tienda Nube** (`search_specific_products`, `orders`, etc.) ahora están **embebidas** directamente en el orquestador para reducir latencia. Ya no dependen obligatoriamente del microservicio externo `tiendanube_service`.
+- **Memoria:** Ventana de los últimos 20 mensajes (Redis + Postgres).
 
-### 📱 Percepción (WhatsApp Service)
-Ubica en `whatsapp_service`. Se encarga de la integración cruda con YCloud/Meta, envío de archivos y detección de **Echoes** (mensajes enviados desde el móvil físico).
+### 📱 Percepción y Transmisión (WhatsApp Service) - `whatsapp_service`
+Maneja la integración con YCloud y la IA de audio.
+- **Transcripción:** Usa **OpenAI Whisper** para audios. 
+- **Bug Fix Crítico:** Todo mensaje recibido (texto o multimedia) debe capturar la respuesta del orquestador y ejecutar `send_sequence`. Anteriormente, los audios enviaban la señal al orquestador pero ignoraban el resultado.
 
 ### 🎨 Control (Platform UI)
-El dashboard administrativo en `platform_ui`. Es una aplicación **Vanilla JS**. No usa frameworks complejos, por lo que la gestión del estado global es manual y crítica.
+Dashboard en `platform_ui`. Es **Vanilla JS**. Mantén la gestión de estado simple y global al inicio de `app.js`.
 
 ---
 
-## 💾 Base de Datos (PostgreSQL)
+## 🎭 La Persona: "Argentina Buena Onda"
 
-### 🚨 Tablas Críticas y Foreign Keys
-1.  **`tenants`**: Tabla madre. Todo cuelga de aquí.
-2.  **`chat_conversations`**: Metadata de chats.
-    *   `human_override_until`: Si está en el futuro, la IA **NO** responde.
-3.  **`tenant_human_handoff_config`**: Nueva tabla para SMTP y derivación.
-    *   `tenant_id` es **PRIMARY KEY** y **FOREIGN KEY** (1:1 con tenants).
-4.  **`credentials`**: Almacén de API Keys.
-    *   `scope`: `global` (general) vs `tenant` (específico).
+El agente tiene una personalidad estricta definida en `sys_template`:
+
+1.  **Tono:** Cálido, informal, voseo argentino ("Mirá", "Te cuento", "Fijate").
+2.  **Prohibido:** No usar "Usted", ni lenguaje robótico de telemarketing.
+3.  **Regla de Envíos:** Puede nombrar empresas (`SHIPPING_PARTNERS`), pero tiene **PROHIBIDO** dar precios o tiempos. Frase obligatoria: *"El costo y tiempo de envío se calculan al final de la compra según tu ubicación."*
+4.  **CTA Obligatorio:** Toda respuesta debe cerrar con un Call to Action (Fitting para puntas, Link web para el resto).
 
 ---
 
-## 📜 Reglas de Oro para Agentes (Precauciones)
+## 💾 Base de Datos y Lógica de Bloqueo
 
-### 1. 🐍 Python / FastAPI (Backend)
--   **LA TRAMPA DE PYDANTIC (CRÍTICO):** Nunca definas un `BaseModel` (ej. `HumanOverrideModel`) dentro de una función asíncrona. Esto rompe el parser de Python y lanza un `SyntaxError` bizarro. **Define siempre las clases al nivel superior del archivo.**
--   **Cascada de Borrado Manual:** Para eliminar un tenant, debes seguir este orden exacto en una transacción para no romper las Foreign Keys:
-    1.  Eliminar `tenant_human_handoff_config`.
-    2.  Eliminar `chat_conversations` (esto dispara el borrado en cascada de mensajes y media).
-    3.  Eliminar `credentials` específicos del tenant.
-    4.  Eliminar el `tenant`.
--   **Passwords SMTP:** Al devolver la configuración al frontend, el password **DEBE** ir enmascarado como `********`. Al recibir un guardado, si el password trae asteriscos, **NO** lo sobrescribas; mantén el valor actual encriptado en la DB.
+### 🚦 Mecanismo de Silencio (Human Override)
+- **Activación:** Se dispara vía `derivhumano` o cuando llega un "echo" de un humano (`whatsapp.smb.message.echoes`).
+- **Duración:** **24 horas** (antes era infinito). Se guarda en `human_override_until`.
+- **Enforcement:** El Orchestrator chequea este timestamp al inicio de `/chat`. Si el bloqueo está activo, retorna `ignored` y la IA no se ejecuta.
 
-### 2. ⚡ JavaScript (Frontend)
--   **Variables Globales de Estado:** Variables como `allChats` **DEBEN** estar definidas en el scope global (inicio de `app.js`). Si las defines dentro de una función como `loadChats`, otras funciones (como `toggleHumanOverride`) fallarán con un `ReferenceError`.
--   **Verificación de Bloqueo:** Para saber si un chat está bloqueado en el UI, nunca compares strings de fecha. Usa:
-    ```javascript
-    const isLocked = new Date(chat.human_override_until) > new Date();
-    ```
-
-### 3. 🔄 Sincronización de Entorno
--   La función `sync_environment()` en `admin_routes.py` sincroniza el tenant "por defecto". 
--   **Regla:** Solo debe crear/actualizar el tenant si las variables de entorno `STORE_NAME` y `BOT_PHONE_NUMBER` **existen y no están vacías**. Si se eliminan del entorno, el sistema ya no debe recrearlas automáticamente, permitiendo el borrado total desde el UI.
+### 🛠️ Herramientas (Tools) - Nombres Exactos
+- `search_specific_products`: Búsqueda general por keyword.
+- `search_by_category`: Búsqueda filtrada por categoría.
+- `browse_general_storefront`: Último recurso (catálogo general).
+- `orders`: Consulta de pedido (ID sin #).
+- `derivhumano`: Derivación a mail y bloqueo bionivel.
 
 ---
 
-## 🛠️ Implementación del Human Handoff (Derivación)
+## 📜 Reglas de Oro para el Código
 
-### 📧 Flujo de Correo
--   Se utiliza el modo de herramienta `derivhumano` en la IA.
--   El orquestador intercepta el llamado, lee la tabla `tenant_human_handoff_config`, desencripta la contraseña SMTP y envía un correo HTML al propietario.
--   **Trigger:** Al activarse la derivación, se pone `human_override_until` en un valor muy lejano (ej. año 2099) para pausar la IA.
+### 1. 🐍 Python (Backend)
+- **Definición de Modelos:** Define clases Pydantic siempre al nivel superior, nunca dentro de funciones.
+- **Variables de Entorno:** Usa `os.getenv` con valores por defecto consistentes con `.env.example`.
+- **NameError Fix:** Asegúrate de que las variables usadas en `sys_template` (como `SHIPPING_PARTNERS`) estén definidas en el scope de la función antes de invocar el f-string.
 
-### 🚦 El Toggle de Override
--   Ubicado en la cabecera del chat en el Platform UI.
--   **Estados:**
-    -   🔴 **Rojo (Atención Humana)**: Bot silenciado. El humano tiene el control.
-    -   🟢 **Verde (Agente Activo)**: El bot responde solo.
--   El frontend debe refrescar este estado basándose en los datos JSON que vienen de `/admin/chats`.
-
----
-
-## 🚀 Guía de Endpoints (Referencia Rápida)
-
-| Endpoint | Método | Acción |
-| :--- | :--- | :--- |
-| `/admin/handoff` | GET/POST | Configuración SMTP y reglas de email. |
-| `/admin/conversations/{id}/human-override` | POST | Activa/Desactiva el silencio de la IA manualmente. |
-| `/admin/tenants/{id}/details` | GET | Devuelve info, conexiones y estado de configuración global. |
-| `/admin/chats` | GET | Lista de conversaciones con flags de bloqueo actualizados. |
+### 2. 🔄 Sincronización
+- La función `sync_environment()` en `admin_routes.py` es la que "crea" el tenant inicial en base al `.env` si la DB está vacía.
 
 ---
 
 ## 📈 Observabilidad
--   Usa la tabla `system_events` para loguear errores graves desde el orquestador.
--   Cualquier error en el envío de emails SMTP debe quedar registrado allí para debugging.
+- Usa `system_events` para auditar fallos en el bridge MCP o errores de SMTP. 
+- Revisa `http_request_completed` en los logs para monitorear latencia del agente.
 
 ---
-
-## 🔮 Arquitectura "Next Gen" (En Desarrollo)
-El proyecto contiene carpetas para una futura migración a React:
-1.  **`frontend_react`**: Aplicación React (posiblemente Vite/Next) que reemplazará a `platform_ui`.
-2.  **`bff_service`**: "Backend for Frontend". Probablemente un servicio Nodejs/Express intermedio.
-    *   **Estado:** Experimental / En desarrollo.
-    *   **Precaución:** Los agentes actuales deben priorizar `platform_ui` (Vanilla) y `orchestrator_service` parar mantener la estabilidad del sistema productivo, a menos que se les instruya específicamente trabajar en la migración.
-
----
-**Recuerda:** Este código está diseñado para ser multi-tenant. Siempre usa `tenant_id` en tus consultas para no mezclar datos de diferentes tiendas.
+**Recuerda:** Este sistema es multi-tenant pero está optimizado para despliegues single-tenant rápidos vía EasyPanel. Mantén las credenciales en variables de entorno siempre que sea posible.

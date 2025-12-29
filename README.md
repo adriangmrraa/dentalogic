@@ -1,69 +1,52 @@
-# Pointe Coach Microservices
+# 🩰 Pointe Coach Agent - Nexus v3
 
-Este proyecto implementa un agente de chat para WhatsApp que interactúa con la plataforma de e-commerce Tienda Nube, utilizando una arquitectura de microservicios con LangChain.
+Sistema de atención al cliente automatizado para **Tienda Nube** vía **WhatsApp**, impulsado por IA (**LangChain + GPT-4o**). El agente entiende consultas complejas, busca en el catálogo en tiempo real y gestiona derivaciones a humanos.
 
-## Arquitectura
+## 🚀 Guía Rápida de Inicio
 
-- **whatsapp_service**: Maneja webhooks de WhatsApp (ycloud), verifica firmas y reenvía mensajes al orquestador.
-- **orchestrator_service**: Contiene el agente LangChain, gestiona memoria, dedupe y orquesta tools.
-- **platform_ui**: Dashboard administrativo (React) para gestionar tenants, credenciales y analizar métricas.
-- **tiendanube_service**: Expone tools para interactuar con la API de Tienda Nube.
+1. **Clonar y Configurar:**
+   ```bash
+   cp .env.example .env
+   # Completa las claves de OpenAI, YCloud y Tienda Nube
+   ```
+2. **Levantar Infraestructura:**
+   ```bash
+   docker-compose up --build
+   ```
+3. **Acceder:**
+   - **Orchestrator:** `http://localhost:8000`
+   - **Admin UI:** `http://localhost:3000` (puerto depende de tu config local)
 
-## Requisitos
+---
 
-- Docker y Docker Compose
-- Python 3.11 (para desarrollo local)
+## 📚 Documentación Detallada
 
-## Configuración
+Para mantener o extender este proyecto, consulta los siguientes manuales:
 
-1. Copia `.env.example` a `.env` y completa las variables de entorno.
+### ⚙️ [01. Arquitectura del Sistema](docs/01_architecture.md)
+Entiende cómo interactúan el `whatsapp_service`, el `orchestrator_service` y la base de datos. Flujo de mensajes y diagramas.
 
-2. Asegúrate de tener las claves API necesarias:
-   - Tienda Nube API Key
-   - YCloud API Key y Webhook Secret
-   - OpenAI API Key
+### 🔑 [02. Configuración (Variables de Entorno)](docs/02_environment_variables.md)
+Referencia completa de todas las variables necesarias para el branding, conexión a APIs y configuración SMTP.
 
-## Ejecución Local
+### ☁️ [03. Guía de Despliegue (EasyPanel)](docs/03_deployment_guide.md)
+Pasos para subir el proyecto a producción, mapeo de puertos, configuración de dominios y healthchecks.
 
-```bash
-docker-compose up --build
-```
+### 🧠 [04. Identidad y Reglas de la IA](docs/04_agent_logic_and_persona.md)
+Detalle sobre la personalidad "Argentina Buena Onda", reglas de envíos, prohibiciones técnicas y Call to Actions.
 
-Los servicios estarán disponibles en:
-- orchestrator_service: http://localhost:8000
-- tiendanube_service: http://localhost:8001
-- whatsapp_service: http://localhost:8002
-- Postgres: localhost:5432
+### 🛠️ [05. Notas para Desarrolladores](docs/05_developer_notes.md)
+Técnicas de debugging, cómo agregar nuevas Tools, gestión de memoria en Redis y tips de mantenimiento.
 
-## Tests
+---
 
-```bash
-# Instalar dependencias de test
-pip install pytest pytest-asyncio
+## 🛠️ Tecnologías Core
+- **Lenguaje:** Python 3.11 (FastAPI)
+- **IA:** LangChain + OpenAI (GPT-4o-mini / Whisper)
+- **Base de Datos:** PostgreSQL + Redis
+- **Infraestructura:** Docker + EasyPanel
+- **Canal:** WhatsApp (vía YCloud API)
 
-# Ejecutar tests
-pytest
-```
-
-## Troubleshooting
-
-- **Init SQL no corre**: Si la base de datos ya fue inicializada, el script `001_schema.sql` no volverá a correr. Para resetear la DB:
-  ```bash
-  docker-compose down -v
-  docker-compose up --build
-  ```
-
-## Deploy en EasyPanel
-
-1. **WhatsApp Service**: Es el único servicio que debe exponerse públicamente (puerto 8000 -> HTTP).
-2. **Orchestrator y TiendaNube**: Deben mantenerse internos, accesibles solo por la red de Docker.
-3. **Variables**: Configura todas las variables de `.env` en el panel de Environment Variables.
-4. **Healthchecks**: Configura `/health` como la ruta de chequeo.
-
-## Validación y Tests
-
-```bash
-# Correr suite de pruebas
-pytest -q
-```
+---
+*Desarrollado para Pointe Coach Shop.*
 
