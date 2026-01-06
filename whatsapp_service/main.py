@@ -7,6 +7,7 @@ import asyncio
 import redis
 import httpx
 import structlog
+import json
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
