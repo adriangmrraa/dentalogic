@@ -891,6 +891,7 @@ async def get_agent_executable(tenant_phone: str = None, customer_name: str = No
     store_catalog = os.getenv("STORE_CATALOG_KNOWLEDGE", "")
     store_website = os.getenv("STORE_WEBSITE", "https://www.pointecoach.shop")
     SHIPPING_PARTNERS = os.getenv("SHIPPING_PARTNERS", "Correo Argentino y principales logísticas")
+    store_address = os.getenv("STORE_ADDRESS", "Malvinas 452, Paraná, Entre Ríos, Argentina")
     
     # 3. Resolve Credentials from Environment Variables
     # 3. Resolve Credentials from Environment Variables
@@ -906,7 +907,8 @@ async def get_agent_executable(tenant_phone: str = None, customer_name: str = No
     # 4. Construct System Prompt
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    sys_template = f"""Eres la asistente virtual de {store_name} ({store_description}).
+    sys_template = f"""Eres la asistente virtual de {store_name} ({store_description}). 
+Nuestra tienda física se encuentra en: {store_address}.
 {f"El nombre del usuario es {customer_name} (usalo de forma natural y esporádica: principalmente al saludar o al derivar; evitá repetirlo en cada respuesta)." if customer_name else ""}
 
 ## PRIORIDADES (ORDEN ABSOLUTO)
