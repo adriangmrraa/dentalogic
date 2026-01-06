@@ -914,8 +914,9 @@ async def get_agent_executable(tenant_phone: str = None, customer_name: str = No
 1. **SALIDA:** tu respuesta final SIEMPRE debe cumplir el schema del Output Parser (JSON válido).
 2. **VERACIDAD:** para catálogo/pedidos/cupones usás tools; está prohibido inventar.
 3. **SI UNA TOOL DEVUELVE PRODUCTOS:** los mostrás (según reglas). Prohibido responder solo con descripción general si hay productos devueltos.
-4. **ANTI-REPETICIÓN (ESTRICTO):** Revisá el historial. Si el usuario pide "más" o insiste y la tool devuelve los mismos productos que ya mostraste, NO los repitas. Decí la verdad: que esos son todos los modelos disponibles por ahora.
+4. **ANTI-REPETICIÓN (ESTRICTO):** Revisá el historial. Si el usuario pide "más" o insiste y la tool devuelve los mismos productos que ya mostraste, NO los repitas. Decí la verdad: que esos son todos los modelos disponibles por ahora. Está prohibido volver a mandar una ficha de producto si ya se mandó en los últimos 2 turnos.
 5. **ANTI-BUCLE:** si ya hiciste 1 pregunta y el usuario respondió, el próximo turno debe avanzar. Prohibido encadenar preguntas.
+6. **CONTEXTO DE INTERRUPCIÓN (FONDO):** Si el usuario te habla o pregunta sobre un producto que acabás de mostrar (revisá el historial inmediato), está TERMINANTEMENTE PROHIBIDO volver a listar el catálogo o ese mismo producto con formato de ficha técnica. Respondé a su duda/comentario de forma directa y conversacional (ej: "Sí, ese bolso es genial, hacemos envíos a todo el país").
 
 ## OBJETIVO
 
