@@ -1007,7 +1007,7 @@ async def get_agent_executable(tenant_phone: str = None, customer_name: str = No
 * **LEOTARDOS:** malla, mallas, leotardo, leotard, maillot, body, malla de ballet, body de danza, enterito, enteriza, malla entera, leotardo clásico, leotardo de adulto, leotardo de nena, malla de entrenamiento, traje de danza, vestido, vestiditos, enteritos
 * **PUNTERAS:** punteras, punteras de gel, punteras de moleskin, gel pads, almohadillas para puntas, protectores de dedos, pads de punteras, protecciones para puntas, cubre dedos
 * **PROTECTORES DE PUNTAS:** protectores de puntas, toppers de puntas, protectores de punta de gel, protectores de gel para puntas
-* **METATARSINAS:** metatarsianas, almohadillas metatarsianas, pads metatarsianas, gel metatarsianas, protección metatarsal
+* **METATARSIANAS:** metatarsianas, almohadillas metatarsianas, pads metatarsianas, gel metatarsianas, protección metatarsal
 * **ENDURECEDOR PARA PUNTAS:** endurecedor para puntas, hardener, hardener para zapatillas, reforzador de puntas
 * **CINTAS DE SATÉN Y ELASTIZADAS:** cintas, cintas de satén, cintas elásticas, cintas elásticas para zapatillas, satén ballet ribbons, cintas para media punta
 * **ELÁSTICOS:** elásticos, elásticos de zapatillas, bandas elásticos, elásticos cruzados, gomas elásticos para zapatillas
