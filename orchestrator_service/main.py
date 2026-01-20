@@ -379,6 +379,7 @@ REGLAS CRÍTICAS DE RESPUESTA:
    - Antes de llamar a `search_specific_products`, REVISA el catálogo.
    - Si el usuario pide "bolsos", mira que marcas de bolsos hay y busca por marca o categoría exacta (ej: `search_specific_products("Bolsos")`).
    - Evita `browse_general_storefront` si hay un término de búsqueda claro.
+   - BÚSQUEDA INTELIGENTE: Si piden "Malla Negra", busca solo "Malla" (o "Leotardo") y filtra vos mismo si hay variantes en negro. NO busques "Malla Negra" directo.
 GATE: Usa `search_specific_products` SIEMPRE que pidan algo específico.
 CONTEXTO DE LA TIENDA:
 {STORE_DESCRIPTION}
@@ -714,7 +715,10 @@ async def call_tiendanube_api(endpoint: str, params: dict = None):
 @tool
 async def search_specific_products(q: str):
     """SEARCH for specific products by name, category, or brand. REQUIRED for queries like 'medias', 'zapatillas', 'puntas', 'grishko'. 
-    IMPORTANT: Use normalized terms from the Category Router (e.g., use 'Leotardo' instead of 'malla' or 'body'). 
+    IMPORTANT: 
+    1. Use normalized terms from the Category Router (e.g., use 'Leotardo' instead of 'malla' or 'body').
+    2. DO NOT include attributes like COLOR or SIZE in 'q'. Search ONLY for the base product name (e.g. search 'Leotardo', not 'Leotardo negro').
+    3. Filter by color/size internally by checking the 'variants' field in the output.
     Input 'q' is the keyword."""
     cache_key = f"productsq:{q}"
     cached = get_cached_tool(cache_key)
