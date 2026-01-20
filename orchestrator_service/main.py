@@ -470,7 +470,7 @@ class OrchestratorMessage(BaseModel):
     imageUrl: Optional[str] = Field(None, description="The URL of the product image (images[0].src from tools), or null if no image is available.")
 
 class OrchestratorResult(BaseModel):
-    status: Literal["ok", "duplicate", "ignored", "error"]
+    status: Literal["ok", "duplicate", "ignored", "error", "processing"]
     send: bool
     text: Optional[str] = None
     messages: List[OrchestratorMessage] = Field(default_factory=list)
@@ -723,7 +723,7 @@ async def search_specific_products(q: str):
     cache_key = f"productsq:{q}"
     cached = get_cached_tool(cache_key)
     if cached: return cached
-    result = await call_tiendanube_api("/products", {"q": q, "per_page": 3})
+    result = await call_tiendanube_api("/products", {"q": q, "per_page": 15})
     if isinstance(result, (dict, list)): set_cached_tool(cache_key, result, ttl=600)
     return result
 
@@ -734,7 +734,7 @@ async def search_by_category(category: str, keyword: str):
     cache_key = f"search_by_category:{category}:{keyword}"
     cached = get_cached_tool(cache_key)
     if cached: return cached
-    result = await call_tiendanube_api("/products", {"q": q, "per_page": 3})
+    result = await call_tiendanube_api("/products", {"q": q, "per_page": 15})
     if isinstance(result, (dict, list)): set_cached_tool(cache_key, result, ttl=600)
     return result
 
@@ -744,7 +744,7 @@ async def browse_general_storefront():
     cache_key = "productsall"
     cached = get_cached_tool(cache_key)
     if cached: return cached
-    result = await call_tiendanube_api("/products", {"per_page": 3})
+    result = await call_tiendanube_api("/products", {"per_page": 9})
     if isinstance(result, (dict, list)): set_cached_tool(cache_key, result, ttl=600)
     return result
 
