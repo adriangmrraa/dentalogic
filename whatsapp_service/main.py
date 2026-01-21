@@ -451,9 +451,20 @@ async def ycloud_webhook(request: Request):
         bot_phone = msg.get("from")
         
         text = None
-        if msg.get("type") == "text":
-            text = msg.get("text", {}).get("body")
+        msg_type = msg.get("type")
         
+        if msg_type == "text":
+            text = msg.get("text", {}).get("body")
+        elif msg_type == "audio":
+            text = "[Audio enviado]"
+        elif msg_type == "image":
+            text = msg.get("image", {}).get("caption") or "[Imagen enviada]"
+        elif msg_type == "document":
+            text = msg.get("document", {}).get("caption") or "[Documento enviado]"
+        elif msg_type == "video":
+             text = msg.get("video", {}).get("caption") or "[Video enviado]"
+        
+        # If we have text (real or fallback) and a user phone, forward it
         if text and user_phone:
              payload = {
                 "provider": "ycloud", 
@@ -470,7 +481,7 @@ async def ycloud_webhook(request: Request):
              
              try:
                  await forward_to_orchestrator(payload, headers)
-                 return {"status": "echo_forwarded"}
+                 return {"status": "echo_forwarded", "type": msg_type}
              except Exception as e:
                  logger.error("echo_forward_failed", error=str(e))
                  return {"status": "error_forwarding_echo"}
