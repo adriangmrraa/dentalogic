@@ -220,7 +220,10 @@ async def send_sequence(messages: List[OrchestratorMessage], user_number: str, b
                     await client.send_text(user_number, part, correlation_id)
                     try: await client.mark_as_read(inbound_id, correlation_id)
                     except: pass
-                
+
+            # Delay between messages to prevent out-of-order delivery
+            await asyncio.sleep(2)
+
         except Exception as e:
             logger.error("sequence_step_error", error=str(e), correlation_id=correlation_id)
 
