@@ -1,0 +1,518 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  ArrowLeft, User, Phone, Mail, Calendar, AlertTriangle,
+  FileText, Plus, Activity, Heart, Pill, Stethoscope, Clock
+} from 'lucide-react';
+import api from '../api/axios';
+
+interface Patient {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  phone_number: string;
+  email?: string;
+  dni?: string;
+  obra_social?: string;
+  obra_social_number?: string;
+  birth_date?: string;
+  created_at: string;
+  status?: string;
+  medical_notes?: string; // Antecedentes médicos
+}
+
+interface ClinicalRecord {
+  id: number;
+  patient_id: number;
+  professional_id: number;
+  professional_name: string;
+  appointment_id?: number;
+  record_type: string;
+  chief_complaint?: string;
+  diagnosis?: string;
+  treatment_plan?: string;
+  notes?: string;
+  vital_signs?: Record<string, string>;
+  created_at: string;
+}
+
+const criticalConditions = [
+  'diabetes', 'hipertension', 'cardiopatia', 'hemofilia',
+  'alergia penicilina', 'embarazo', ' anticoagulacion',
+  'vih', 'hepatitis', 'asma severa'
+];
+
+export default function PatientDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [records, setRecords] = useState<ClinicalRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showNoteForm, setShowNoteForm] = useState(false);
+  const [criticalConditionsFound, setCriticalConditionsFound] = useState<string[]>([]);
+
+  const [formData, setFormData] = useState({
+    record_type: 'evolution',
+    chief_complaint: '',
+    diagnosis: '',
+    treatment_plan: '',
+    notes: '',
+    blood_pressure: '',
+    heart_rate: '',
+    temperature: '',
+  });
+
+  useEffect(() => {
+    if (id) {
+      fetchPatientData();
+    }
+  }, [id]);
+
+  const fetchPatientData = async () => {
+    try {
+      setLoading(true);
+      const [patientRes, recordsRes] = await Promise.all([
+        api.get(`/admin/patients/${id}`),
+        api.get(`/admin/patients/${id}/records`),
+      ]);
+      setPatient(patientRes.data);
+      setRecords(recordsRes.data);
+      
+      // Check for critical medical conditions
+      if (patientRes.data.medical_notes) {
+        const notes = patientRes.data.medical_notes.toLowerCase();
+        const found = criticalConditions.filter(condition =>
+          notes.includes(condition.toLowerCase())
+        );
+        setCriticalConditionsFound(found);
+      }
+    } catch (error) {
+      console.error('Error fetching patient data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        patient_id: parseInt(id!),
+        record_type: formData.record_type,
+        chief_complaint: formData.chief_complaint,
+        diagnosis: formData.diagnosis,
+        treatment_plan: formData.treatment_plan,
+        notes: formData.notes,
+        vital_signs: {
+          blood_pressure: formData.blood_pressure,
+          heart_rate: formData.heart_rate,
+          temperature: formData.temperature,
+        },
+      };
+
+      await api.post('/admin/clinical-records', payload);
+      fetchPatientData();
+      setShowNoteForm(false);
+      setFormData({
+        record_type: 'evolution',
+        chief_complaint: '',
+        diagnosis: '',
+        treatment_plan: '',
+        notes: '',
+        blood_pressure: '',
+        heart_rate: '',
+        temperature: '',
+      });
+    } catch (error) {
+      console.error('Error saving clinical record:', error);
+      alert('Error al guardar el registro');
+    }
+  };
+
+  const getRecordIcon = (type: string) => {
+    switch (type) {
+      case 'initial': return <Stethoscope className="text-blue-500" size={18} />;
+      case 'evolution': return <Activity className="text-green-500" size={18} />;
+      case 'procedure': return <Heart className="text-purple-500" size={18} />;
+      case 'prescription': return <Pill className="text-orange-500" size={18} />;
+      default: return <FileText className="text-gray-500" size={18} />;
+    }
+  };
+
+  const getRecordTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      initial: 'Consulta Inicial',
+      evolution: 'Evolución',
+      procedure: 'Procedimiento',
+      prescription: 'Receta',
+    };
+    return labels[type] || type;
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 text-center text-gray-500">
+        Cargando datos del paciente...
+      </div>
+    );
+  }
+
+  if (!patient) {
+    return (
+      <div className="p-6 text-center text-gray-500">
+        Paciente no encontrado
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex items-center gap-4 mb-6">
+        <button
+          onClick={() => navigate('/pacientes')}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <ArrowLeft size={20} />
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">
+            {patient.first_name} {patient.last_name}
+          </h1>
+          <p className="text-gray-500">Historia Clínica Digital</p>
+        </div>
+        {criticalConditionsFound.length > 0 && (
+          <div className="ml-auto flex items-center gap-2 bg-red-100 text-red-800 px-3 py-1 rounded-full">
+            <AlertTriangle size={16} />
+            <span className="text-sm font-medium">Antecedentes Críticos</span>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-6">
+        {/* Patient Profile */}
+        <div className="col-span-1 space-y-4">
+          {/* Basic Info */}
+          <div className="bg-white rounded-lg shadow p-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-white text-xl font-bold">
+                {patient.first_name?.charAt(0)}
+              </div>
+              <div>
+                <div className="font-medium text-gray-900">
+                  {patient.first_name} {patient.last_name}
+                </div>
+                <div className="text-sm text-gray-500">Paciente</div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm">
+                <Phone className="text-gray-400" size={16} />
+                <span>{patient.phone_number}</span>
+              </div>
+              {patient.email && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Mail className="text-gray-400" size={16} />
+                  <span>{patient.email}</span>
+                </div>
+              )}
+              {patient.dni && (
+                <div className="flex items-center gap-2 text-sm">
+                  <User className="text-gray-400" size={16} />
+                  <span>DNI: {patient.dni}</span>
+                </div>
+              )}
+              {patient.obra_social && (
+                <div className="flex items-center gap-2 text-sm">
+                  <FileText className="text-gray-400" size={16} />
+                  <span>{patient.obra_social} {patient.obra_social_number}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2 text-sm">
+                <Calendar className="text-gray-400" size={16} />
+                <span>Alta: {new Date(patient.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Medical Notes / Antecedentes */}
+          {patient.medical_notes && (
+            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="text-red-500" size={18} />
+                <h3 className="font-medium text-gray-900">Antecedentes Médicos</h3>
+              </div>
+              <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                {patient.medical_notes}
+              </p>
+              {criticalConditionsFound.length > 0 && (
+                <div className="mt-3 pt-3 border-t">
+                  <p className="text-xs font-medium text-red-600 mb-2">Condiciones Críticas:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {criticalConditionsFound.map((condition) => (
+                      <span key={condition} className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded">
+                        {condition}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Add Note Button */}
+          <button
+            onClick={() => setShowNoteForm(true)}
+            className="w-full flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-lg hover:bg-primary-dark transition-colors"
+          >
+            <Plus size={18} />
+            Agregar Evolución
+          </button>
+        </div>
+
+        {/* Clinical Records Timeline */}
+        <div className="col-span-2">
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b">
+              <h2 className="font-medium text-gray-900">Línea de Tiempo Clínica</h2>
+              <p className="text-sm text-gray-500">{records.length} registros</p>
+            </div>
+
+            <div className="p-4">
+              {records.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText size={48} className="mx-auto mb-2 opacity-50" />
+                  <p>No hay registros clínicos aún</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {records.map((record, index) => (
+                    <div key={record.id} className="relative pl-8 pb-4">
+                      {/* Timeline line */}
+                      {index < records.length - 1 && (
+                        <div className="absolute left-[11px] top-6 bottom-0 w-0.5 bg-gray-200"></div>
+                      )}
+                      
+                      {/* Timeline dot */}
+                      <div className="absolute left-0 top-1 w-6 h-6 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center">
+                        {getRecordIcon(record.record_type)}
+                      </div>
+
+                      {/* Content */}
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">
+                              {getRecordTypeLabel(record.record_type)}
+                            </span>
+                            <span className="ml-2 text-sm text-gray-500">
+                              {new Date(record.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-400">
+                            Dr. {record.professional_name}
+                          </span>
+                        </div>
+
+                        {record.chief_complaint && (
+                          <div className="mb-2">
+                            <p className="text-xs font-medium text-gray-500">Motivo de consulta</p>
+                            <p className="text-sm">{record.chief_complaint}</p>
+                          </div>
+                        )}
+
+                        {record.diagnosis && (
+                          <div className="mb-2">
+                            <p className="text-xs font-medium text-gray-500">Diagnóstico</p>
+                            <p className="text-sm">{record.diagnosis}</p>
+                          </div>
+                        )}
+
+                        {record.treatment_plan && (
+                          <div className="mb-2">
+                            <p className="text-xs font-medium text-gray-500">Plan de tratamiento</p>
+                            <p className="text-sm">{record.treatment_plan}</p>
+                          </div>
+                        )}
+
+                        {record.notes && (
+                          <div className="mb-2">
+                            <p className="text-xs font-medium text-gray-500">Notas</p>
+                            <p className="text-sm text-gray-600">{record.notes}</p>
+                          </div>
+                        )}
+
+                        {record.vital_signs && (
+                          <div className="flex gap-4 mt-2 pt-2 border-t">
+                            {record.vital_signs.blood_pressure && (
+                              <div className="text-xs">
+                                <span className="text-gray-400">PA: </span>
+                                <span>{record.vital_signs.blood_pressure}</span>
+                              </div>
+                            )}
+                            {record.vital_signs.heart_rate && (
+                              <div className="text-xs">
+                                <span className="text-gray-400">FC: </span>
+                                <span>{record.vital_signs.heart_rate} ppm</span>
+                              </div>
+                            )}
+                            {record.vital_signs.temperature && (
+                              <div className="text-xs">
+                                <span className="text-gray-400">T°: </span>
+                                <span>{record.vital_signs.temperature}°C</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Add Note Modal */}
+      {showNoteForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white">
+              <h2 className="text-xl font-bold">Nueva Evolución Clínica</h2>
+              <button
+                onClick={() => setShowNoteForm(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-4">
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tipo de Registro
+                  </label>
+                  <select
+                    value={formData.record_type}
+                    onChange={(e) => setFormData({ ...formData, record_type: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="initial">Consulta Inicial</option>
+                    <option value="evolution">Evolución</option>
+                    <option value="procedure">Procedimiento</option>
+                    <option value="prescription">Receta</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Motivo de Consulta
+                </label>
+                <input
+                  type="text"
+                  value={formData.chief_complaint}
+                  onChange={(e) => setFormData({ ...formData, chief_complaint: e.target.value })}
+                  placeholder="Ej: Dolor de muela, revisión de rutina..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Diagnóstico
+                </label>
+                <textarea
+                  value={formData.diagnosis}
+                  onChange={(e) => setFormData({ ...formData, diagnosis: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Plan de Tratamiento
+                </label>
+                <textarea
+                  value={formData.treatment_plan}
+                  onChange={(e) => setFormData({ ...formData, treatment_plan: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              {/* Vital Signs */}
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Signos Vitales</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Presión Arterial</label>
+                    <input
+                      type="text"
+                      placeholder="120/80"
+                      value={formData.blood_pressure}
+                      onChange={(e) => setFormData({ ...formData, blood_pressure: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Frecuencia Cardíaca</label>
+                    <input
+                      type="text"
+                      placeholder="72"
+                      value={formData.heart_rate}
+                      onChange={(e) => setFormData({ ...formData, heart_rate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Temperatura</label>
+                    <input
+                      type="text"
+                      placeholder="36.5"
+                      value={formData.temperature}
+                      onChange={(e) => setFormData({ ...formData, temperature: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notas Adicionales
+                </label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowNoteForm(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-white bg-primary rounded-lg hover:bg-primary-dark"
+                >
+                  Guardar Registro
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

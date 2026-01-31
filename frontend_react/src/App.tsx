@@ -1,11 +1,12 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Dashboard } from './views/Dashboard';
-import { Credentials } from './views/Credentials';
-import { Stores } from './views/Stores';
-import { Setup } from './views/Setup';
-import { Logs } from './views/Logs';
-import { Tools } from './views/Tools';
+import AgendaView from './views/AgendaView';
+import PatientsView from './views/PatientsView';
+import PatientDetail from './views/PatientDetail';
+import ProfessionalsView from './views/ProfessionalsView';
+import ChatsView from './views/ChatsView';
+import TreatmentsView from './views/TreatmentsView';
 
 function App() {
   return (
@@ -13,14 +14,13 @@ function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/setup" element={<Setup />} />
-          <Route path="/stores" element={<Stores />} />
-          <Route path="/logs" element={<Logs />} />
-          <Route path="/analytics" element={<div className="view active"><h1 className="view-title">Métricas Avanzadas</h1><p>Próximamente...</p></div>} />
-          <Route path="/credentials" element={<Credentials />} />
-          <Route path="/ycloud" element={<div className="view active"><h1 className="view-title">WhatsApp (YCloud)</h1><p>Próximamente...</p></div>} />
-          <Route path="/whatsapp-meta" element={<div className="view active"><h1 className="view-title">WhatsApp Meta API</h1><p>Próximamente...</p></div>} />
-          <Route path="/tools" element={<Tools />} />
+          <Route path="/agenda" element={<AgendaView />} />
+          <Route path="/pacientes" element={<PatientsView />} />
+          <Route path="/pacientes/:id" element={<PatientDetail />} />
+          <Route path="/chats" element={<ChatsView />} />
+          <Route path="/profesionales" element={<ProfessionalsView />} />
+          <Route path="/tratamientos" element={<TreatmentsView />} />
+          <Route path="/configuracion" element={<div className="p-6"><h1 className="text-2xl font-bold">Configuración</h1><p className="text-gray-500">Próximamente...</p></div>} />
         </Routes>
       </Layout>
     </Router>

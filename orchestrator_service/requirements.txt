@@ -12,4 +12,6 @@ langchain-community==0.0.13
 python-dotenv
 prometheus-client
 httpx
-requests
+requestspython-dateutil
+python-socketio
+aiofiles

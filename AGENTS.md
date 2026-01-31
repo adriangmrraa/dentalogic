@@ -10,6 +10,7 @@ Este documento es el manual de instrucciones definitivo para cualquier IA o desa
 El cerebro central. Gestiona el agente LangChain, la memoria y la base de datos.
 - **Cambio Crítico v3:** Las herramientas de **Tienda Nube** (`search_specific_products`, `orders`, etc.) ahora están **embebidas** directamente en el orquestador para reducir latencia. Ya no dependen obligatoriamente del microservicio externo `tiendanube_service`.
 - **Memoria:** Ventana de los últimos 20 mensajes (Redis + Postgres).
+- **WebSocket / Socket.IO:** Servidor Socket.IO embebido para sincronización en tiempo real de la agenda. Emite eventos `NEW_APPOINTMENT`, `APPOINTMENT_UPDATED`, `APPOINTMENT_DELETED` cuando se crean, actualizan o cancelan turnos.
 
 ### 📱 Percepción y Transmisión (WhatsApp Service) - `whatsapp_service`
 Maneja la integración con YCloud y la IA de audio.
@@ -45,6 +46,9 @@ El agente tiene una personalidad estricta definida en `sys_template`:
 - `browse_general_storefront`: Último recurso (catálogo general).
 - `orders`: Consulta de pedido (ID sin #).
 - `derivhumano`: Derivación a mail y bloqueo bionivel.
+- `check_availability`: Consulta disponibilidad de turnos para una fecha específica.
+- `book_appointment`: Registra un turno en la base de datos y emite evento `NEW_APPOINTMENT` vía WebSocket.
+- `triage_urgency`: Analiza síntomas para clasificar urgencia (emergency, high, normal, low).
 
 ---
 

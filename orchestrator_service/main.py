@@ -1,1562 +1,460 @@
 import os
 import json
-import hashlib
-import time
+import logging
+import asyncio
 import uuid
-import requests
-import re
-import redis
-import structlog
-import httpx
-import smtplib
-from email.mime.text import MIMEText
-from email.utils import formatdate
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union, Literal
-from fastapi import FastAPI, HTTPException, Header, Depends, status, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from datetime import datetime, timedelta, date
+from typing import List, Optional, Dict, Any
 from contextvars import ContextVar
+from contextlib import asynccontextmanager
+from dateutil.parser import parse as dateutil_parse
+import re
+
+from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from dotenv import load_dotenv
-
-# --- Dynamic Context ---
-tenant_store_id: ContextVar[Optional[str]] = ContextVar("tenant_store_id", default=None)
-tenant_access_token: ContextVar[Optional[str]] = ContextVar("tenant_access_token", default=None)
-current_tenant_id: ContextVar[Optional[int]] = ContextVar("current_tenant_id", default=None)
-current_conversation_id: ContextVar[Optional[uuid.UUID]] = ContextVar("current_conversation_id", default=None)
-current_customer_phone: ContextVar[Optional[str]] = ContextVar("current_customer_phone", default=None)
-
-# Initialize earlys
-load_dotenv()
-
-try:
-    from langchain.agents import AgentExecutor, create_openai_functions_agent
-except ImportError:
-    from langchain.agents.agent import AgentExecutor
-    from langchain.agents import create_openai_functions_agent
+from sqlalchemy import create_url
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import text
 
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.tools import tool
-from langchain.memory import ConversationBufferMemory
-from langchain_community.chat_message_histories import RedisChatMessageHistory
+from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from langchain.tools import tool
 
+import socketio
 from db import db
+from admin_routes import router as admin_router
 
-# Configuration & Environment
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
-POSTGRES_DSN = os.getenv("POSTGRES_DSN")
+# --- CONFIGURACIÓN ---
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+logging.basicConfig(level=LOG_LEVEL)
+logger = logging.getLogger("orchestrator")
 
-# Fallback Tienda Nube credentials (from Env Vars)
-GLOBAL_TN_STORE_ID = os.getenv("TIENDANUBE_STORE_ID") or os.getenv("GLOBAL_TN_STORE_ID")
-GLOBAL_TN_ACCESS_TOKEN = os.getenv("TIENDANUBE_ACCESS_TOKEN") or os.getenv("GLOBAL_TN_ACCESS_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+POSTGRES_DSN = os.getenv("POSTGRES_DSN", "")
+CLINIC_NAME = os.getenv("CLINIC_NAME", "Nexus Dental")
+CLINIC_LOCATION = os.getenv("CLINIC_LOCATION", "Buenos Aires, Argentina")
 
-# Global Fallback Content (only used if DB has no specific tenant config)
-GLOBAL_CATALOG_KNOWLEDGE = os.getenv("GLOBAL_CATALOG_KNOWLEDGE")
-GLOBAL_SYSTEM_PROMPT = os.getenv("GLOBAL_SYSTEM_PROMPT")
-GLOBAL_STORE_WEBSITE = os.getenv("STORE_WEBSITE", "https://www.pointecoach.shop")
+# ContextVars para rastrear el usuario en la sesión de LangChain
+current_customer_phone: ContextVar[Optional[str]] = ContextVar("current_customer_phone", default=None)
+current_patient_id: ContextVar[Optional[int]] = ContextVar("current_patient_id", default=None)
 
-# Handoff Configuration (ENV)
-HANDOFF_EMAIL = os.getenv("HANDOFF_EMAIL") or os.getenv("HANDOFF_TARGET_EMAIL")
-SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
-SMTP_USER = os.getenv("SMTP_USER") or os.getenv("SMTP_USERNAME")
-SMTP_PASS = os.getenv("SMTP_PASS") or os.getenv("SMTP_PASSWORD")
-SMTP_SEC = os.getenv("SMTP_SECURITY", "SSL").upper()
+# --- DATABASE SETUP ---
+engine = create_async_engine(POSTGRES_DSN, echo=False)
+AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-# --- Initialize Structlog ---
-
-if not OPENAI_API_KEY:
-    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-    if not OPENAI_API_KEY:
-        print("CRITICAL ERROR: OPENAI_API_KEY not found.")
-
-# Initialize Structlog
-structlog.configure(
-    processors=[
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer()
-    ],
-    logger_factory=structlog.PrintLoggerFactory(),
-)
-logger = structlog.get_logger()
-
-# Initialize Redis
-redis_client = redis.from_url(REDIS_URL)
-
-# --- Shared Models ---
-# --- Shared Models ---
-class ToolError(BaseModel):
-    code: str = Field(..., description="Error code")
+# --- MODELOS DE DATOS (API) ---
+class ChatRequest(BaseModel):
     message: str
-    retryable: bool
-    details: Optional[Dict[str, Any]] = None
+    phone: str
+    name: Optional[str] = "Paciente"
 
-# FastAPI App
-from contextlib import asynccontextmanager
-from utils import encrypt_password, decrypt_password
-from admin_routes import router as admin_router, sync_environment
+# --- HELPERS PARA PARSING DE FECHAS ---
+
+def get_next_weekday(target_weekday: int) -> date:
+    """Obtiene el próximo día de la semana (0=lunes, 6=domingo)."""
+    today = datetime.now()
+    days_ahead = target_weekday - today.weekday()
+    if days_ahead <= 0:
+        days_ahead += 7
+    return (today + timedelta(days=days_ahead)).date()
+
+def parse_date(date_query: str) -> date:
+    """Convierte 'mañana', 'lunes', '2025-02-05' a date."""
+    query = date_query.lower().strip()
+    
+    # Palabras clave españolas/inglesas
+    day_map = {
+        'mañana': lambda: (datetime.now() + timedelta(days=1)).date(),
+        'tomorrow': lambda: (datetime.now() + timedelta(days=1)).date(),
+        'hoy': lambda: datetime.now().date(),
+        'today': lambda: datetime.now().date(),
+        'lunes': lambda: get_next_weekday(0),
+        'monday': lambda: get_next_weekday(0),
+        'martes': lambda: get_next_weekday(1),
+        'tuesday': lambda: get_next_weekday(1),
+        'miércoles': lambda: get_next_weekday(2),
+        'wednesday': lambda: get_next_weekday(2),
+        'jueves': lambda: get_next_weekday(3),
+        'thursday': lambda: get_next_weekday(3),
+        'viernes': lambda: get_next_weekday(4),
+        'friday': lambda: get_next_weekday(4),
+        'sábado': lambda: get_next_weekday(5),
+        'saturday': lambda: get_next_weekday(5),
+        'domingo': lambda: get_next_weekday(6),
+        'sunday': lambda: get_next_weekday(6),
+    }
+    
+    if query in day_map:
+        return day_map[query]()
+    
+    # Intentar parsear como fecha
+    try:
+        return dateutil_parse(query, dayfirst=True).date()
+    except:
+        return datetime.now().date()
+
+def parse_datetime(datetime_query: str) -> datetime:
+    """Convierte 'mañana 14:00', '2025-02-05 14:30' a datetime."""
+    try:
+        dt = dateutil_parse(datetime_query, dayfirst=True)
+        return dt
+    except:
+        # Fallback: mañana a las 14:00
+        tomorrow = datetime.now() + timedelta(days=1)
+        return tomorrow.replace(hour=14, minute=0, second=0, microsecond=0)
+
+def generate_free_slots(target_date: date, busy_times: List[tuple], 
+                       start_hour=9, end_hour=18, interval_minutes=30) -> List[str]:
+    """Genera lista de horarios disponibles (30min intervals)."""
+    slots = []
+    current = datetime.combine(target_date, datetime.min.time()).replace(hour=start_hour)
+    end = datetime.combine(target_date, datetime.min.time()).replace(hour=end_hour)
+    
+    # Convertir busy_times a set de horas
+    busy_hours = set()
+    for busy_start, duration in busy_times:
+        busy_hours.add(busy_start.hour + (busy_start.minute / 60))
+    
+    while current < end:
+        # Saltar almuerzo 13:00-14:00
+        if current.hour >= 13 and current.hour < 14:
+            current += timedelta(minutes=interval_minutes)
+            continue
+        
+        # Verificar que no está ocupado
+        hour_decimal = current.hour + (current.minute / 60)
+        if hour_decimal not in busy_hours:
+            slots.append(current.strftime("%H:%M"))
+        
+        current += timedelta(minutes=interval_minutes)
+    
+    return slots[:5]  # Retornar primeros 5
+
+# --- TOOLS DENTALES ---
+
+@tool
+async def check_availability(date_query: str):
+    """
+    Consulta la disponibilidad REAL de turnos en la BD para una fecha.
+    date_query: Descripción de la fecha (ej: 'mañana', 'lunes', '2025-05-10')
+    Devuelve: Horarios disponibles con profesionales
+    """
+    try:
+        target_date = parse_date(date_query)
+        
+        # Query BD: obtener turnos confirmados para esa fecha
+        busy_appointments = await db.pool.fetch("""
+            SELECT appointment_datetime, duration_minutes, professional_id
+            FROM appointments
+            WHERE DATE(appointment_datetime) = $1
+            AND status IN ('scheduled', 'confirmed')
+            ORDER BY appointment_datetime ASC
+        """, target_date)
+        
+        # Extraer times ocupados
+        busy_times = [(row['appointment_datetime'], row['duration_minutes']) 
+                      for row in busy_appointments]
+        
+        # Generar slots libres
+        available_slots = generate_free_slots(target_date, busy_times)
+        
+        if available_slots:
+            slots_str = ", ".join(available_slots)
+            return f"Tenemos disponibilidad para {date_query}: {slots_str} (30 min cada turno)."
+        else:
+            return f"No hay disponibilidad para {date_query}. ¿Te interesa otro día?"
+            
+    except Exception as e:
+        logger.error(f"Error en check_availability: {e}")
+        return f"No pude consultar disponibilidad. Prueba diciendo 'Quiero agendar mañana'."
+
+@tool
+async def book_appointment(date_time: str, treatment_reason: str):
+    """
+    Registra un turno en la BD. Úsalo cuando el paciente confirma fecha, hora y motivo.
+    date_time: Fecha y hora del turno (ej: 'mañana 14:00')
+    treatment_reason: Tipo de tratamiento (checkup, cleaning, etc.)
+    """
+    phone = current_customer_phone.get()
+    
+    if not phone:
+        return "❌ Error: No pude identificar tu teléfono. Reinicia la conversación."
+    
+    try:
+        # 1. Parsear datetime
+        apt_datetime = parse_datetime(date_time)
+        
+        # 2. Buscar paciente por teléfono, o crear uno
+        patient = await db.pool.fetchrow(
+            "SELECT id FROM patients WHERE phone_number = $1",
+            phone
+        )
+        
+        if not patient:
+            # Crear paciente nuevo
+            patient = await db.pool.fetchrow("""
+                INSERT INTO patients (phone_number, first_name, status, created_at)
+                VALUES ($1, 'Chat User', 'active', NOW())
+                RETURNING id
+            """, phone)
+            logger.info(f"Paciente nuevo creado: {phone}")
+        
+        # 3. Obtener profesional activo (ej: ID 1)
+        professional = await db.pool.fetchrow(
+            "SELECT id FROM professionals WHERE is_active = true LIMIT 1"
+        )
+        
+        if not professional:
+            return "❌ No hay profesionales disponibles en este momento. Contacta directamente."
+        
+        # 4. Verificar que no hay sobrelapamiento
+        overlap = await db.pool.fetchval("""
+            SELECT COUNT(*) FROM appointments
+            WHERE professional_id = $1
+            AND DATE(appointment_datetime) = $2
+            AND status IN ('scheduled', 'confirmed')
+        """, professional['id'], apt_datetime.date())
+        
+        if overlap > 0:
+            return f"❌ No hay disponibilidad exacta en {date_time}. ¿Probás con otro horario?"
+        
+        # 5. Insertar turno
+        apt_id = str(uuid.uuid4())
+        await db.pool.execute("""
+            INSERT INTO appointments 
+            (id, patient_id, professional_id, appointment_datetime, appointment_type, status, urgency_level, created_at)
+            VALUES ($1, $2, $3, $4, $5, 'scheduled', 'normal', NOW())
+        """, apt_id, patient['id'], professional['id'], apt_datetime, treatment_reason)
+        
+        logger.info(f"✅ Turno registrado: {apt_id} para {phone}")
+        current_patient_id.set(patient['id'])
+        
+        # 6. Emitir evento de Socket.IO para actualización en tiempo real
+        # Obtener datos completos del turno para emitir
+        appointment_data = await db.pool.fetchrow("""
+            SELECT a.id, a.patient_id, a.professional_id, a.appointment_datetime, 
+                   a.appointment_type, a.status, a.urgency_level,
+                   p.first_name, p.last_name, p.phone_number,
+                   prof.first_name as professional_name
+            FROM appointments a
+            JOIN patients p ON a.patient_id = p.id
+            JOIN professionals prof ON a.professional_id = prof.id
+            WHERE a.id = $1
+        """, apt_id)
+        
+        if appointment_data:
+            await emit_appointment_event("NEW_APPOINTMENT", dict(appointment_data))
+        
+        return f"✅ ¡Turno confirmado para {apt_datetime.strftime('%d/%m/%Y a las %H:%M')}! Te esperamos en {CLINIC_NAME}. Confirmación: #{apt_id[:8]}"
+        
+    except Exception as e:
+        logger.error(f"Error en book_appointment: {e}")
+        return f"❌ No pude registrar el turno: {str(e)}. Por favor, contacta directamente."
+
+@tool
+async def triage_urgency(symptoms: str):
+    """
+    Analiza síntomas para clasificar urgencia.
+    Devuelve: Nivel de urgencia (emergency, high, normal, low) + recomendación
+    """
+    urgency_keywords = {
+        'emergency': ['dolor fuerte', 'sangrado', 'traumatismo', 'accidente', 'golpe', 'roto', 'fractura'],
+        'high': ['dolor', 'hinchazón', 'inflamación', 'infección'],
+        'normal': ['revisión', 'limpieza', 'control', 'checkup'],
+    }
+    
+    symptoms_lower = symptoms.lower()
+    
+    # Clasificar urgencia
+    urgency_level = 'low'
+    for level, keywords in urgency_keywords.items():
+        if any(kw in symptoms_lower for kw in keywords):
+            urgency_level = level
+            break
+    
+    responses = {
+        'emergency': "🚨 URGENCIA DETECTADA. Deberías venir HOY mismo. Si es muy grave, llama directamente: Llamá al consultorio.",
+        'high': "⚠️ Deberías agendar un turno lo antes posible, preferentemente esta semana.",
+        'normal': "✅ Puedes agendar un turno en la fecha que te venga bien.",
+        'low': "ℹ️ Puedes agendar una revisión de rutina cuando lo necesites."
+    }
+    
+    return responses.get(urgency_level, responses['normal'])
+
+@tool
+async def derivhumano(reason: str = "Consulta general"):
+    """
+    Deriva a humano: silencia el bot y conecta con la secretaria.
+    Bloquea el bot por 24h (human_override_until).
+    """
+    phone = current_customer_phone.get()
+    
+    if not phone:
+        return "⚠️ No pude procesar tu solicitud. Intenta nuevamente."
+    
+    try:
+        # Actualizar conversación para bloquear bot
+        await db.pool.execute("""
+            UPDATE chat_conversations
+            SET status = 'human_handling',
+                human_override_until = NOW() + INTERVAL '24 hours'
+            WHERE phone_number = $1
+        """, phone)
+        
+        logger.info(f"🤝 Derivación a humano: {phone} ({reason})")
+        return "👋 Se ha solicitado la intervención de nuestra secretaria. En breve te contactaremos por WhatsApp. ¡Gracias!"
+        
+    except Exception as e:
+        logger.error(f"Error en derivhumano: {e}")
+        return "⚠️ Error al procesar la derivación. Intenta nuevamente."
+
+DENTAL_TOOLS = [check_availability, book_appointment, triage_urgency, derivhumano]
+
+# --- SYSTEM PROMPT ---
+sys_template = f"""Eres el Asistente Virtual de {CLINIC_NAME}, ubicada en {CLINIC_LOCATION}.
+Tu objetivo es ayudar a los pacientes a agendar turnos, resolver dudas sobre tratamientos y realizar un triaje inicial.
+
+REGLAS DE ORO:
+1. TONO: Sos una asistente dental profesional argentina. Usá el voseo ("vos", "te cuento", "fijate", "mirá") de forma cálida y educada.
+2. AGENDAMIENTO: Antes de confirmar un turno, siempre consultá disponibilidad con la herramienta 'check_availability'.
+3. TRIAJE: Si el paciente menciona DOLOR, MOLESTIA o un accidente, usá 'triage_urgency' inmediatamente.
+4. NO DIAGNOSTICAR: Nunca digas qué tiene el paciente ni recetes medicación. Limitáte a decir "el doctor deberá evaluarte en el consultorio".
+5. BREVEDAD: Respuestas cortas y al grano. Usá emojis de forma moderada (🦷, ✨).
+
+Si el paciente se pone agresivo o pide hablar con una persona, usá 'derivhumano'.
+"""
+
+# --- AGENT SETUP ---
+def get_agent_executable():
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=OPENAI_API_KEY)
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", sys_template),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ])
+    agent = create_openai_tools_agent(llm, DENTAL_TOOLS, prompt)
+    return AgentExecutor(agent=agent, tools=DENTAL_TOOLS, verbose=False)
+
+agent_executor = get_agent_executable()
+
+# --- API ENDPOINTS ---
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Connect to DB
-    try:
-        if not POSTGRES_DSN:
-            logger.error("missing_postgres_dsn", note="Check environment variables")
-            raise ValueError("POSTGRES_DSN is not set")
-
-        await db.connect()
-        logger.info("db_connected")
-        
-        # Migration Steps - Executed Sequentially
-        migration_steps = [
-            # 1. Tenants Table
-            """
-            CREATE TABLE IF NOT EXISTS tenants (
-                id SERIAL PRIMARY KEY,
-                store_name TEXT NOT NULL,
-                bot_phone_number TEXT UNIQUE NOT NULL,
-                owner_email TEXT,
-                store_location TEXT,
-                store_website TEXT,
-                store_description TEXT,
-                store_catalog_knowledge TEXT,
-                tiendanube_store_id TEXT,
-                tiendanube_access_token TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            """,
-            # 1b. Pre-clean Handoff Config (Drop if broken)
-            """
-            DO $$
-            BEGIN
-                -- If table exists but lacks PK (broken state from previous edits), drop it to allow fresh creation.
-                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tenant_human_handoff_config') 
-                   AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tenant_human_handoff_config_pkey') THEN
-                   
-                   DROP TABLE tenant_human_handoff_config CASCADE;
-                END IF;
-            END $$;
-            """,
-            # 1c. Tenant Human Handoff Config (Final Spec + Consistency)
-            """
-            CREATE TABLE IF NOT EXISTS tenant_human_handoff_config (
-                tenant_id INTEGER PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
-                enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                destination_email TEXT NOT NULL,
-                handoff_instructions TEXT, 
-                handoff_message TEXT,
-                smtp_host TEXT NOT NULL,
-                smtp_port INTEGER NOT NULL,
-                smtp_security TEXT NOT NULL DEFAULT 'SSL', -- SSL | STARTTLS | NONE
-                smtp_username TEXT NOT NULL,
-                smtp_password_encrypted TEXT NOT NULL,
-                triggers JSONB NOT NULL DEFAULT '{}',
-                email_context JSONB NOT NULL DEFAULT '{}',
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            );
-            """,
-            # 2. Credentials Table
-            """
-            CREATE TABLE IF NOT EXISTS credentials (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                value TEXT NOT NULL,
-                category TEXT,
-                scope TEXT DEFAULT 'global',
-                tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
-                description TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW(),
-                CONSTRAINT unique_name_scope UNIQUE(name, scope)
-            );
-            """,
-            # 3. Credentials Repair (DO block)
-            """
-            DO $$ 
-            BEGIN 
-                -- Check for updated_at column
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='updated_at') THEN
-                    ALTER TABLE credentials ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
-                END IF;
-
-                -- Check for UNIQUE constraint (name, scope)
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint 
-                    WHERE conname = 'unique_name_scope' AND conrelid = 'credentials'::regclass
-                ) THEN
-                    BEGIN
-                        ALTER TABLE credentials ADD CONSTRAINT unique_name_scope UNIQUE(name, scope);
-                    EXCEPTION WHEN others THEN
-                        RAISE NOTICE 'Could not add unique constraint to credentials - likely duplicates exist';
-                    END;
-                END IF;
-            END $$;
-            """,
-            # 4. PGCryto Extension
-            """
-            DO $$
-            BEGIN
-                CREATE EXTENSION IF NOT EXISTS pgcrypto;
-            EXCEPTION WHEN OTHERS THEN
-                RAISE NOTICE 'Could not create extension pgcrypto - assuming it exists or not needed if manually handling UUIDs';
-            END $$;
-            """,
-            # 5. Chat Conversations
-            """
-            CREATE TABLE IF NOT EXISTS chat_conversations (
-                id UUID PRIMARY KEY,
-                tenant_id INTEGER REFERENCES tenants(id),
-                channel VARCHAR(32) NOT NULL, 
-                external_user_id VARCHAR(128) NOT NULL,
-                display_name VARCHAR(255),
-                avatar_url TEXT,
-                status VARCHAR(32) NOT NULL DEFAULT 'open',
-                human_override_until TIMESTAMPTZ,
-                last_message_at TIMESTAMPTZ,
-                last_message_preview TEXT,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                UNIQUE (channel, external_user_id) 
-            );
-            """,
-            # 6. Chat Conversations Repair
-            """
-            DO $$
-            BEGIN
-                ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_message_preview TEXT;
-                ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMPTZ;
-                ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS avatar_url TEXT;
-                ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS human_override_until TIMESTAMPTZ;
-            EXCEPTION WHEN OTHERS THEN
-                RAISE NOTICE 'Schema repair failed for chat_conversations';
-            END $$;
-            """,
-            # 7. Chat Conversations Constraint
-            """
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chat_conversations_tenant_channel_user_key') THEN
-                     ALTER TABLE chat_conversations ADD CONSTRAINT chat_conversations_tenant_channel_user_key UNIQUE (tenant_id, channel, external_user_id);
-                END IF;
-            EXCEPTION WHEN OTHERS THEN
-                 RAISE NOTICE 'Could not constraint unique chat_conversations';
-            END $$;
-            """,
-            # 8. Chat Media
-            """
-            CREATE TABLE IF NOT EXISTS chat_media (
-                id UUID PRIMARY KEY,
-                tenant_id INTEGER, 
-                channel VARCHAR(32) NOT NULL,
-                provider_media_id VARCHAR(128),
-                media_type VARCHAR(32) NOT NULL,
-                mime_type VARCHAR(64),
-                file_name VARCHAR(255),
-                file_size INTEGER,
-                storage_url TEXT NOT NULL,
-                preview_url TEXT,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-            """,
-            # 9. Chat Messages
-            """
-            CREATE TABLE IF NOT EXISTS chat_messages (
-                id UUID PRIMARY KEY,
-                tenant_id INTEGER, 
-                conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
-                role VARCHAR(32) NOT NULL,
-                message_type VARCHAR(32) NOT NULL DEFAULT 'text',
-                content TEXT,
-                media_id UUID REFERENCES chat_media(id),
-                human_override BOOLEAN NOT NULL DEFAULT false,
-                sent_by_user_id TEXT, 
-                sent_from VARCHAR(64),
-                sent_context VARCHAR(64),
-                ycloud_message_id VARCHAR(128),
-                provider_status VARCHAR(32),
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-            """,
-            # 9b. Chat Messages Repair (Comprehensive Repair to avoid missing columns and fix legacy ID type)
-            """
-            DO $$
-            BEGIN
-                -- If ID is integer (legacy), we must drop it and recreate correctly
-                IF (SELECT data_type FROM information_schema.columns WHERE table_name = 'chat_messages' AND column_name = 'id') != 'uuid' THEN
-                    DROP TABLE IF EXISTS chat_messages CASCADE;
-                END IF;
-            EXCEPTION WHEN OTHERS THEN
-                RAISE NOTICE 'Could not check/drop chat_messages';
-            END $$;
-            """,
-            # Re-create if dropped (Duplicate of step 9 basically, but safe)
-            """
-            CREATE TABLE IF NOT EXISTS chat_messages (
-                id UUID PRIMARY KEY,
-                tenant_id INTEGER, 
-                conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
-                role VARCHAR(32) NOT NULL,
-                message_type VARCHAR(32) NOT NULL DEFAULT 'text',
-                content TEXT,
-                media_id UUID REFERENCES chat_media(id),
-                human_override BOOLEAN NOT NULL DEFAULT false,
-                sent_by_user_id TEXT, 
-                sent_from VARCHAR(64),
-                sent_context VARCHAR(64),
-                ycloud_message_id VARCHAR(128),
-                provider_status VARCHAR(32),
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                correlation_id TEXT,
-                from_number VARCHAR(128)
-            );
-            """,
-            # Ensure columns in case table existed but was missing those
-            """
-            DO $$
-            BEGIN
-                ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS correlation_id TEXT;
-                ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS from_number VARCHAR(128);
-                ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS message_type VARCHAR(32) DEFAULT 'text';
-                ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS media_id UUID;
-            EXCEPTION WHEN OTHERS THEN
-                RAISE NOTICE 'Schema repair failed for chat_messages';
-            END $$;
-            """,
-            # 10. System Events
-            """
-            CREATE TABLE IF NOT EXISTS system_events (
-                id SERIAL PRIMARY KEY,
-                level VARCHAR(16) NOT NULL, -- info, warn, error
-                event_type VARCHAR(64) NOT NULL, -- http_request, tool_use, system
-                message TEXT,
-                metadata JSONB,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-            """,
-            # 11. Indexes
-            "CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages (conversation_id, created_at);",
-            "CREATE INDEX IF NOT EXISTS idx_chat_conversations_tenant ON chat_conversations (tenant_id, updated_at DESC);",
-            "CREATE INDEX IF NOT EXISTS idx_chat_messages_media ON chat_messages (media_id);",
-            
-            # 12. Advanced Features Columns
-            """
-            DO $$
-            BEGIN
-                ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tokens_used BIGINT DEFAULT 0;
-                ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tool_calls BIGINT DEFAULT 0;
-            END $$;
-            """,
-            
-            # 13. Update Prompt
-            """
-            UPDATE tenants 
-            SET system_prompt_template = 'Eres el asistente virtual de {STORE_NAME}.
-
-REGLAS CRÍTICAS DE RESPUESTA:
-1. SALIDA: Responde SIEMPRE con el formato JSON de OrchestratorResponse (una lista de objetos "messages").
-2. ESTILO: Tus respuestas deben ser naturales y amigables. El contenido de los mensajes NO debe parecer datos crudos.
-3. FORMATO DE LINKS: NUNCA uses formato markdown [texto](url). Escribe la URL completa y limpia en su propia línea nueva.
-4. SECUENCIA DE BURBUJAS (8 pasos para productos):
-   - Burbuja 1: Introducción amigable (ej: "Saluda si te han saludado, luego di Te muestro opciones de bolsos disponibles...").
-   - Burbuja 2: SOLO la imageUrl del producto 1.
-   - Burbuja 3: Nombre, precio, VARIANTES (Colores/Talles resumidos en misma línea). Luego un salto de línea y la URL del producto.
-   - Burbuja 4: SOLO la imageUrl del producto 2.
-   - Burbuja 5: DESCRIPCIÓN (breve y fiel). Luego un salto de línea. Nombre, precio, VARIANTES. Luego URL producto.
-   - Burbuja 6: SOLO la imageUrl del producto 3 (si hay).
-   - Burbuja 7: DESCRIPCIÓN (breve y fiel). Luego un salto de línea. Nombre, precio, VARIANTES. Luego URL producto.
-   - Burbuja 8: CTA Final con la URL general ({STORE_URL}) en una línea nueva o invitación a Fitting si son puntas.
-5. FITTING: Si el usuario pregunta por "zapatillas de punta" por primera vez, recomienda SIEMPRE un fitting en la Burbuja 8.
-6. NO inventes enlaces. Usa los devueltos por las tools. NUNCA inventes descripción, usa la provista.
-7. USO DE CATALOGO: Tu variable {STORE_CATALOG_KNOWLEDGE} contiene las categorías y marcas reales.
-   - Antes de llamar a `search_specific_products`, REVISA el catálogo.
-   - Si el usuario pide "bolsos", mira que marcas de bolsos hay y busca por marca o categoría exacta (ej: `search_specific_products("Bolsos")`).
-   - Evita `browse_general_storefront` si hay un término de búsqueda claro.
-   - BÚSQUEDA INTELIGENTE: Si piden "Malla Negra", busca solo "Malla" (o "Leotardo") y filtra vos mismo si hay variantes en negro. NO busques "Malla Negra" directo.
-GATE: Usa `search_specific_products` SIEMPRE que pidan algo específico.
-CONTEXTO DE LA TIENDA:
-{STORE_DESCRIPTION}
-CATALOGO:
-{STORE_CATALOG_KNOWLEDGE}'
-            WHERE store_name = 'Pointe Coach' OR id = 39;
-            """
-        ]
-        
-        # Execute migration steps sequentially
-        for i, step in enumerate(migration_steps):
-            try:
-                if step.strip():
-                    await db.pool.execute(step)
-            except Exception as step_err:
-                logger.error(f"migration_step_failed_ignored", step_index=i, error=str(step_err))
-                # We continue despite errors to try to apply as much as possible
-        
-        logger.info("db_migrations_applied")
-        
-        # Sync Environment Tenants - Called AFTER migrations to ensure tables exist
-        try:
-            await sync_environment()
-            logger.info("environment_synced")
-        except Exception as e:
-            logger.error("environment_sync_failed", error=str(e))
-    except Exception as e:
-        logger.error("startup_critical_error", error=str(e), dsn_preview=POSTGRES_DSN[:15] if POSTGRES_DSN else "None")
-        # Optimization: We let it start, but health checks will fail.
-        # However, for debugging, let's stop it if it's a gaierror to force visibility.
-        if "Name or service not known" in str(e):
-             print(f"CRITICAL DNS ERROR: Cannot resolve database host. Check your POSTGRES_DSN: {POSTGRES_DSN}")
-             raise e
+    """Manage app lifecycle: startup and shutdown."""
+    # Startup
+    logger.info("🚀 Iniciando orquestador dental...")
+    await db.connect()
+    logger.info("✅ Base de datos conectada")
     
     yield
     
-    # Shutdown: Disconnect DB
+    # Shutdown
+    logger.info("🔴 Cerrando orquestador dental...")
     await db.disconnect()
-    logger.info("db_disconnected")
+    logger.info("✅ Desconexión completada")
 
-# FastAPI App Initialization
-app = FastAPI(
-    title="Orchestrator Service",
-    description="Central intelligence for Kilocode microservices.",
-    version="1.1.0",
-    lifespan=lifespan
-)
+app = FastAPI(title=f"{CLINIC_NAME} Orchestrator", lifespan=lifespan)
 
-# Root Endpoint for basic health checks (Traefik/EasyPanel)
-@app.get("/")
-async def root():
-    return {"status": "ok", "service": "orchestrator", "version": "1.1.0"}
-
-# Health check (Standard)
-@app.get("/health")
-async def health_check_std():
-    return {"status": "ok", "service": "orchestrator"}
-
-class ToolResponse(BaseModel):
-    ok: bool
-    data: Optional[Any] = None
-    error: Optional[ToolError] = None
-    meta: Optional[Dict[str, Any]] = None
-
-class InboundMedia(BaseModel):
-    type: str
-    url: str
-    mime_type: Optional[str] = None
-    file_name: Optional[str] = None
-    provider_id: Optional[str] = None
-
-class InboundChatEvent(BaseModel):
-    provider: str
-    event_id: str
-    provider_message_id: str
-    from_number: str
-    to_number: Optional[str] = None
-    text: Optional[str] = None # made optional for pure media messages
-    customer_name: Optional[str] = None
-    event_type: str
-    correlation_id: str
-    media: Optional[List[InboundMedia]] = None
-
-class OrchestratorMessage(BaseModel):
-    part: Optional[int] = Field(None, description="The sequence number of this message.")
-    total: Optional[int] = Field(None, description="The total number of messages.")
-    text: Optional[str] = Field(None, description="The text content of this message burst.")
-    imageUrl: Optional[str] = Field(None, description="The URL of the product image (images[0].src from tools), or null if no image is available.")
-
-class OrchestratorResult(BaseModel):
-    status: Literal["ok", "duplicate", "ignored", "error", "processing"]
-    send: bool
-    text: Optional[str] = None
-    messages: List[OrchestratorMessage] = Field(default_factory=list)
-    meta: Optional[Dict[str, Any]] = None
-
-
-# (Middleware and app instance moved to top)
-
-# --- Include Admin Router ---
+# Include admin routes
 app.include_router(admin_router)
 
-# Metrics
-SERVICE_NAME = "orchestrator_service"
-REQUESTS = Counter("http_requests_total", "Total Request Count", ["service", "endpoint", "method", "status"])
-LATENCY = Histogram("http_request_latency_seconds", "Request Latency", ["service", "endpoint"])
-TOOL_CALLS = Counter("tool_calls_total", "Total Tool Calls", ["tool", "status"])
-
-# --- Tools & Helpers ---
-def get_cached_tool(key: str):
-    try:
-        data = redis_client.get(f"cache:tool:{key}")
-        if data:
-            return json.loads(data)
-    except Exception as e:
-        logger.error("cache_read_error", error=str(e))
-    return None
-
-# --- Tools & Helpers ---
-MCP_URL = os.getenv("MCP_URL", "https://n8n-n8n.qvwxm2.easypanel.host/mcp/d36b3e5f-9756-447f-9a07-74d50543c7e8")
-
-async def call_mcp_tool(tool_name: str, arguments: dict):
-    """Bridge to call tools on n8n MCP server with stateful session and SSE support."""
-    logger.info("mcp_handshake_start", tool=tool_name)
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            headers = {
-                "Content-Type": "application/json",
-                "Accept": "application/json, text/event-stream"
-            }
-            
-            # 1. Initialize
-            init_payload = {
-                "jsonrpc": "2.0",
-                "id": "init-" + str(uuid.uuid4())[:8],
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": {"name": "Orchestrator-Bridge", "version": "1.0"}
-                }
-            }
-            init_resp = await client.post(MCP_URL, json=init_payload, headers=headers)
-            
-            if init_resp.status_code != 200:
-                return f"MCP Init Failed ({init_resp.status_code}): {init_resp.text}"
-            
-            # Capture Mcp-Session-Id
-            session_id = init_resp.headers.get("Mcp-Session-Id")
-            if not session_id:
-                try:
-                    result = init_resp.json().get("result", {})
-                    session_id = result.get("meta", {}).get("sessionId") or result.get("sessionId")
-                except: pass
-            
-            if session_id:
-                logger.info("mcp_session_captured", session_id=session_id)
-                client.headers.update({"Mcp-Session-Id": session_id})
-
-            # 2. Notifications/initialized
-            notif_payload = {
-                "jsonrpc": "2.0",
-                "method": "notifications/initialized"
-            }
-            await client.post(MCP_URL, json=notif_payload, headers=headers)
-
-            # 3. Call Tool
-            call_payload = {
-                "jsonrpc": "2.0",
-                "id": "call-" + str(uuid.uuid4())[:8],
-                "method": "tools/call",
-                "params": {
-                    "name": tool_name,
-                    "arguments": arguments
-                }
-            }
-            
-            all_text = ""
-            async with client.stream("POST", MCP_URL, json=call_payload, headers=headers) as resp:
-                if resp.status_code != 200:
-                    raw_text = await resp.aread()
-                    return f"MCP Tool Call Error {resp.status_code}: {raw_text.decode()}"
-
-                async for line in resp.aiter_lines():
-                    if not line: continue
-                    if line.startswith("data: "):
-                        data_json = line[6:]
-                        try:
-                            msg = json.loads(data_json)
-                            if msg.get("id") == call_payload["id"] or "result" in msg or "error" in msg:
-                                if "result" in msg: return msg["result"]
-                                if "error" in msg: return f"MCP Tool Error: {msg['error']}"
-                        except: pass
-                    all_text += line + "\n"
-
-            if not all_text.strip():
-                return "MCP Server returned an empty response."
-            
-            try:
-                json_resp = json.loads(all_text)
-                if "result" in json_resp: return json_resp["result"]
-                return json_resp
-            except:
-                return all_text
-                
-    except Exception as e:
-        logger.error("mcp_bridge_error", tool=tool_name, error=str(e))
-        await log_db("error", "tool_execution_failed", f"MCP Tool {tool_name} failed: {str(e)}", {"tool": tool_name})
-        return f"MCP Bridge Exception: {str(e)}"
-
-def get_cached_tool(key: str):
-    try:
-        data = redis_client.get(f"cache:tool:{key}")
-        if data:
-            return json.loads(data)
-    except Exception as e:
-        logger.error("cache_read_error", error=str(e))
-    return None
-
-def set_cached_tool(key: str, data: dict, ttl: int = 300):
-    try:
-        redis_client.setex(f"cache:tool:{key}", ttl, json.dumps(data))
-    except Exception as e:
-        logger.error("cache_write_error", error=str(e))
-
-def simplify_product(p):
-    """Keep only essential fields for the LLM to save tokens."""
-    if not isinstance(p, dict): return p
-    
-    # Simplify variants to just a summary of options if needed, or specific prices
-    variants = p.get("variants") or []
-    if not isinstance(variants, list): variants = []
-    
-    price = "0"
-    promo_price = None
-    variant_details = []
-    
-    if variants:
-        v0 = variants[0] if isinstance(variants[0], dict) else {}
-        price = v0.get("price", "0")
-        promo_price = v0.get("promotional_price", None)
-        
-        # Summarize variants (e.g., "Color: Rojo, Azul")
-        seen_options = set()
-        for v in variants:
-            if not isinstance(v, dict): continue
-            v_values = v.get("values") or []
-            if isinstance(v_values, list):
-                for val in v_values:
-                    if isinstance(val, dict):
-                        val_str = val.get("es") or val.get("en") 
-                        if val_str: seen_options.add(val_str)
-        
-        if seen_options:
-            variant_details = list(seen_options)
-
-    # Extract first image URL
-    image_url = None
-    images = p.get("images") or []
-    if isinstance(images, list) and len(images) > 0:
-        img0 = images[0]
-        if isinstance(img0, dict):
-            image_url = img0.get("src")
-
-    # Extract and clean description (ROBUST)
-    desc_obj = p.get("description")
-    raw_desc = ""
-    if isinstance(desc_obj, dict):
-        raw_desc = desc_obj.get("es", "")
-    elif isinstance(desc_obj, str):
-        raw_desc = desc_obj
-    else:
-        # Fallback to 'descripción' field if exists
-        raw_desc = p.get("descripción", "") or ""
-
-    if not isinstance(raw_desc, str): raw_desc = ""
-
-    # Remove simple HTML tags for token saving
-    clean_desc = re.sub('<[^<]+?>', '', raw_desc)
-    # Truncate if too long (e.g. 300 chars)
-    if len(clean_desc) > 300:
-        clean_desc = clean_desc[:297] + "..."
-
-    return {
-        "id": p.get("id"),
-        "name": p.get("name", {}).get("es", "Sin nombre"),
-        "price": price,
-        "promotional_price": promo_price,
-        "description": clean_desc, 
-        "variants": ", ".join(variant_details), 
-        "url": p.get("canonical_url"),
-        "imageUrl": image_url
-    }
-
-async def call_tiendanube_api(endpoint: str, params: dict = None):
-    # Retrieve credentials STRICTLY from Environment Variables (as requested)
-    store_id = GLOBAL_TN_STORE_ID
-    token = GLOBAL_TN_ACCESS_TOKEN
-
-    if not store_id or not token:
-        # Debug: Check if vars are actually empty
-        logger.error("tiendanube_config_missing", 
-                     store_id=store_id, 
-                     has_token=bool(token),
-                     context_note="Global Env Vars are missing. Check .env")
-        return "Error: Store ID or Token not configured in Environment Variables."
-
-    headers = {
-        "Authentication": f"bearer {token}",
-        "User-Agent": os.getenv("TIENDANUBE_USER_AGENT", "Orchestrator-Agent/1.0"),
-        "Content-Type": "application/json"
-    }
-    try:
-        url = f"https://api.tiendanube.com/v1/{store_id}{endpoint}"
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url, params=params, headers=headers)
-            if response.status_code != 200:
-                logger.error("tiendanube_api_error", status=response.status_code, text=response.text[:200])
-                return f"Error HTTP {response.status_code}: {response.text}"
-            
-            data = response.json()
-            
-            # Auto-simplify if it's a list of products
-            if isinstance(data, list) and "/products" in endpoint:
-                return [simplify_product(p) for p in data]
-                
-            return data
-    except Exception as e:
-        logger.error("tiendanube_request_exception", error=str(e))
-        await log_db("error", "external_api_error", f"TiendaNube API failed: {endpoint}", {"error": str(e)})
-        return f"Request Error: {str(e)}"
-
-@tool
-async def search_specific_products(q: str):
-    """SEARCH for specific products by name, category, or brand. REQUIRED for queries like 'medias', 'zapatillas', 'puntas', 'grishko'. 
-    IMPORTANT: 
-    1. Use normalized terms from the Category Router (e.g., use 'Leotardo' instead of 'malla' or 'body').
-    2. DO NOT include attributes like COLOR or SIZE in 'q'. Search ONLY for the base product name (e.g. search 'Leotardo', not 'Leotardo negro').
-    3. Filter by color/size internally by checking the 'variants' field in the output.
-    Input 'q' is the keyword."""
-    cache_key = f"productsq:{q}"
-    cached = get_cached_tool(cache_key)
-    if cached: return cached
-    result = await call_tiendanube_api("/products", {"q": q, "per_page": 15})
-    if isinstance(result, (dict, list)): set_cached_tool(cache_key, result, ttl=600)
-    return result
-
-@tool
-async def search_by_category(category: str, keyword: str):
-    """Search for products by category and keyword in Tienda Nube. Returns top 3 results simplified."""
-    q = f"{category} {keyword}"
-    cache_key = f"search_by_category:{category}:{keyword}"
-    cached = get_cached_tool(cache_key)
-    if cached: return cached
-    result = await call_tiendanube_api("/products", {"q": q, "per_page": 15})
-    if isinstance(result, (dict, list)): set_cached_tool(cache_key, result, ttl=600)
-    return result
-
-@tool
-async def browse_general_storefront():
-    """Browse the generic storefront (latest items). Use ONLY for vague requests like 'what do you have?' or 'show me catalogue'. DO NOT USE for specific items."""
-    cache_key = "productsall"
-    cached = get_cached_tool(cache_key)
-    if cached: return cached
-    result = await call_tiendanube_api("/products", {"per_page": 9})
-    if isinstance(result, (dict, list)): set_cached_tool(cache_key, result, ttl=600)
-    return result
-
-@tool
-async def cupones_list():
-    """List active coupons and discounts from Tienda Nube via n8n MCP."""
-    return await call_mcp_tool("cupones_list", {})
-
-@tool
-async def orders(q: str):
-    """Search for order information directly in Tienda Nube API.
-    Pass the order ID (without #) to retrieve status and details."""
-    clean_q = q.replace("#", "").strip()
-    # Using search parameter 'q' as seen in the successful n8n config
-    return await call_tiendanube_api("/orders", {"q": clean_q})
-
-@tool
-async def sendemail(subject: str, text: str):
-    """Send an email to support or customer via n8n MCP."""
-    return await call_mcp_tool("sendemail", {"Subject": subject, "Text": text})
-
-@tool
-async def derivhumano(reason: str, contact_name: Optional[str] = None, contact_phone: Optional[str] = None, summary: Optional[str] = None, action_required: Optional[str] = None):
-    """EQUIPO/HUMANO: Use this tool to derive the conversation to a human operator via email and lock the AI. 
-    Inputs:
-    - reason: The main reason for handoff.
-    - contact_name: Name of the customer.
-    - contact_phone: Phone of the customer.
-    - summary: 1-3 lines summary of the conversation.
-    - action_required: What should the human do?"""
-    
-    tid = current_tenant_id.get()
-    cid = current_conversation_id.get()
-    cphone = current_customer_phone.get()
-    
-    if not tid or not cid:
-        return "Error: Context not initialized for handoff."
-
-    # 1. Resolve Handoff Settings (ENV First, then DB)
-    target_email = HANDOFF_EMAIL
-    h_smtp_host = SMTP_HOST
-    h_smtp_port = SMTP_PORT
-    h_smtp_user = SMTP_USER
-    h_smtp_pass = SMTP_PASS
-    h_smtp_sec = SMTP_SEC
-    
-    store_name = os.getenv("STORE_NAME", "Pointe Coach")
-
-    # STRICT ENV ONLY - No DB Lookup for Handoff Config
-    # If tid exists, we still rely on global env vars as per user request.
-
-    if not target_email or not h_smtp_host or not h_smtp_user or not h_smtp_pass:
-        logger.warning("handoff_config_incomplete", email=bool(target_email), host=bool(h_smtp_host))
-        return "Error: Handoff configuration (SMTP or Target Email) is incomplete. Please check environment variables (HANDOFF_EMAIL, SMTP_HOST, etc.)."
-
-    # 2. Build Content
-    wa_id = cphone or contact_phone or "Oculto"
-    user_name = contact_name or 'No especificado'
-    wa_link = f"https://wa.me/{wa_id}" if wa_id != "Oculto" else "No disponible"
-    
-    subject = f"Derivación Humana: {reason} - {user_name}"
-    body = f"""DETALLE DE DERIVACIÓN (EQUIPO {store_name.upper()})
- 
-Motivo: {reason}
-Cliente: {user_name}
-Teléfono: {wa_id}
-Link WhatsApp: {wa_link}
-
-RESUMEN RECIENTE:
-{summary or 'Sin resumen de historial'}
-
-ACCIÓN REQUERIDA:
-{action_required or 'Atención inmediata'}
-
-Conversation ID: {cid}
-Tienda: {store_name}
-"""
-
-    # 3. SMTP Send
-    try:
-        msg = MIMEText(body)
-        msg['Subject'] = subject
-        msg['From'] = h_smtp_user
-        msg['To'] = target_email
-        msg['Date'] = formatdate(localtime=True)
-
-        if h_smtp_sec == 'SSL':
-            with smtplib.SMTP_SSL(h_smtp_host, h_smtp_port) as server:
-                server.login(h_smtp_user, h_smtp_pass)
-                server.send_message(msg)
-        elif h_smtp_sec == 'STARTTLS':
-            with smtplib.SMTP(h_smtp_host, h_smtp_port) as server:
-                server.starttls()
-                server.login(h_smtp_user, h_smtp_pass)
-                server.send_message(msg)
-        else: # NONE or fallback
-            with smtplib.SMTP(h_smtp_host, h_smtp_port) as server:
-                server.login(h_smtp_user, h_smtp_pass)
-                server.send_message(msg)
-        
-        # 4. Lock Conversation (24h)
-        if cid:
-             await db.pool.execute("""
-                 UPDATE chat_conversations 
-                 SET human_override_until = NOW() + INTERVAL '24 hours',
-                     status = 'human_handling'
-                 WHERE id = $1
-             """, cid)
-        
-        logger.info("handoff_email_sent_smtp", to=target_email, host=h_smtp_host, locking_cid=cid)
-
-        return f"Handoff SUCCESSFUL. AI LOCKED. Manda el mensaje de cierre según el motivo: (1) Para FITTING/PUNTAS, usá: '➡Te derivamos con una asesora (FITTER), que esta capacitada para que encuentres la mejor punta que se adecue a TU PIE 🩰 en breve se contacta con vos.' (2) Para PEDIDOS, usá: 'Fijate que ya te contacto con mis compañeras para que te ayuden con tu orden #... y sepas exactamente el estado.' (3) Para OTROS (ayuda general, quejas, pedido de humano), usá un mensaje cálido y coherente con lo que pidió el usuario."
-            
-    except Exception as e:
-        logger.error("handoff_email_failed", error=str(e))
-        await log_db("error", "handoff_email_failed", str(e), {"tid": tid, "cid": str(cid)})
-        return f"Error sending handoff email: {str(e)}"
-
-tools = [search_specific_products, search_by_category, browse_general_storefront, cupones_list, orders, derivhumano]
-
-from langchain.output_parsers import PydanticOutputParser
-from langchain_core.messages import HumanMessage, AIMessage
-
-# --- Output Schema for Agent ---
-class OrchestratorResponse(BaseModel):
-    """The structured response from the orchestrator agent containing multiple messages."""
-    messages: List[OrchestratorMessage] = Field(description="List of messages (parts) to send to the user, in order.")
-
-# Initialize Parser
-parser = PydanticOutputParser(pydantic_object=OrchestratorResponse)
-
-# Agent Initialization
-# --- Agent Factory (Dynamic per Tenant) ---
-async def get_agent_executable(tenant_phone: str = None, customer_name: str = None):
-    """
-    Creates an AgentExecutor dynamically.
-    PRIORITY: Always use Environment Variables for this single-tenant deployment. 
-    The DB is only used for chat memory consistency.
-    """
-    # 1. Ensure DB connection (only for memory persistence later)
-    if not db.pool:
-        await db.connect()
-
-    # 2. Resolve Configuration from Environment Variables (STRICT SINGLE TENANT)
-    # NO DB LOOKUP for settings.
-    store_name = os.getenv("STORE_NAME", "Pointe Coach")
-    store_description = os.getenv("STORE_DESCRIPTION", "tienda de artículos de danza clásica y contemporánea")
-    store_catalog = os.getenv("STORE_CATALOG_KNOWLEDGE", "")
-    store_website = os.getenv("STORE_WEBSITE", "https://www.pointecoach.shop")
-    SHIPPING_PARTNERS = os.getenv("SHIPPING_PARTNERS", "Correo Argentino y principales logísticas")
-    store_address = os.getenv("STORE_ADDRESS", "Malvinas 452, Paraná, Entre Ríos, Argentina")
-    
-    # 3. Resolve Credentials from Environment Variables
-    # 3. Resolve Credentials from Environment Variables
-    current_openai_key = os.getenv("OPENAI_API_KEY")
-    current_tn_store_id = GLOBAL_TN_STORE_ID
-    current_tn_access_token = GLOBAL_TN_ACCESS_TOKEN
-
-    # Set context variables for tools to consume
-    if current_tn_store_id and current_tn_access_token:
-        tenant_store_id.set(current_tn_store_id)
-        tenant_access_token.set(current_tn_access_token)
-    
-    # 4. Construct System Prompt
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    sys_template = f"""Eres la asistente virtual de {store_name} ({store_description}). 
-Nuestra tienda física se encuentra en: {store_address}.
-{f"El nombre del usuario es {customer_name} (usalo de forma natural y esporádica: principalmente al saludar o al derivar; evitá repetirlo en cada respuesta)." if customer_name else ""}
-
-## PRIORIDADES (ORDEN ABSOLUTO)
-
-1. **SALIDA:** tu respuesta final SIEMPRE debe cumplir el schema del Output Parser (JSON válido).
-2. **VERACIDAD:** para catálogo/pedidos/cupones/derivaciones usás tools; está prohibido inventar.
-3. **DERIVACIÓN OBLIGATORIA:** Está TERMINANTEMENTE PROHIBIDO decir que derivás a un humano o usar el mensaje de cierre de derivación si NO ejecutaste exitosamente la tool `derivhumano` en ese mismo turno. Si la derivación es necesaria, llamá a la tool primero.
-4. **MAPEADO OBLIGATORIO (ROUTER):** Si el usuario usa un término del **DICCIONARIO DE SINÓNIMOS**, es obligatorio que lo traduzcas a la **CATEGORÍA BASE** antes de llamar a la tool. Está PROHIBIDO decir "No tengo [Sinónimo]" si el sinónimo existe en tu diccionario.
-5. **ANTI-REPETICIÓN (ESTRICTO):** Revisá el historial. Si el usuario pide "más" o insiste y la tool devuelve los mismos productos que ya mostraste, NO los repitas. Decí la verdad. Está prohibido volver a mandar una ficha de producto si ya se mandó en los últimos 2 turnos.
-6. **ANTI-BUCLE:** si ya hiciste 1 pregunta y el usuario respondió, el próximo turno debe avanzar. Prohibido encadenar preguntas.
-7. **CONTEXTO DE INTERRUPCIÓN (FONDO):** Si el usuario te habla o pregunta sobre un producto que acabás de mostrar (revisá el historial inmediato), está TERMINANTEMENTE PROHIBIDO volver a listar el catálogo o ese mismo producto con formato de ficha técnica. Respondé a su duda/comentario de forma directa y conversacional.
-
-## DICCIONARIO DE SINÓNIMOS (MAPEO A CATEGORÍA BASE)
-
-*   **MEDIA PUNTA:** media punta, medias puntas, zapatillas de media punta, zapatillas de ensayo, zapatillas de tela, slippers de ballet.
-*   **ZAPATILLAS DE PUNTA:** puntas, zapatillas de punta, pointe, pointe shoes, calzado de punta (NO confundir con media punta), etc.
-*   **MEDIAS:** medias, medias de ballet, medias de danza, medias convertibles, convertible socks, panty, pantymedia, cancan, cancanes, can can.
-*   **BOLSOS:** bolso, bolso de danza, bolso de ballet, mochila de danza, mochila para ballet, bag de danza.
-*   **LEOTARDOS:** malla, mallas, leotardo, leotard, maillot, body, malla de ballet, body de danza, enterito, enteriza, malla entera.
-*   **PUNTERAS:** punteras, punteras de gel, almohadillas para puntas, protectores de dedos, pads de punteras.
-*   **PROTECTORES DE PUNTAS:** protectores de puntas, toppers de puntas, protectores de punta de gel.
-*   **METATARSIANAS:** metatarsianas, almohadillas metatarsianas, pads metatarsianas, gel metatarsianas.
-*   **CINTAS:** cintas, cintas de satén, cintas elásticas, satén ballet ribbons.
-
-## ESTRATEGIA DE QUERY Y FALLBACK (SMART SAFETY)
-* **REGLA DE MAPEO:** Antes de usar una tool, compará la palabra con el Diccionario. (ej: "mallas" -> buscás `search_specific_products(q='Leotardos')`).
-* **REGLA DE FALLBACK (SMART RETRY):** Si buscás algo específico y la tool devuelve **0 resultados**:
-    *   **CASO A (Categoría en Diccionario):** Si buscaste por Categoría Base (ej: Leotardos) y no hay nada, decí: "En este momento no tengo stock de [Leotardos] por ahora". **NO** muestres zapatillas ni otros productos al azar.
-    *   **CASO B (Consulta Vaga):** Solo si la consulta es vaga ("¿Qué tenés?", "Mostrame cosas"), podés usar `browse_general_storefront`.
-
-## REGLA DE VERACIDAD (CRÍTICA)
-
-* Prohibido inventar: precios, stock, variantes, links, imágenes, estados de pedidos, cupones.
-* Link e imageUrl solo pueden ser valores exactos devueltos por tools. Nunca construyas URLs ni “arregles” dominios/rutas.
-* Prohibido “completar” productos: solo mostrar productos existentes en outputs de tools.
-
-## GATE ABSOLUTO DE CATÁLOGO (INNEGOCIABLE)
-
-* **VALIDATION FIRST:** Antes de buscar, identificá si el usuario pide una categoría del Diccionario de Sinónimos.
-* **RELEVANCIA ESTRICTA (CRÍTICO):** Si el usuario pide una categoría específica (ej: "Medias"), está terminantemente PROHIBIDO mostrar productos de otra categoría. Solo mostrá lo que se pidió tras el mapeo.
-* **Consultas vagas/banales:** Si el usuario pregunta de forma general ("¿Qué tienen?", "Mostrame algo lindo"), no repreguntes. Ejecutá `browse_general_storefront` inmediatamente y mostrá 3 opciones reales del catálogo.
-* **DICCIONARIO OBLIGATORIO:** Mapeá CUALQUIER sinónimo a su categoría base antes de llamar a la tool. Nunca busques por el término informal del usuario si existe traducción.
-* Está prohibido enviar productos o precios si NO hubo tool ejecutada con éxito en ese turno.
-
-## PARCHE CRÍTICO — ANTI “RESPUESTA SIN TOOL”
-
-* Para CUALQUIER consulta de catálogo, debés ejecutar una tool de catálogo o fallback.
-* Si no se ejecutó una tool, si falló, o si devolvió vacío (incluso tras fallback): está prohibido listar productos inventados.
-* Si el usuario pide “¿qué tienen disponible?”: siempre responder con productos reales del catálogo.
-
-## TONO Y PERSONALIDAD (ARGENTINA "BUENA ONDA")
-
-* **Estilo:** Hablá como una compañera de danza experta. Usá "vos", sé cálida y empática.
-* **Puntuación (ESTRICTO):** Usá solo el signo de pregunta al final (`?`), nunca el de apertura (`¿`). Evitá el exceso de signos de admiración; si los usás, solo al final (`!`) y de forma muy medida.
-* **Prohibido:** No uses "usted", "su", "has", "podéis". No uses frases de telemarketing.
-* **Naturalidad:** Usá frases puente como "Mirá", "Te cuento", "Fijate", "Dale".
-* **Empatía:** Si el usuario te pregunta "¿Cómo estás?", respondé con calidez y preguntale a él también antes de avanzar. Si el usuario tiene dudas o problemas (talle, dolor), validá su sentimiento y ofrecé ayuda.
-
-## REGLAS DE INTERACCIÓN (CHISTE VS TÉCNICO)
-
-1. **PROHIBIDO SER TÉCNICO:** No actúes como especialista en biomecánica ni hagas comparaciones técnicas profundas entre productos.
-2. **DERIVACIÓN GENERAL (HUMANO/TÉCNICO/PROBLEMAS):** Usá `derivhumano` inmediatamente si: (A) El usuario pide hablar con alguien. (B) Tiene un PROBLEMA REAL con un pago o pedido que la tool no resuelve (ej: demora excesiva, queja). (C) Hace preguntas técnicas profundas. PROHIBIDO derivar para un simple chequeo de estado de orden (para eso está la Regla 4).
-3. **CUIDADOS:** No des guías de "cómo cuidar tus zapatillas". Derivá o sé muy breve.
-4. **ESTADO DE PEDIDO (SIN DERIVAR):** Si el usuario solo quiere saber "dónde está mi pedido", usá SIEMPRE la tool `orders`. No derivés a humano para esto. Sé ULTRA BREVE: informá el estado y listo.
-5. **FITTING (SOLO PUNTAS):** Ofrecelo exclusivamente para zapatillas de punta. Si el usuario acepta, usá `derivhumano`. El mensaje de despedida tras derivar DEBE ser: '➡Te derivamos con una asesora (FITTER), que esta capacitada para que encuentres la mejor punta que se adecue a TU PIE 🩰 en breve se contacta con vos.'
-6. **ENVÍOS:** Trabajamos con {SHIPPING_PARTNERS}. PROHIBIDO dar precios o tiempos de entrega. Tu única respuesta permitida es: "El costo y tiempo de envío se calculan al final de la compra según tu ubicación."
-
-## PRIMERA INTERACCIÓN (SALUDO Cálido)
-
-* Si hay intención de búsqueda: SALUDO + TOOL + RESULTADOS en el mismo turno.
-* Si es SOLO saludo: 
-  1. “Hola! ¿Cómo estás? Soy del equipo de Pointe Coach.” 
-  2. Si te preguntan cómo estás: respondé con calidez (ej: "¡Bien, todo bárbaro por acá! ¿Vos cómo estás?").
-  3. Cerrá siempre con: "¿En qué te ayudo?" (respetando la regla de puntuación).
-
-## REGLAS DE FLUJO (ANTI-BUCLE)
-
-* Si categoría definida: NO repreguntar. Ejecutar tool.
-* “Sí, mostrame” = obligación de tool.
-* Anti-placeholder: nunca enviar a tools valores vacíos.
-* Si q NO contiene la categoría detectada (ver Router): No llames tools, corregí q.
-
-## TOOLS DISPONIBLES (NOMBRES EXACTOS)
-
-1. `search_specific_products`: busca por keyword (q). q DEBE incluir categoría + marca/modelo.
-2. `search_by_category`: category + keyword.
-3. `browse_general_storefront`: USAR SIEMPRE para consultas vagas ("¿Qué tienen?", "Mostrame algo") o como último recurso. No repreguntar, mostrar productos.
-4. `cupones_list`: promos.
-5. `orders`: estado pedido (q=número).
-6. `derivhumano`: derivación.
-
-## REGLA DE RESULTADOS (CANTIDAD)
-
-* **OBJETIVO PRINCIPAL:** Mostrar 3 OPCIONES si la tool devuelve suficientes resultados.
-* **ESCASEZ:** Si hay menos de 3 (1 o 2), mostrá solo los que hay. Decí la verdad.
-* Prohibido inventar productos para llenar los 3 espacios.
-* Prohibido mostrar solo 1 si la tool devolvió 3 o más.
-
-## REGLA DE CALL TO ACTION (CIERRE OBLIGATORIO)
-
-* El último mensaje de tu respuesta (última burbuja) SIEMPRE debe ser un Call to Action (CTA) COHERENTE Y NATURAL.
-* **CASO 1 (SOLO ZAPATILLAS DE PUNTA):** Siempre ofrecer "Fitting" (virtual o presencial). El mensaje DEBE ser: "Para las puntas es clave que te asesores para elegir la mejor punta que se adecue a tu pie  🩰 Te contactamos con una asesora (FITTER)?". (IMPORTANTE: Esto NO aplica para Media Punta ni otros productos).
-* **CASO 2 (MUCHOS PRODUCTOS - 3 o +):** Ofrecer link a la web: "Si querés ver más opciones, entrá a nuestra web: {store_website}".
-* **CASO 3 (POCOS PRODUCTOS - 1 o 2 totales):** NO digas "ver más opciones". Usá un cierre de servicio: "¿Te puedo ayudar con algo más?" o "Cualquier duda con el talle de ese modelo avisame".
-
-## FORMATO DE PRESENTACIÓN (WHATSAPP - LIMPIO)
-
-* Secuencia OBLIGATORIA: Intro -> Prod 1 -> Prod 2 -> Prod 3 -> CTA.
-* Estructura del campo `text` para productos (TODO EN UNO):
-  [NOMBRE DEL PRODUCTO]
-  Precio: $[PRECIO NUMÉRICO]
-  Variantes: [LISTA DE VARIANTES]
-  [DESCRIPCIÓN: FIDEDIGNA PERO RESUMIDA A MÁXIMO 2 LÍNEAS. NO TE EXCEDAS.]
-  [URL SIN ADORNOS]
-
-## GUÍA DE USO DE DATOS (MAPPING EXACTO):
-
-* Tool `name` -> Nombre del producto.
-* Tool `price` -> "Precio: $" + precio. Priorizá `promotional_price`.
-* Tool `variants` -> Variantes. Copia la lista.
-* Tool `description` -> Descripción. FIDEDIGNA (TÉCNICA) PERO MUY RESUMIDA (Max 2 renglones) para que entre en un solo mensaje.
-* Tool `url` -> Link al final.
-* Tool `imageUrl` -> Campo `imageUrl`.
-
-## REGLAS DE CONTENIDO (CRÍTICO: TEXTO PLANO)
-
-1. **PROHIBIDO MARKDOWN:** No uses `###`, `**bold**`, `*italics*`, `![img]()`, `[link](url)`.
-2. **PROHIBIDO ETIQUETA "DESCRIPCIÓN":** No escribas "Descripción:".
-3. **ETIQUETAS "PRECIO" Y "VARIANTES":** Estas SÍ van. "Precio: $..." y "Variantes: ...".
-4. **PROHIBIDO INCLUIR IMAGEN EN EL TEXTO:** JAMÁS pongas `![...](...)` en el campo `text`.
-5. **LONGITUD MÁXIMA:** Resumí la descripción. Si el texto es muy largo, WhatsApp lo corta. Mantenelo corto y conciso.
-6. **URLS LIMPIAS:** NUNCA pongas la URL entre paréntesis.
-7. **CALL TO ACTION:** El mensaje final de cierre (CTA) es OBLIGATORIO.
-
-## CONOCIMIENTO DE TIENDA:
-
-MAPA DE CATEGORÍAS (Usar para búsquedas proactivas):
-- Zapatillas: Puntas, Media punta.
-- Medias: Convertibles, Socks, Contemporáneo, Poliamida, Patín.
-- Accesorios: Metatarsianas, Bolsa de red, Elásticos, Cintas, Endurecedor de puntas, Punteras, Protectores.
-- Otros: Bolsos, Leotardos.
-- Servicios: Fitting / Asesoría.
-
-{store_catalog}
-
-## FORMAT INSTRUCTIONS:
-
-{{format_instructions}}
-
-## EXAMPLE JSON OUTPUT (Do not deviate):
-
-```json
-{{
-    "messages": [
-        {{ "text": "Hola, acá tenés opciones lindas:", "imageUrl": null }},
-        {{ "text": "Zapatillas Grishko 2007\\n$55.000\\nVariantes: 4, 5, 6, 7\\nSon ideales para pie griego y brindan excelente soporte gracias a su tecnología de arco.\\nhttps://www.pointecoach.shop/productos/grishko-2007", "imageUrl": "https://dcdn-us..." }},
-        {{ "text": "Zapatillas Sansha Etoile\\n$45.000\\nVariantes: 7, 8\\nSuela dividida, muy cómodas para estudiantes avanzadas.\\nhttps://www.pointecoach.shop/productos/sansha-etoile", "imageUrl": "https://dcdn-us..." }},
-        {{ "text": "Si buscabas otro modelo, en la web {store_website} tenés todo el catálogo. ¡Avisame cualquier duda!", "imageUrl": null }}
-    ]
-}}
-```
-
-**IMPORTANT: Output strict JSON only. No strings attached.**
-"""
-    # 5. Initialize Prompt and LLM
-    prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content=sys_template),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("user", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ]).partial(format_instructions=parser.get_format_instructions())
-
-    if not current_openai_key:
-        raise ValueError("OPENAI_API_KEY environment variable is not set")
-
-    llm = ChatOpenAI(
-        model="gpt-4.1-mini",
-        api_key=current_openai_key, 
-        temperature=0, 
-        max_tokens=2000,
-        model_kwargs={"response_format": {"type": "json_object"}}
-    )
-    
-    agent_def = create_openai_functions_agent(llm, tools, prompt)
-    return AgentExecutor(agent=agent_def, tools=tools, verbose=True)
-
-# Global fallback for health checks (optional)
-# agent = ... (Removed global instantiation to force per-request dynamic loading)
-
-# Helper for DB Logging
-async def log_db(level: str, event_type: str, message: str, meta: dict = None):
-    """Fire and forget log to system_events."""
-    try:
-        if db.pool:
-            await db.pool.execute(
-                "INSERT INTO system_events (level, event_type, message, metadata, created_at) VALUES ($1, $2, $3, $4, NOW())",
-                level, event_type, message, json.dumps(meta) if meta else "{}"
-            )
-    except Exception as e:
-        # Fallback to stdout if DB fails
-        print(f"DB_LOG_FAIL: {e}")
-
-# Middleware
-@app.middleware("http")
-async def add_metrics_and_logs(request: Request, call_next):
-    start_time = time.time()
-    correlation_id = request.headers.get("X-Correlation-Id") or request.headers.get("traceparent")
-    
-    # Log Request Start (Verbose?) No, let's log completion only to reduce noise, 
-    # or errors.
-    
-    response = await call_next(request)
-    process_time = time.time() - start_time
-    status_code = response.status_code
-    
-    REQUESTS.labels(service=SERVICE_NAME, endpoint=request.url.path, method=request.method, status=status_code).inc()
-    LATENCY.labels(service=SERVICE_NAME, endpoint=request.url.path).observe(process_time)
-    
-    logger.bind(
-        service=SERVICE_NAME, correlation_id=correlation_id, status_code=status_code,
-        method=request.method, endpoint=request.url.path, latency_ms=round(process_time * 1000, 2)
-    ).info("http_request_completed" if status_code < 400 else "http_request_failed")
-    
-    # DB Logging for Console
-    # We filter out health checks to avoid spamming the DB
-    if "/health" not in request.url.path and "/metrics" not in request.url.path:
-        level = "info" if status_code < 400 else "error"
-        evt_type = "http_request"
-        # Background task for logging to not block response? 
-        # For simplicity in this MVP, we await. It's fast (Postgres).
-        await log_db(
-            level, 
-            evt_type, 
-            f"{request.method} {request.url.path}", 
-            {
-                "status": status_code, 
-                "latency_ms": round(process_time * 1000, 2),
-                "correlation_id": correlation_id
-            }
-        )
-
-    return response
-
-# Endpoints
-@app.get("/metrics")
-def metrics(): return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-@app.get("/ready")
-async def ready():
-    try:
-        if db.pool: await db.pool.fetchval("SELECT 1")
-        redis_client.ping()
-    except Exception as e:
-        logger.error("readiness_check_failed", error=str(e))
-        raise HTTPException(status_code=503, detail="Dependencies unavailable")
-    return {"status": "ok"}
-
-# Standard verify internal token helper
-async def verify_internal_token(x_internal_token: str = Header(...)):
-    if INTERNAL_API_TOKEN and x_internal_token != INTERNAL_API_TOKEN:
-         raise HTTPException(status_code=401, detail="Invalid Internal Token")
-
-# Startup and Shutdown are handled by lifespan context manager.
-
-@app.post("/chat", response_model=OrchestratorResult)
-async def chat_endpoint(request: Request, event: InboundChatEvent, x_internal_token: str = Header(None)):
-    if x_internal_token != INTERNAL_API_TOKEN:
-         # For testing allow bypass or strict
-         pass
-         
-    # message deduplication logic...
-    event_id = event.event_id
-    if redis_client.get(f"processed:{event_id}"):
-        return OrchestratorResult(status="duplicate", send=False)
-        
-    redis_client.set(f"processed:{event_id}", "1", ex=86400)
-    
-    # --- 1. Conversation & Lockout Management ---
-    # Resolve Conversation ID using (channel, external_user_id)
-    # Typically channel="whatsapp", external_user_id=event.from_number
-    channel = "whatsapp" # Default for now, could be passed in event
-    # Ensure tenant_id is resolved or defaulted (since table requires it)
-    # We'll use a placeholder or resolve based on 'to_number' (Bot Phone)
-    
-    # Try to find existing conversation
-    # We also fetch tenant_id to reuse it
-    conv = await db.pool.fetchrow("""
-        SELECT id, tenant_id, status, human_override_until 
-        FROM chat_conversations 
-        WHERE channel = $1 AND external_user_id = $2
-    """, channel, event.from_number)
-    
-    conv_id = None
-    is_locked = False
-    
-    if conv:
-        conv_id = conv['id']
-        tenant_id = conv['tenant_id']
-        current_tenant_id.set(tenant_id) # Fix: Ensure tenant context is set for existing convs
-        # Check Lockout
-        if conv['human_override_until'] and conv['human_override_until'] > datetime.now().astimezone():
-            is_locked = True
-    else:
-        # Create new conversation
-        # Resolve Tenant ID robustly (Single Tenant Logic)
-        # We try to find the tenant by phone, but if it fails, we use the first available one 
-        # or create a default one to ensure memory (FK) works.
-        tenant_row = await db.pool.fetchrow("SELECT id FROM tenants ORDER BY id ASC LIMIT 1")
-        
-        if not tenant_row:
-             # CREATE DEFAULT TENANT if DB is truly empty
-             logger.info("creating_default_tenant_for_single_tenant_mode")
-             store_name = os.getenv("STORE_NAME", "Default Store")
-             bot_phone = event.to_number or os.getenv("BOT_PHONE_NUMBER", "5491100000000")
-             
-             tenant_id = await db.pool.fetchval("""
-                INSERT INTO tenants (store_name, bot_phone_number)
-                VALUES ($1, $2)
-                ON CONFLICT (bot_phone_number) DO UPDATE SET store_name = EXCLUDED.store_name
-                RETURNING id
-             """, store_name, bot_phone)
-        else:
-            tenant_id = tenant_row['id']
-            
-        logger.info("using_tenant_for_memory", tenant_id=tenant_id)
-        current_tenant_id.set(tenant_id)
-
-        new_conv_id = str(uuid.uuid4())
-        conv_id = await db.pool.fetchval("""
-            INSERT INTO chat_conversations (
-                id, tenant_id, channel, external_user_id, display_name, status, created_at, updated_at
-            ) VALUES (
-                $1, $2, $3, $4, $5, 'open', NOW(), NOW()
-            ) RETURNING id
-        """, new_conv_id, tenant_id, channel, event.from_number, event.customer_name or event.from_number)
-
-    # Set Conversation Context (CRITICAL for tools)
-    current_conversation_id.set(conv_id)
-
-    # --- 2. Handle Echoes (Human Messages from App) ---
-    is_echo = False
-    if event.event_type in ["whatsapp.message.echo", "whatsapp.smb.message.echoes", "message_echo"]:
-         is_echo = True
-    
-    if is_echo:
-         logger.info("human_echo_received", from_number=event.from_number, text_preview=event.text[:50] if event.text else "Media")
-         
-         # 1. Update Chat Conversation Lockout
-         if conv_id:
-             await db.pool.execute("""
-                 UPDATE chat_conversations 
-                 SET human_override_until = NOW() + INTERVAL '24 hours',
-                     status = 'human_handling',
-                     last_message_at = NOW(),
-                     updated_at = NOW()
-                 WHERE id = $1
-             """, conv_id)
-             
-             # 2. Log message to history (marked as human_supervisor)
-             if event.text:
-                 await db.pool.execute("""
-                     INSERT INTO chat_messages (
-                         id, tenant_id, conversation_id, role, content, 
-                         human_override, sent_from, sent_context, created_at
-                     )
-                     VALUES ($1, $2, $3, 'human_supervisor', $4, TRUE, 'webhook', 'whatsapp_echo', NOW())
-                 """, str(uuid.uuid4()), tenant_id, conv_id, event.text)
-
-         return OrchestratorResult(status="ok", send=False, text="Echo processed, AI paused.")
-        
-    # --- 3. Handle User Message (Inbound) ---
-    
-    # Handle Media if present
-    media_id = None
-    message_type = "text"
-    if event.media and len(event.media) > 0:
-        m = event.media[0] # Assuming single media per message for now
-        message_type = m.type
-        # Persist Media
-        # Persist Media
-        media_uuid = str(uuid.uuid4())
-        media_id = await db.pool.fetchval("""
-            INSERT INTO chat_media (
-                id, tenant_id, channel, provider_media_id, media_type, 
-                mime_type, file_name, storage_url, created_at
-            ) VALUES (
-                $1, $2, $3, $4, $5, 
-                $6, $7, $8, NOW()
-            ) RETURNING id
-        """, media_uuid, tenant_id, channel, m.provider_id, m.type, m.mime_type or "application/octet-stream", m.file_name, m.url)
-    
-    # Store User Message
-    correlation_id = event.correlation_id or str(uuid.uuid4())
-    content = event.text or "" # Can be empty if just image
-    
-    await db.pool.execute("""
-        INSERT INTO chat_messages (
-            id, tenant_id, conversation_id, role, content, 
-            correlation_id, created_at, message_type, media_id, from_number
-        ) VALUES (
-            $1, (SELECT tenant_id FROM chat_conversations WHERE id=$2), $2, 'user', $3,
-            $4, NOW(), $5, $6, $7
-        )
-    """, uuid.uuid4(), conv_id, content, correlation_id, message_type, media_id, event.from_number)
-    
-    # Update Conversation Metadata
-    preview_text = content[:50] if content else f"[{message_type}]"
-    await db.pool.execute("""
-        UPDATE chat_conversations 
-        SET last_message_at = NOW(), last_message_preview = $1, updated_at = NOW()
-        WHERE id = $2
-    """, preview_text, conv_id)
-
-    history_rows = await db.pool.fetch("""
-        SELECT role, content 
-        FROM chat_messages 
-        WHERE conversation_id = $1 
-        ORDER BY created_at ASC 
-        LIMIT 20
-    """, conv_id)
-    
-    chat_history = []
-    for h in history_rows:
-        if h['role'] == 'user':
-            chat_history.append(HumanMessage(content=h['content'] or ""))
-        elif h['role'] in ['assistant', 'human_supervisor']:
-            chat_history.append(AIMessage(content=h['content'] or ""))
-    
-    # Dynamic Agent Loading
-    tenant_lookup = event.to_number or event.from_number
-    
-    # CRITICAL: Enforce Lockout (Human Override)
-    # If the conversation is locked (human_override_until > now), we DO NOT execute the agent.
-    if is_locked:
-        logger.info("conversation_locked_human_override", conv_id=conv_id)
-        # We return "ignored" so the orchestrator stops here. 
-        # The user message was already stored in DB (lines 1303-1311), visible to human agents.
-        return OrchestratorResult(status="ignored", send=False, text="Conversation locked by human override.")
-
-    executor = await get_agent_executable(tenant_phone=tenant_lookup, customer_name=event.customer_name)
-    
-    # Set Conversation Context for Tools
-    current_conversation_id.set(conv_id)
-    current_customer_phone.set(event.from_number)
-    
-    # Distributed Lock (Prevent Race Conditions per number)
-    lock_key = f"lock:{event.from_number}"
-    lock = redis_client.lock(lock_key, timeout=50) # Increased to 50s
-    acquired = False
-    
-    # Early check for lock availability
-    if not lock.acquire(blocking=False):
-        logger.info("message_locked_processing", from_number=event.from_number)
-        return OrchestratorResult(status="processing", send=False, text="Message being processed")
-    
-    acquired = True
+# --- SOCKET.IO CONFIGURATION ---
+# Create Socket.IO instance with async mode
+sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
+socket_app = socketio.ASGIApp(sio, app)
+
+# Socket.IO event handlers
+@sio.event
+async def connect(sid, environ):
+    logger.info(f"🔌 Client connected: {sid}")
+
+@sio.event
+async def disconnect(sid):
+    logger.info(f"🔌 Client disconnected: {sid}")
+
+# Helper function to emit appointment events (can be imported by admin_routes)
+async def emit_appointment_event(event_type: str, data: Dict[str, Any]):
+    """Emit appointment-related events to all connected clients."""
+    await sio.emit(event_type, data)
+    logger.info(f"📡 Socket event emitted: {event_type} - {data}")
+
+# Make the emit function available to other modules
+app.state.emit_appointment_event = emit_appointment_event
+
+@app.post("/chat")
+async def chat_endpoint(req: ChatRequest):
+    """Endpoint de chat que persiste historial en BD."""
+    current_customer_phone.set(req.phone)
+    correlation_id = str(uuid.uuid4())
     
     try:
-        inputs = {"input": event.text, "chat_history": chat_history}
-        result = await executor.ainvoke(inputs)
-        output = result["output"] 
+        # 1. Cargar historial de BD (últimos 20 mensajes)
+        chat_history = await db.get_chat_history(req.phone, limit=20)
         
-        # --- Smart Output Processing (Layer 2) ---
-        final_messages = []
-        
-        # Case A: Strict Pydantic Object
-        if isinstance(output, OrchestratorResponse):
-            final_messages = output.messages
-            
-        # Case B: Dict (JSON) but might have wrong keys
-        elif isinstance(output, dict):
-            # 1. Correct Format
-            if "messages" in output and isinstance(output["messages"], list):
-                 final_messages = [OrchestratorMessage(**m) for m in output["messages"]]
-            # 2. "message" or "response" single key (Common Hallucination)
-            elif "message" in output:
-                 final_messages = [OrchestratorMessage(text=str(output["message"]), part=1, total=1)]
-            elif "response" in output:
-                 final_messages = [OrchestratorMessage(text=str(output["response"]), part=1, total=1)]
-            elif "answer" in output:
-                 final_messages = [OrchestratorMessage(text=str(output["answer"]), part=1, total=1)]
+        # Convertir a formato LangChain
+        messages = []
+        for msg in chat_history:
+            if msg['role'] == 'user':
+                messages.append(HumanMessage(content=msg['content']))
             else:
-                 # Fallback: Dump the whole dict as text provided it's not internal weirdness
-                 # Check if it has 'part', 'total', 'text' at root (Flattened)
-                 if "text" in output:
-                     final_messages = [OrchestratorMessage(text=str(output["text"]), part=output.get("part", 1), total=output.get("total", 1))]
-                 else:
-                     # Last resort: Stringify
-                     final_messages = [OrchestratorMessage(text=json.dumps(output, ensure_ascii=False), part=1, total=1)]
-                     
-        # Case C: String (maybe JSON string)
-        elif isinstance(output, str):
-            # 1. Clean Markdown (Standardize)
-            cleaned = output.strip()
-            if cleaned.startswith("```json"): cleaned = cleaned[7:].split("```")[0].strip()
-            elif cleaned.startswith("```"): cleaned = cleaned[3:].split("```")[0].strip()
-            
-            try:
-                # 2. Try JSON Load (Robust)
-                parsed_json = json.loads(cleaned)
-                
-                # HELPER: Text Sanitizer
-                def sanitize_text(text: str) -> str:
-                    if not text: return ""
-                    import re
-                    # 1. Remove Image Markdown ![...](...)
-                    text = re.sub(r'!\[.*?\]\(.*?\)', '', text)
-                    # 2. Remove Headers ###
-                    text = re.sub(r'#+\s*', '', text)
-                    # 3. Remove Bold/Italic ** *
-                    text = re.sub(r'\*\*|__', '', text)
-                    # 4. Remove unwanted labels
-                    text = re.sub(r'(?i)descripci[óo]n:', '', text)
-                    # 5. Remove URL wrapping parens (url) -> url
-                    text = re.sub(r'\((https?://[^\s]+)\)', r'\1', text)
-                    # 6. Technical Enforcement: Remove opening punctuation ¿ and ¡
-                    text = text.replace('¿', '').replace('¡', '')
-                    # 7. Trim lines
-                    lines = [line.strip() for line in text.split('\n')]
-                    return '\n'.join([l for l in lines if l]).strip()
-
-                # HELPER: URL Sanitizer
-                def sanitize_url(url: str) -> str:
-                    if not url: return None
-                    url = str(url).strip()
-                    # 1. Un-markdown: ![alt](url) -> url
-                    import re
-                    match = re.search(r'\((https?://[^\)]+)\)', url)
-                    if match: return match.group(1)
-                    # 2. Un-parens: (url) -> url
-                    if url.startswith("(") and url.endswith(")"): return url[1:-1]
-                    return url
-
-                # 3. Process as Dict
-                if isinstance(parsed_json, dict) and "messages" in parsed_json and isinstance(parsed_json["messages"], list):
-                    final_messages = []
-                    for m in parsed_json["messages"]:
-                        p_part = m.get("part")
-                        p_total = m.get("total")
-                        # SANITIZE TEXT & IMAGE
-                        p_text = sanitize_text(m.get("text"))
-                        p_image = sanitize_url(m.get("imageUrl") or m.get("image_url"))
-                        
-                        final_messages.append(OrchestratorMessage(
-                            part=p_part,
-                            total=p_total,
-                            text=p_text,
-                            imageUrl=p_image
-                        ))
-                elif isinstance(parsed_json, dict) and any(k in parsed_json for k in ["message", "response", "text"]):
-                     # Single message handling
-                     txt = parsed_json.get("message") or parsed_json.get("response") or parsed_json.get("text")
-                     final_messages = [OrchestratorMessage(text=sanitize_text(str(txt)) if txt else "", part=1, total=1)]
-                elif isinstance(parsed_json, list):
-                     # Direct list handling
-                     final_messages = []
-                     for m in parsed_json:
-                        if isinstance(m, dict):
-                             final_messages.append(OrchestratorMessage(
-                                text=sanitize_text(m.get("text")),
-                                imageUrl=sanitize_url(m.get("imageUrl") or m.get("image_url"))
-                             ))
-                else:
-                    final_messages = [OrchestratorMessage(text=json.dumps(parsed_json, indent=2, ensure_ascii=False))]
-
-            except json.JSONDecodeError:
-                # 4. JSON Failed -> It's just text
-                final_messages = [OrchestratorMessage(text=cleaned)]
-            except Exception as e:
-                logger.error("output_parsing_failed", error=str(e), output_sample=cleaned[:100])
-                final_messages = [OrchestratorMessage(text=cleaned)]
-                
-        else:
-            final_messages = [OrchestratorMessage(text=str(output))]
-
-
-        # Store Assistant Response
-        raw_output_str = ""
-        if isinstance(output, str):
-            raw_output_str = output
-        else:
-            try:
-                # If output is OrchestratorResponse or similar
-                if hasattr(output, 'dict'):
-                    raw_output_str = json.dumps(output.dict(), ensure_ascii=False)
-                else:
-                    raw_output_str = json.dumps(output, ensure_ascii=False)
-            except:
-                raw_output_str = str(output)
-
-        await db.pool.execute("""
-            INSERT INTO chat_messages (
-                id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number
-            ) VALUES (
-                $1, (SELECT tenant_id FROM chat_conversations WHERE id=$2), $2, 'assistant', $3, $4, NOW(), $5
-            )
-        """, uuid.uuid4(), conv_id, raw_output_str, correlation_id, event.from_number)
+                messages.append(AIMessage(content=msg['content']))
         
-        # Track Usage
-        await db.pool.execute("UPDATE tenants SET total_tool_calls = total_tool_calls + 1 WHERE bot_phone_number = $1", event.from_number)
-
-        return OrchestratorResult(
-            status="ok", 
-            send=True, 
-            messages=final_messages,
-            meta={"correlation_id": correlation_id}
+        # 2. Guardar mensaje del usuario
+        await db.append_chat_message(
+            from_number=req.phone,
+            role='user',
+            content=req.message,
+            correlation_id=correlation_id
         )
-            
+        
+        # 3. Invocar agente
+        response = await agent_executor.ainvoke({
+            "input": req.message,
+            "chat_history": messages
+        })
+        
+        assistant_response = response.get("output", "Error procesando respuesta")
+        
+        # 4. Guardar respuesta del asistente
+        await db.append_chat_message(
+            from_number=req.phone,
+            role='assistant',
+            content=assistant_response,
+            correlation_id=correlation_id
+        )
+        
+        logger.info(f"✅ Chat procesado para {req.phone} (correlation_id={correlation_id})")
+        
+        return {
+            "output": assistant_response,
+            "correlation_id": correlation_id,
+            "status": "ok"
+        }
+        
     except Exception as e:
-        log.error("unexpected_error", error=str(e))
-        await db.mark_inbound_failed(event.provider, event.provider_message_id, str(e))
-        return OrchestratorResult(status="error", send=False, meta={"error": str(e)})
-    finally:
-        if acquired:
-            try:
-                lock.release()
-            except redis.exceptions.LockNotOwnedError:
-                logger.warning("lock_release_failed_not_owned", from_number=event.from_number)
-            except Exception as e:
-                logger.error("lock_release_error", error=str(e))
+        logger.error(f"❌ Error en chat para {req.phone}: {str(e)}")
+        await db.append_chat_message(
+            from_number=req.phone,
+            role='system',
+            content=f"Error interno: {str(e)}",
+            correlation_id=correlation_id
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Error interno del orquestador", "correlation_id": correlation_id}
+        )
 
-# --- CORS CONFIGURATION (OUTERMOST LAYER) ---
-# Middlewares in FastAPI are processed in reverse order of addition.
-# Adding CORSMiddleware last makes it the first to handle requests (outermost).
-CORS_ALLOWED_ORIGINS_RAW = os.getenv("CORS_ALLOWED_ORIGINS", "")
-CORS_ALLOWED_ORIGINS = [
-    origin.strip() for origin in CORS_ALLOWED_ORIGINS_RAW.split(",") if origin.strip()
-] or [
-    "https://docker-platform-ui.yn8wow.easypanel.host",
-    "http://localhost:3000",
-    "http://localhost:8000"
-]
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "dental-orchestrator"}
 
-# When using allow_credentials=True, allow_origins cannot be ["*"]
-USE_CREDENTIALS = True
-if "*" in CORS_ALLOWED_ORIGINS:
-    USE_CREDENTIALS = False # CORS spec requirement
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ALLOWED_ORIGINS,
-    allow_credentials=USE_CREDENTIALS,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-print(f"INFO: CORS initialized with origins: {CORS_ALLOWED_ORIGINS}")
+if __name__ == "__main__":
+    import uvicorn
+    # Use socket_app instead of app to support Socket.IO
+    uvicorn.run(socket_app, host="0.0.0.0", port=8000)

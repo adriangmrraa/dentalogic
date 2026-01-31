@@ -58,5 +58,26 @@ class Database:
             rows = await conn.fetch(query, from_number, limit)
             return [dict(row) for row in reversed(rows)]
 
+    # --- WRAPPER METHODS PARA TOOLS (acceso directo al pool) ---
+    async def fetch(self, query: str, *args):
+        """Wrapper para pool.fetch - usado por check_availability."""
+        async with self.pool.acquire() as conn:
+            return await conn.fetch(query, *args)
+    
+    async def fetchrow(self, query: str, *args):
+        """Wrapper para pool.fetchrow - usado por book_appointment."""
+        async with self.pool.acquire() as conn:
+            return await conn.fetchrow(query, *args)
+    
+    async def fetchval(self, query: str, *args):
+        """Wrapper para pool.fetchval."""
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(query, *args)
+    
+    async def execute(self, query: str, *args):
+        """Wrapper para pool.execute - usado por book_appointment."""
+        async with self.pool.acquire() as conn:
+            return await conn.execute(query, *args)
+
 # Global instance
 db = Database()
