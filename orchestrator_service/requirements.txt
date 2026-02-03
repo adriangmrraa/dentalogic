@@ -11,7 +11,7 @@ langchain-openai==0.0.5
 langchain-community==0.0.13
 python-dotenv
 prometheus-client
-httpx
-requestspython-dateutil
+requests
+python-dateutil
 python-socketio
 aiofiles
