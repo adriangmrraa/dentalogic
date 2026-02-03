@@ -99,15 +99,15 @@ https://wa.tudominio.com/webhook/ycloud
 
 **Nota:** El Orchestrator ejecuta migraciones de BD automáticamente en startup (via lifespan event).
 
-### 2.3 Platform UI (Puerto 80) - PÚBLICO
+### 2.3 Frontend React (Puerto 80) - PÚBLICO
 
 ```
 1. Add Service → Docker
-2. Nombre: platform-ui
-3. Dockerfile: platform_ui/Dockerfile
+2. Nombre: frontend-react
+3. Dockerfile: frontend_react/Dockerfile
 4. Puerto: 80
 5. Dominio: admin.tudominio.com (HTTPS)
-6. Healthcheck: (la UI es vanilla JS, puede no tener endpoint /health)
+6. Healthcheck: (la UI es React, puede no tener endpoint /health)
 7. Variables de Entorno:
    - ADMIN_TOKEN=... (copia el mismo del Orchestrator)
    - ORCHESTRATOR_URL=http://orchestrator_service:8000 (o deja en blanco para auto-detectar)
@@ -115,9 +115,9 @@ https://wa.tudominio.com/webhook/ycloud
 ```
 
 **Auto-detección de URL:**
-Si no especificas `ORCHESTRATOR_URL`, la Platform UI lo detecta automáticamente:
+Si no especificas `ORCHESTRATOR_URL`, el Frontend React lo detecta automáticamente:
 - `localhost` → `http://localhost:8000`
-- `platform-ui.domain.com` → `orchestrator-service.domain.com`
+- `frontend-react.domain.com` → `orchestrator-service.domain.com`
 
 ## 3. Mapeo de Puertos y Networking
 
@@ -125,7 +125,7 @@ Si no especificas `ORCHESTRATOR_URL`, la Platform UI lo detecta automáticamente
 | :--- | :--- | :--- | :--- |
 | whatsapp_service | 8002 | ✅ SÍ | `https://wa.tudominio.com` |
 | orchestrator_service | 8000 | ❌ NO (interno) | `http://orchestrator_service:8000` (red interna) |
-| platform_ui | 80 | ✅ SÍ | `https://admin.tudominio.com` |
+| frontend_react | 80 | ✅ SÍ | `https://admin.tudominio.com` |
 | postgres | 5432 | ❌ NO (solo desde servicios) | `postgres://...@postgres:5432` |
 | redis | 6379 | ❌ NO (solo desde servicios) | `redis://redis:6379` |
 
@@ -407,13 +407,13 @@ docker-compose up --build
 # Acceso:
 # - Orchestrator: http://localhost:8000
 # - WhatsApp Service: http://localhost:8002
-# - Platform UI: http://localhost
+# - Frontend React: http://localhost:5173
 ```
 
 **docker-compose.yml incluye:**
 - orchestrator_service
 - whatsapp_service
-- platform_ui
+- frontend_react
 - postgres
 - redis
 

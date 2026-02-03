@@ -27,7 +27,7 @@ docker-compose up --build
 | :--- | :--- | :--- |
 | **Orchestrator** | `http://localhost:8000` | Coordinador Clínico (FastAPI + LangChain) |
 | **WhatsApp Service** | `http://localhost:8002` | Relay de Mensajería y Whisper |
-| **Platform UI** | `http://localhost/` | Centro de Operaciones Dental (React) |
+| **Operations Center** | `http://localhost:5173` | Centro de Operaciones Dental (React) |
 
 ---
 

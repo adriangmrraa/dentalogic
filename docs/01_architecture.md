@@ -30,12 +30,12 @@ PostgreSQL Redis OpenAI
 (Historias)(Locks)(LLM)
    |
    v
-Platform UI (80)
+Frontend React (5173)
 Centro de Operaciones Dental
    |
    | WebSocket (Socket.IO)
    v
-AgendaView / Odontograma (React)
+AgendaView / Odontograma
    - FullCalendar
    - Real-time updates
 ```
@@ -71,9 +71,11 @@ AgendaView / Odontograma (React)
 - **Sincronización:** Emite eventos `NEW_APPOINTMENT` vía Socket.IO para actualizar la AgendaView instantáneamente.
 - **Multi-Tenancy:** Soporte para múltiples consultorios/clínicas bajo la misma infraestructura.
 
-### C. Platform UI (Puerto 80) - **Centro de Operaciones**
+### C. Frontend React (Puerto 5173) - **Centro de Operaciones**
 
-**Tecnología:** React + FullCalendar + Socket.IO
+**Tecnología:** React + Vite + FullCalendar + Socket.IO
+
+**Carpeta:** `frontend_react/`
 
 **Vistas Principales:**
 - **Agenda Inteligente:** Calendario interactivo con sincronización de Google Calendar.

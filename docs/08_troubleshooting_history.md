@@ -5,11 +5,11 @@ Este documento registra problemas encontrados y sus soluciones para referencia f
 ## Platform UI - Errores de Configuración Nginx
 
 **Problema (histórico v2):**
-- El servicio `platform_ui` fallaba con errores de URL hardcodeada en nginx.conf
+- El servicio `frontend_react` fallaba con errores de URL hardcodeada en nginx.conf
 - La configuración de Nginx tenía dependencia de dominios que no existían
 
 **Solución Aplicada:**
-- Se modificó `platform_ui/nginx.conf` para ser genérico
+- Se modificó `frontend_react/nginx.conf` para ser genérico
 - Se implementó auto-detección de API URL en JavaScript (`app.js`)
 - La UI ahora detecta dinámicamente dónde está el Orchestrator
 
