@@ -79,7 +79,9 @@ class Database:
             logger.info("✅ Auto-migración completada exitosamente")
             
         except Exception as e:
+            import traceback
             logger.error(f"❌ Error en auto-migración: {e}")
+            logger.error(traceback.format_exc())
             # No fallar el startup, solo loguear
 
     async def disconnect(self):

@@ -53,9 +53,26 @@ AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=F
 
 # --- MODELOS DE DATOS (API) ---
 class ChatRequest(BaseModel):
-    message: str
-    phone: str
+    # Support both internal naming and WhatsApp service naming
+    message: Optional[str] = None
+    text: Optional[str] = None
+    phone: Optional[str] = None
+    from_number: Optional[str] = None
     name: Optional[str] = "Paciente"
+    customer_name: Optional[str] = None
+    media: List[Dict[str, Any]] = Field(default_factory=list)
+
+    @property
+    def final_message(self) -> str:
+        return self.message or self.text or ""
+
+    @property
+    def final_phone(self) -> str:
+        return self.phone or self.from_number or ""
+    
+    @property
+    def final_name(self) -> str:
+        return self.customer_name or self.name or "Paciente"
 
 # --- HELPERS PARA PARSING DE FECHAS ---
 
@@ -599,7 +616,7 @@ app.state.emit_appointment_event = emit_appointment_event
 @app.post("/chat")
 async def chat_endpoint(req: ChatRequest):
     """Endpoint de chat que persiste historial en BD."""
-    current_customer_phone.set(req.phone)
+    current_customer_phone.set(req.final_phone)
     correlation_id = str(uuid.uuid4())
     
     try:
@@ -608,7 +625,7 @@ async def chat_endpoint(req: ChatRequest):
             SELECT human_handoff_requested, human_override_until 
             FROM patients 
             WHERE phone_number = $1
-        """, req.phone)
+        """, req.final_phone)
         
         if handoff_check:
             is_handoff_active = handoff_check['human_handoff_requested']
@@ -620,9 +637,9 @@ async def chat_endpoint(req: ChatRequest):
                     logger.info(f"🔇 IA silenciada para {req.phone} hasta {override_until}")
                     # Guardar el mensaje del usuario pero NO responder
                     await db.append_chat_message(
-                        from_number=req.phone,
+                        from_number=req.final_phone,
                         role='user',
-                        content=req.message,
+                        content=req.final_message,
                         correlation_id=correlation_id
                     )
                     return {
@@ -638,10 +655,10 @@ async def chat_endpoint(req: ChatRequest):
                         SET human_handoff_requested = FALSE, 
                             human_override_until = NULL 
                         WHERE phone_number = $1
-                    """, req.phone)
+                    """, req.final_phone)
         
         # 1. Cargar historial de BD (últimos 20 mensajes)
-        chat_history = await db.get_chat_history(req.phone, limit=20)
+        chat_history = await db.get_chat_history(req.final_phone, limit=20)
         
         # Convertir a formato LangChain
         messages = []
@@ -653,15 +670,15 @@ async def chat_endpoint(req: ChatRequest):
         
         # 2. Guardar mensaje del usuario
         await db.append_chat_message(
-            from_number=req.phone,
+            from_number=req.final_phone,
             role='user',
-            content=req.message,
+            content=req.final_message,
             correlation_id=correlation_id
         )
         
         # 3. Invocar agente
         response = await agent_executor.ainvoke({
-            "input": req.message,
+            "input": req.final_message,
             "chat_history": messages
         })
         
@@ -669,13 +686,13 @@ async def chat_endpoint(req: ChatRequest):
         
         # 4. Guardar respuesta del asistente
         await db.append_chat_message(
-            from_number=req.phone,
+            from_number=req.final_phone,
             role='assistant',
             content=assistant_response,
             correlation_id=correlation_id
         )
         
-        logger.info(f"✅ Chat procesado para {req.phone} (correlation_id={correlation_id})")
+        logger.info(f"✅ Chat procesado para {req.final_phone} (correlation_id={correlation_id})")
         
         return {
             "status": "ok",
