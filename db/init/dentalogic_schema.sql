@@ -127,6 +127,14 @@ CREATE TABLE IF NOT EXISTS professionals (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Asegurar que la columna user_id existe para migraciones de versiones anteriores
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='professionals' AND column_name='user_id') THEN
+        ALTER TABLE professionals ADD COLUMN user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_professionals_tenant ON professionals(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_professionals_active ON professionals(is_active);
 CREATE INDEX IF NOT EXISTS idx_professionals_user_id ON professionals(user_id);
