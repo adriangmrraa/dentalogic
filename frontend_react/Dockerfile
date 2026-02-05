@@ -5,7 +5,21 @@ COPY package*.json ./
 # Relaxed install (ignoring peer deps conflicts if any persist)
 RUN npm install --legacy-peer-deps
 COPY . .
-# Skip type checking during build for stability
+
+# Build arguments for environment variables
+ARG VITE_API_URL
+ARG VITE_BFF_URL
+ARG VITE_WS_URL
+ARG VITE_APP_NAME=Dentalogic
+
+# Map ARGs to ENVs so they are available to the build process
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_BFF_URL=$VITE_BFF_URL
+ENV VITE_WS_URL=$VITE_WS_URL
+ENV VITE_APP_NAME=$VITE_APP_NAME
+
+# Skip type checking during build for stability if needed, 
+# but here package.json has tsc && vite build
 RUN npm run build
 
 # Stage 2: Serve
