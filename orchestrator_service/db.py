@@ -36,6 +36,7 @@ class Database:
         import logging
         logger = logging.getLogger("db")
         
+        try:
             # Verificar si las tablas principales existen
             async with self.pool.acquire() as conn:
                 # Específicamente necesitamos la tabla 'users' para el nuevo sistema
