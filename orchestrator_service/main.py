@@ -584,6 +584,19 @@ if allowed_origins_str:
 # Eliminar duplicados manteniendo el orden lógico
 origins = list(dict.fromkeys(origins))
 
+# --- MIDDLEWARE & EXCEPTION HANDLERS ---
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"🔥 UNHANDLED ERROR: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Error interno del servidor. El equipo técnico ha sido notificado.",
+            "error_type": type(exc).__name__
+        }
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

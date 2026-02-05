@@ -25,11 +25,15 @@ class TokenData(BaseModel):
 class AuthService:
     @staticmethod
     def get_password_hash(password: str) -> str:
-        return pwd_context.hash(password)
+        # Bcrypt has a 72-byte limit. We truncate to ensure stability.
+        # This is safe as anything beyond 72 is ignored by bcrypt anyway.
+        safe_password = password[:72]
+        return pwd_context.hash(safe_password)
 
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
-        return pwd_context.verify(plain_password, hashed_password)
+        safe_password = plain_password[:72]
+        return pwd_context.verify(safe_password, hashed_password)
 
     @staticmethod
     def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:

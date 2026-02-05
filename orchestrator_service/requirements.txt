@@ -20,6 +20,7 @@ google-auth
 google-auth-httplib2
 google-auth-oauthlib
 passlib[bcrypt]
+bcrypt==3.2.0
 python-jose[cryptography]
 python-multipart
 pyjwt
