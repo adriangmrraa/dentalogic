@@ -639,7 +639,10 @@ async def chat_endpoint(req: ChatRequest):
     correlation_id = str(uuid.uuid4())
     
     try:
-        # 0. Verificar si hay intervención humana activa
+        # 0. A) Ensure patient reference exists (Fix for visibility)
+        await db.ensure_patient_exists(req.final_phone)
+
+        # 0. B) Verificar si hay intervención humana activa
         handoff_check = await db.pool.fetchrow("""
             SELECT human_handoff_requested, human_override_until 
             FROM patients 
