@@ -11,7 +11,9 @@ class Database:
 
     async def connect(self):
         if not self.pool:
-            self.pool = await asyncpg.create_pool(POSTGRES_DSN)
+            # asyncpg no soporta el esquema 'postgresql+asyncpg', solo 'postgresql' o 'postgres'
+            dsn = POSTGRES_DSN.replace("postgresql+asyncpg://", "postgresql://") if POSTGRES_DSN else None
+            self.pool = await asyncpg.create_pool(dsn)
 
     async def disconnect(self):
         if self.pool:
