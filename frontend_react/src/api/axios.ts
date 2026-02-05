@@ -14,11 +14,11 @@ export const getCurrentTenantId = (): string | null => {
   // Try to get from localStorage first (for persistent sessions)
   const storedTenant = localStorage.getItem('X-Tenant-ID');
   if (storedTenant) return storedTenant;
-  
+
   // Try to get from session storage
   const sessionTenant = sessionStorage.getItem('X-Tenant-ID');
   if (sessionTenant) return sessionTenant;
-  
+
   // Default tenant for development (can be overridden by environment)
   return import.meta.env.VITE_DEFAULT_TENANT_ID || 'default';
 };
@@ -73,24 +73,36 @@ const api: AxiosInstance = axios.create({
 // Request interceptor: agregar token y X-Tenant-ID
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // Get auth token
-    const token = localStorage.getItem('ADMIN_TOKEN');
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // 1. Get auth token (from localStorage or Environment Fallback)
+    let token = localStorage.getItem('ADMIN_TOKEN');
+
+    // Auto-init from environment if empty (Essential for Docker/EasyPanel zero-config)
+    if (!token) {
+      const envToken = import.meta.env.VITE_ADMIN_TOKEN;
+      if (envToken) {
+        console.log('[API] 🔑 Initializing ADMIN_TOKEN from Environment');
+        localStorage.setItem('ADMIN_TOKEN', envToken);
+        token = envToken;
+      }
     }
-    
-    // Get and set X-Tenant-ID header
+
+    if (token && config.headers) {
+      // Backend expects X-Admin-Token (verified in admin_routes.py)
+      config.headers['X-Admin-Token'] = token;
+    }
+
+    // 2. Get and set X-Tenant-ID header
     const tenantId = getCurrentTenantId();
     if (tenantId && config.headers) {
       config.headers['X-Tenant-ID'] = tenantId;
     }
-    
+
     // Log request
     console.log(`[API] ${config.method?.toUpperCase()} ${config.url} [Tenant: ${tenantId}]`);
-    
+
     // Agregar retry count metadata
     (config as any).metadata = { retryCount: 0 };
-    
+
     return config;
   },
   (error: AxiosError) => {
@@ -107,34 +119,34 @@ api.interceptors.response.use(
   },
   async (error: AxiosError) => {
     const originalConfig = error.config as CustomAxiosConfig | undefined;
-    
+
     if (!originalConfig || originalConfig._retryCount === undefined) {
       return Promise.reject(error);
     }
-    
+
     const retryCount = (originalConfig._retryCount || 0) + 1;
-    
+
     // Solo hacer retry para errores 5xx o pérdida de conexión
     const status = error.response?.status;
-    const shouldRetry = 
+    const shouldRetry =
       status && (status >= 500 || error.code === 'ECONNABORTED') &&
       retryCount <= MAX_RETRIES;
-    
+
     if (shouldRetry) {
       originalConfig._retryCount = retryCount;
       const delayMs = calculateExponentialDelay(retryCount - 1);
-      
+
       console.log(`[API] ⏳ Retry ${retryCount}/${MAX_RETRIES} para ${originalConfig.url} en ${Math.round(delayMs)}ms`);
-      
+
       await delay(delayMs);
       return api(originalConfig);
     }
-    
+
     // Manejo específico de errores
     if (status === 401) {
       console.warn('[API] ⚠️ Unauthorized - Limpiando token');
       localStorage.removeItem('ADMIN_TOKEN');
-      
+
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login';
       }
@@ -151,7 +163,7 @@ api.interceptors.response.use(
     } else if (!error.response) {
       console.error('[API] 🌐 Sin conexión:', error.message);
     }
-    
+
     return Promise.reject(error);
   }
 );
@@ -163,7 +175,7 @@ api.interceptors.response.use(
 // Helper para GET con cache opcional
 export const apiGet = async <T>(url: string, useCache = false): Promise<T> => {
   const cacheKey = `cache_${url}`;
-  
+
   if (useCache) {
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
@@ -179,29 +191,29 @@ export const apiGet = async <T>(url: string, useCache = false): Promise<T> => {
       }
     }
   }
-  
+
   const response = await api.get<T>(url);
-  
+
   if (useCache) {
     localStorage.setItem(cacheKey, JSON.stringify({
       data: response.data,
       timestamp: Date.now()
     }));
   }
-  
+
   return response.data;
 };
 
 // Helper para POST sin cache
-export const apiPost = <T>(url: string, data?: any): Promise<T> => 
+export const apiPost = <T>(url: string, data?: any): Promise<T> =>
   api.post<T>(url, data).then(res => res.data);
 
 // Helper para PUT
-export const apiPut = <T>(url: string, data?: any): Promise<T> => 
+export const apiPut = <T>(url: string, data?: any): Promise<T> =>
   api.put<T>(url, data).then(res => res.data);
 
 // Helper para DELETE
-export const apiDelete = <T>(url: string): Promise<T> => 
+export const apiDelete = <T>(url: string): Promise<T> =>
   api.delete<T>(url).then(res => res.data);
 
 export { api };

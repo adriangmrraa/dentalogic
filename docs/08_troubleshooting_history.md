@@ -154,4 +154,24 @@ Este documento registra problemas encontrados y sus soluciones para referencia f
 
 ---
 
+## Startup, Routing y Persistencia (v4)
+
+**Problema (2026-02-05):**
+- **401 Unauthorized**: Frontend fallaba al conectar con Orchestrator por falta de token en build.
+- **404 Not Found**: YCloud enviaba webhooks a `/webhook` pero el servicio esperaba `/webhook/ycloud`.
+- **422 Unprocessable**: Mismatch de nombres en JSON entre WhatsApp de entrada (`from_number`/`text`) y Orchestrator (`phone`/`message`).
+- **500 Internal Error**: `asyncpg` fallaba con errores `NoneType` al procesar scripts SQL grandes.
+
+**Solución Aplicada:**
+- **Frontend**: Inyectar `VITE_ADMIN_TOKEN` como `ARG` y `ENV` en `frontend_react/Dockerfile`.
+- **WhatsApp Service**: Agregar alias `@app.post("/webhook")` junto al original.
+- **Orchestrator**: Normalizar el modelo `ChatRequest` con Pydantic Aliases/Properties para aceptar ambos formatos.
+- **DB (db.py)**: Implementar un **Smart SQL Splitter** que divide el schema por `;` (respetando `$$`) y ejecuta cada sentencia individualmente.
+
+**Estado:**
+- ✅ Completamente estabilizado en v4 "Platinum Resilience".
+- Ver `docs/01_architecture.md` para el flujo de datos normalizado.
+
+---
+
 *Histórico de Problemas y Soluciones Nexus v3 © 2025*

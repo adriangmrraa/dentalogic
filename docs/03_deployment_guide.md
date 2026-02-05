@@ -61,9 +61,9 @@ EasyPanel Dashboard
 8. Deploy
 ```
 
-**Importante:** Este es el URL que configuras en el panel de YCloud como Webhook URL:
+**Importante:** El servicio acepta webhooks en `/webhook` y `/webhook/ycloud` para máxima compatibilidad con el panel de YCloud.
 ```
-https://wa.tudominio.com/webhook/ycloud
+https://wa.tudominio.com/webhook
 ```
 
 ### 2.2 Orchestrator Service (Puerto 8000) - INTERNO
@@ -140,8 +140,9 @@ async def lifespan(app: FastAPI):
     # Conecta a DB
     await db.connect()
     
-    # Ejecuta schema (dentalogic_schema.sql aplicado manualmente)
-    # Sincroniza variables de entorno con DB
+    # Ejecuta schema (dentalogic_schema.sql)
+    # El sistema usa un Smart Splitter para ejecutar cada sentencia individualmente
+    # garantizando compatibilidad con funciones PL/pgSQL complejas.
     await sync_environment()
 ```
 

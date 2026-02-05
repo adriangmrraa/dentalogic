@@ -19,3 +19,10 @@ auto-invoke: true
 3. **Variables de Entorno (Build vs Runtime):**
    - `VITE_` variables se inyectan en **BUILD TIME**. Si las cambias, hay que reconstruir la imagen.
    - Variables de Backend (Python) son **RUNTIME**. Solo requieren reinicio.
+
+4. **Webhooks y Redirección:**
+   - Para servicios como YCloud, el orquestador debe aceptar tanto `/webhook` como `/webhook/ycloud` para evitar errores 404 si el usuario olvida la ruta específica.
+
+5. **Troubleshooting 401/422:**
+   - 401 en Frontend → Falta `VITE_ADMIN_TOKEN` en build.
+   - 422 en Orchestrator → Mismatch de nombres de campos en payload (normalizar en Pydantic).

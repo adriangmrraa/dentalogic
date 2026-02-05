@@ -56,7 +56,12 @@ const api = axios.create({
 - **Micro-animaciones**: Usar `animate-pulse` para estados de triaje crítico.
 - **Responsive**: Mobile-first para que los odontólogos puedan ver su agenda desde el celular.
 
-## 5. Checklist de UI
+## 6. Producción y Dockerización
+**CRÍTICO**: El frontend inyecta variables `VITE_` durante el **BUILD TIME**.
+- **Regla**: El `Dockerfile` debe usar `ARG` y `ENV` para capturar `VITE_ADMIN_TOKEN` y `VITE_API_URL` durante el comando `npm run build`.
+- **Verificación**: Si el frontend da 401 en producción, lo primero es verificar que las variables están presentes en el panel de EasyPanel ANTES del build.
+
+## 7. Checklist de UI
 - [ ] ¿El componente maneja `isLoading` con un spinner o esqueleto?
 - [ ] ¿Los errores se muestran vía Toasts o alertas `check-fail`?
 - [ ] ¿Se usa `Lucide` para coherencia visual?

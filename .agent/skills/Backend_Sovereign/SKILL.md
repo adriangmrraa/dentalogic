@@ -68,7 +68,22 @@ Las herramientas de la IA deben seguir protocolos estrictos de triaje y agenda:
 - `book_appointment`: Valida datos del paciente antes de confirmar.
 - `triage_urgency`: Clasifica el dolor y deriva a humano si es `critical`.
 
-## 6. Checklist de Desarrollo
+## 7. Normalización de Payloads (Compatibility Layer)
+Para asegurar compatibilidad entre microservicios (especialmente WhatsApp -> Orquestador), los modelos Pydantic deben ser flexibles:
+- **Regla**: Aceptar múltiples nombres para el mismo dato (ej: `phone` y `from_number`).
+- **Implementación**: Usar `@property` o `Field(alias=...)` en los modelos de request para normalizar el acceso a los datos.
+
+```python
+class ChatRequest(BaseModel):
+    message: Optional[str] = None
+    text: Optional[str] = None  # Alias para compatibilidad
+    
+    @property
+    def final_message(self) -> str:
+        return self.message or self.text or ""
+```
+
+## 8. Checklist de Desarrollo
 - [ ] ¿El nuevo endpoint usa `verify_admin_token`?
 - [ ] ¿Las operaciones de citas disparan un `gcal_service` sync?
 - [ ] ¿Se emiten eventos vía Socket.IO para actualización del Dashboard?

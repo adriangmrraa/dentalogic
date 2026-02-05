@@ -82,7 +82,8 @@ Bot entra en silencio por 24 horas
 | Variable | Descripción | Ejemplo | Requerida |
 | :--- | :--- | :--- | :--- |
 | `ORCHESTRATOR_URL` | URL del Orchestrator (para admin panel) | (auto-detecta) | ❌ |
-| `ADMIN_TOKEN` | Token de administrador | (mismo que Orchestrator) | ✅ (si se usa UI) |
+| `VITE_ADMIN_TOKEN` | Token de administrador (inyectado en build) | `admin-secret-token` | ✅ |
+| `VITE_API_BASE_URL` | URL base para la API del orquestador | (auto-detecta) | ❌ |
 
 **Auto-detección de URL:**
 ```javascript
@@ -154,6 +155,10 @@ CORS_ALLOWED_ORIGINS=http://localhost,http://localhost:3000
 YCLOUD_API_KEY=yc_api_xxxxx
 YCLOUD_WEBHOOK_SECRET=yc_webhook_xxxxx
 ORCHESTRATOR_SERVICE_URL=http://orchestrator_service:8000
+
+# --- Frontend (Build Time) ---
+VITE_ADMIN_TOKEN=admin-dev-token
+VITE_API_URL=http://localhost:8000
 ```
 
 ## 8. Validación de Variables Críticas

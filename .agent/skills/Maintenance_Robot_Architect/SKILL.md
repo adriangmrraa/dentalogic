@@ -31,6 +31,13 @@ Esto elimina la necesidad de ejecutar scripts SQL manuales o depender de carpeta
     *   La historia de migración se mantiene secuencial. Agrega nuevos pasos al final de la lista.
     *   Solo modifica pasos existentes si detectas un error grave de sintaxis que rompe el arranque.
 
+4.  **Smart SQL Splitting**:
+    *   NUNCA executes un script SQL completo con `conn.execute(script)`. `asyncpg` falla con scripts grandes (`NoneType` error).
+    *   SIEMPRE divide el script en sentencias individuales (respetando bloques `$$`) y ejecútalas una por una.
+
+5.  **Validación de Conexión**:
+    *   Verificar que `POSTGRES_DSN` sea válido antes de intentar la migración para evitar fallos silenciosos.
+
 ## Guía de Implementación
 
 ### 1. Ubicación
