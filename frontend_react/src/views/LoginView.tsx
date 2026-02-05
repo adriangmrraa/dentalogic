@@ -5,158 +5,158 @@ import api from '../api/axios';
 import { Lock, Mail, Shield, AlertCircle, CheckCircle } from 'lucide-react';
 
 const LoginView: React.FC = () => {
-    const { login } = useAuth();
-    const navigate = useNavigate();
-    const location = useLocation();
-    const [isRegistering, setIsRegistering] = useState(false);
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [firstName, setFirstName] = useState('');
-    const [role, setRole] = useState('professional');
-    const [error, setError] = useState<string | null>(null);
-    const [message, setMessage] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [role, setRole] = useState('professional');
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-    const from = location.state?.from?.pathname || "/";
+  const from = location.state?.from?.pathname || "/";
 
-    const handleLogin = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError(null);
-        setLoading(true);
-        try {
-            const response = await api.post('/auth/login', { email, password });
-            login(response.data.access_token, response.data.user);
-            navigate(from, { replace: true });
-        } catch (err: any) {
-            setError(err.response?.data?.detail || "Error al iniciar sesión. Verifique sus credenciales.");
-        } finally {
-            setLoading(false);
-        }
-    };
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      login(response.data.access_token, response.data.user);
+      navigate(from, { replace: true });
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "Error al iniciar sesión. Verifique sus credenciales.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const handleRegister = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError(null);
-        setMessage(null);
-        setLoading(true);
-        try {
-            await api.post('/auth/register', {
-                email,
-                password,
-                role,
-                first_name: firstName,
-                last_name: ""
-            });
-            setMessage("Registro solicitado con éxito. Un CEO debe aprobar tu cuenta antes de que puedas ingresar.");
-            setIsRegistering(false);
-        } catch (err: any) {
-            setError(err.response?.data?.detail || "Error al registrarse. Intente nuevamente.");
-        } finally {
-            setLoading(false);
-        }
-    };
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
+    setLoading(true);
+    try {
+      await api.post('/auth/register', {
+        email,
+        password,
+        role,
+        first_name: firstName,
+        last_name: ""
+      });
+      setMessage("Registro solicitado con éxito. Un CEO debe aprobar tu cuenta antes de que puedas ingresar.");
+      setIsRegistering(false);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "Error al registrarse. Intente nuevamente.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return (
-        <div className="login-container">
-            <div className="login-card glass">
-                <div className="login-header">
-                    <div className="logo-icon">
-                        <Shield size={32} color="var(--accent)" />
-                    </div>
-                    <h1>Dentalogic</h1>
-                    <p>{isRegistering ? 'Solicitud de acceso a la plataforma' : 'Bienvenido de nuevo'}</p>
-                </div>
+  return (
+    <div className="login-container">
+      <div className="login-card glass">
+        <div className="login-header">
+          <div className="logo-icon">
+            <Shield size={32} color="var(--accent)" />
+          </div>
+          <h1>Dentalogic</h1>
+          <p>{isRegistering ? 'Solicitud de acceso a la plataforma' : 'Bienvenido de nuevo'}</p>
+        </div>
 
-                {error && (
-                    <div className="auth-alert error">
-                        <AlertCircle size={18} />
-                        <span>{error}</span>
-                    </div>
-                )}
+        {error && (
+          <div className="auth-alert error">
+            <AlertCircle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
 
-                {message && (
-                    <div className="auth-alert success">
-                        <CheckCircle size={18} />
-                        <span>{message}</span>
-                    </div>
-                )}
+        {message && (
+          <div className="auth-alert success">
+            <CheckCircle size={18} />
+            <span>{message}</span>
+          </div>
+        )}
 
-                <form onSubmit={isRegistering ? handleRegister : handleLogin} className="auth-form">
-                    {isRegistering && (
-                        <div className="input-group">
-                            <label>Nombre</label>
-                            <div className="input-wrapper">
-                                <input
-                                    type="text"
-                                    value={firstName}
-                                    onChange={(e) => setFirstName(e.target.value)}
-                                    placeholder="Tu nombre completo"
-                                    required
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="input-group">
-                        <label>Correo Electrónico</label>
-                        <div className="input-wrapper">
-                            <Mail className="input-icon" size={18} />
-                            <input
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="ejemplo@clinica.com"
-                                required
-                            />
-                        </div>
-                    </div>
-
-                    <div className="input-group">
-                        <label>Contraseña</label>
-                        <div className="input-wrapper">
-                            <Lock className="input-icon" size={18} />
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="••••••••"
-                                required
-                            />
-                        </div>
-                    </div>
-
-                    {isRegistering && (
-                        <div className="input-group">
-                            <label>Rol solicitado</label>
-                            <select value={role} onChange={(e) => setRole(e.target.value)}>
-                                <option value="professional">Profesional Dental</option>
-                                <option value="secretary">Secretaría / Administración</option>
-                                <option value="ceo">Director / CEO</option>
-                            </select>
-                        </div>
-                    )}
-
-                    <button type="submit" className="btn-primary auth-btn" disabled={loading}>
-                        {loading ? 'Procesando...' : (isRegistering ? 'Solicitar Registro' : 'Ingresar')}
-                    </button>
-                </form>
-
-                <div className="auth-footer">
-                    <button
-                        type="button"
-                        className="btn-link"
-                        onClick={() => {
-                            setIsRegistering(!isRegistering);
-                            setError(null);
-                            setMessage(null);
-                        }}
-                    >
-                        {isRegistering ? '¿Ya tienes cuenta? Ingresa aquí' : '¿No tienes acceso? Solicitalo ahora'}
-                    </button>
-                </div>
+        <form onSubmit={isRegistering ? handleRegister : handleLogin} className="auth-form">
+          {isRegistering && (
+            <div className="input-group">
+              <label>Nombre</label>
+              <div className="input-wrapper">
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Tu nombre completo"
+                  required
+                />
+              </div>
             </div>
+          )}
 
-            <style>{`
+          <div className="input-group">
+            <label>Correo Electrónico</label>
+            <div className="input-wrapper">
+              <Mail className="input-icon" size={18} />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="ejemplo@clinica.com"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label>Contraseña</label>
+            <div className="input-wrapper">
+              <Lock className="input-icon" size={18} />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+            </div>
+          </div>
+
+          {isRegistering && (
+            <div className="input-group">
+              <label>Rol solicitado</label>
+              <select value={role} onChange={(e) => setRole(e.target.value)}>
+                <option value="professional">Profesional Dental</option>
+                <option value="secretary">Secretaría / Administración</option>
+                <option value="ceo">Director / CEO</option>
+              </select>
+            </div>
+          )}
+
+          <button type="submit" className="btn-primary auth-btn" disabled={loading}>
+            {loading ? 'Procesando...' : (isRegistering ? 'Solicitar Registro' : 'Ingresar')}
+          </button>
+        </form>
+
+        <div className="auth-footer">
+          <button
+            type="button"
+            className="btn-link"
+            onClick={() => {
+              setIsRegistering(!isRegistering);
+              setError(null);
+              setMessage(null);
+            }}
+          >
+            {isRegistering ? '¿Ya tienes cuenta? Ingresa aquí' : '¿No tienes acceso? Solicitalo ahora'}
+          </button>
+        </div>
+      </div>
+
+      <style>{`
         .login-container {
           display: flex;
           justify-content: center;
@@ -261,23 +261,29 @@ const LoginView: React.FC = () => {
         .btn-link {
           background: none;
           border: none;
-          color: var(--accent);
-          font-size: 0.9rem;
+          color: #4da6ff; /* Higher contrast blue */
+          font-size: 0.95rem;
           cursor: pointer;
           margin-top: 20px;
-          opacity: 0.8;
-          transition: opacity 0.3s;
+          text-decoration: none;
+          font-weight: 500;
+          transition: all 0.3s;
         }
         .btn-link:hover {
-          opacity: 1;
+          color: white;
+          text-decoration: underline;
+        }
+        .input-group select option {
+          background: #1a1a2e;
+          color: white;
         }
         @keyframes slideUp {
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-        </div>
-    );
+    </div>
+  );
 };
 
 export default LoginView;
