@@ -26,7 +26,7 @@ Este proyecto se configura completamente mediante variables de entorno. En despl
 | `SHIPPING_PARTNERS` | Empresas de envío (comma-separated) | `Andreani, Correo Argentino` | ❌ |
 
 **Nota:** El sistema inyecta estas variables en el `system_prompt` del agente LangChain.
-
+   
 ### 2.2 Integración Tienda Nube
 
 | Variable | Descripción | Ejemplo | Requerida |
