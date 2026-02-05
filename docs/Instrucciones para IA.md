@@ -32,6 +32,12 @@ Refactor the current schema to support:
 * clinical\_records: JSONB structure for Odontograms and text for clinical notes.  
 * accounting: Tables for payments, insurance claims (OSDE), and daily cash flow.
 
+### **D. Database Evolution (Maintenance Robot)**
+
+* **Self-Healing:** Never execute SQL direct or via external migrations. 
+* **Protocol:** Add new columns or tables to the `patches` list in `orchestrator_service/db.py` using `DO $$` blocks with `IF NOT EXISTS`.
+* **Synchronize:** Run `./sync-schema.ps1` to update the base foundation after changing the evolution pipeline.
+
 ### **C. Frontend Refactoring (Vanilla JS)**
 
 * **Dashboard:** Shift from "Sales" to "Patient Flow". Highlight "Urgencies".  

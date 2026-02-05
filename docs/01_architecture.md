@@ -93,6 +93,11 @@ AgendaView / Odontograma
 | **clinical_records** | Evoluciones clínicas, diagnósticos y odontogramas. |
 | **appointments** | Gestión de turnos, estados y sincronización GCalendar. |
 | **accounting_transactions** | Liquidaciones y cobros de prestaciones. |
+### 3.2 Maintenance Robot (Self-Healing)
+El sistema utiliza un **Robot de Mantenimiento** integrado en `orchestrator_service/db.py` que garantiza la integridad del esquema en cada arranque:
+- **Foundation**: Si no existe la tabla `tenants`, aplica el esquema base completo.
+- **Evolution Pipeline**: Una lista de parches (`patches`) en Python que ejecutan bloques `DO $$` para agregar columnas o tablas nuevas de forma idempotente y segura.
+- **Resiliencia**: El motor SQL ignora comentarios y respeta bloques de código complejos, evitando errores de sintaxis comunes en despliegues automatizados.
 
 ## 4. Flujo de una Urgencia
 

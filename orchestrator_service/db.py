@@ -30,120 +30,108 @@ class Database:
     
     async def _run_auto_migrations(self):
         """
-        Sistema de Auto-Migración (Maintenance Robot).
-        Lee dentalogic_schema.sql y lo ejecuta de forma idempotente.
+        Sistema de Auto-Migración (Maintenance Robot / Schema Surgeon).
+        Se asegura de que la base de datos esté siempre actualizada y saludable.
         """
         import logging
         logger = logging.getLogger("db")
         
         try:
-            # Verificar si las tablas principales existen
+            # 1. Auditoría de Salud: ¿Existe la base mínima?
             async with self.pool.acquire() as conn:
-                # Específicamente necesitamos la tabla 'users' para el nuevo sistema
-                users_table_exists = await conn.fetchval("""
+                schema_exists = await conn.fetchval("""
                     SELECT EXISTS (
                         SELECT FROM information_schema.tables 
-                        WHERE table_name = 'users'
+                        WHERE table_name = 'tenants'
                     )
                 """)
             
-            if users_table_exists:
-                logger.info("✅ Tabla 'users' detectada, schema OK")
-                return
+            # 2. Aplicar Base (Foundation) si es un Fresh Install
+            if not schema_exists:
+                logger.warning("⚠️ Base de datos vacía, aplicando Foundation...")
+                await self._apply_foundation(logger)
             
-            logger.warning("⚠️ Tablas faltantes detectadas, ejecutando auto-migración...")
+            # 3. Evolución Continua (Pipeline de Cirugía)
+            # Aquí agregamos parches específicos que deben correr siempre de forma segura
+            await self._run_evolution_pipeline(logger)
             
-            # Intentar múltiples rutas para el schema (Dev vs Docker)
-            possible_paths = [
-                os.path.join(os.path.dirname(__file__), "..", "db", "init", "dentalogic_schema.sql"), # Estructura raíz
-                os.path.join(os.path.dirname(__file__), "db", "init", "dentalogic_schema.sql"),      # Estructura interna (Docker)
-                "/app/db/init/dentalogic_schema.sql"                                               # Ruta absoluta Docker
-            ]
-            
-            schema_path = None
-            for p in possible_paths:
-                if os.path.exists(p):
-                    schema_path = p
-                    break
-
-            if not schema_path:
-                logger.error(f"❌ Schema file not found. Tried: {possible_paths}")
-                return
-
-            # Cargar y ejecutar el schema
-            with open(schema_path, "r", encoding="utf-8") as f:
-                schema_sql = f.read()
-            
-            # Split robusto para manejar funciones PL/pgSQL (evita romper por ; dentro de $$)
-            import re
-            # Regex que busca ; pero ignora los que están dentro de $$...$$
-            # Esta es una aproximación simple pero efectiva para este schema
-            statements = []
-            current_stmt = []
-            in_dollar = False
-            for line in schema_sql.splitlines():
-                if "$$" in line:
-                    in_dollar = not in_dollar
-                
-                if ";" in line and not in_dollar:
-                    parts = line.split(";")
-                    current_stmt.append(parts[0])
-                    statements.append("\n".join(current_stmt).strip())
-                    current_stmt = parts[1:] if len(parts) > 1 else []
-                else:
-                    current_stmt.append(line)
-            
-            # Limpiar comentarios pero preservar saltos de línea para el splitter avanzado
-            clean_lines = []
-            for line in schema_sql.splitlines():
-                line_clean = line.split('--')[0].rstrip()
-                if line_clean or not line.strip(): # Mantener líneas vacías para no pegar palabras
-                    clean_lines.append(line_clean)
-            
-            clean_sql = "\n".join(clean_lines)
-            
-            # Splitter inteligente que respeta bloques $$
-            statements = []
-            current_stmt = []
-            in_dollar_block = False
-            
-            for line in clean_sql.splitlines():
-                if "$$" in line:
-                    # Contamos cuántas veces aparece $$ para saber si abre o cierra (o ambos)
-                    in_dollar_block = not in_dollar_block if line.count("$$") % 2 != 0 else in_dollar_block
-                
-                current_stmt.append(line)
-                
-                if not in_dollar_block and ";" in line:
-                    # Si la línea tiene un punto y coma fuera de un bloque $$, cerramos la sentencia
-                    full_stmt = "\n".join(current_stmt).strip()
-                    if full_stmt:
-                        statements.append(full_stmt)
-                    current_stmt = []
-            
-            # Agregar lo que quede
-            if current_stmt:
-                leftover = "\n".join(current_stmt).strip()
-                if leftover: statements.append(leftover)
-
-            logger.info(f"⏳ Ejecutando {len(statements)} sentencias SQL...")
-            async with self.pool.acquire() as conn:
-                async with conn.transaction():
-                    for i, stmt in enumerate(statements):
-                        try:
-                            await conn.execute(stmt)
-                        except Exception as st_err:
-                            logger.error(f"❌ Error en sentencia {i+1}: {st_err}")
-                            logger.error(f"Sentencia que falló:\n{stmt}")
-                            raise st_err 
-            
-            logger.info("✅ Auto-migración completada exitosamente")
+            logger.info("✅ Base de datos verificada y actualizada (Maintenance Robot OK)")
             
         except Exception as e:
             import traceback
-            logger.error(f"❌ Error en auto-migración: {e}")
+            logger.error(f"❌ Error en Maintenance Robot: {e}")
             logger.error(traceback.format_exc())
-            # No fallar el startup, solo loguear
+
+    async def _apply_foundation(self, logger):
+        """Ejecuta el esquema base dentalogic_schema.sql"""
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), "..", "db", "init", "dentalogic_schema.sql"),
+            os.path.join(os.path.dirname(__file__), "db", "init", "dentalogic_schema.sql"),
+            "/app/db/init/dentalogic_schema.sql"
+        ]
+        
+        schema_path = next((p for p in possible_paths if os.path.exists(p)), None)
+        if not schema_path:
+            logger.error("❌ Foundation schema not found!")
+            return
+
+        with open(schema_path, "r", encoding="utf-8") as f:
+            schema_sql = f.read()
+
+        # Limpiar comentarios y separar sentencias respetando $$
+        clean_lines = [line.split('--')[0].rstrip() for line in schema_sql.splitlines()]
+        clean_sql = "\n".join(clean_lines)
+        
+        statements = []
+        current_stmt = []
+        in_dollar = False
+        for line in clean_sql.splitlines():
+            if "$$" in line:
+                in_dollar = not in_dollar if line.count("$$") % 2 != 0 else in_dollar
+            current_stmt.append(line)
+            if not in_dollar and ";" in line:
+                full = "\n".join(current_stmt).strip()
+                if full: statements.append(full)
+                current_stmt = []
+        
+        if current_stmt:
+            leftover = "\n".join(current_stmt).strip()
+            if leftover: statements.append(leftover)
+
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                for i, stmt in enumerate(statements):
+                    await conn.execute(stmt)
+        logger.info(f"✅ Foundation aplicada ({len(statements)} sentencias)")
+
+    async def _run_evolution_pipeline(self, logger):
+        """
+        Pipeline de Cirugía: Parches acumulativos e independientes.
+        Agrega aquí bloques DO $$ que aseguren la evolución del esquema.
+        """
+        patches = [
+            # Parche 1: Asegurar tabla 'users' y columna 'user_id' en 'professionals'
+            """
+            DO $$ 
+            BEGIN 
+                -- Asegurar columna user_id en professionals
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='professionals' AND column_name='user_id') THEN
+                    ALTER TABLE professionals ADD COLUMN user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+                END IF;
+            END $$;
+            """,
+            # Agrega más parches aquí en el futuro...
+        ]
+
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                for i, patch in enumerate(patches):
+                    try:
+                        await conn.execute(patch)
+                    except Exception as e:
+                        logger.error(f"❌ Error aplicando parche evolutivo {i+1}: {e}")
+                        # En evolución, a veces es mejor fallar rápido para no corromper
+                        raise e
 
     async def disconnect(self):
         if self.pool:

@@ -47,19 +47,40 @@ CREATE TABLE patients (
 );
 ```
 
-## 3. Gestor de Migraciones Manuales
-Cuando necesites agregar una columna o índice, creá un script SQL en `orchestrator_service/scripts/` o ejecútalo directamente vía `db.pool`.
+## 3. Gestor de Migraciones (Maintenance Robot)
+Dentalogic utiliza un sistema de **Self-Healing** y **Evolución Continua** en `orchestrator_service/db.py`.
 
-**Ejemplo de agregado de Urgencia**:
+### Arquitectura de Dos Capas:
+1.  **Foundation**: Si la tabla `tenants` no existe, se aplica `dentalogic_schema.sql` completo.
+2.  **Evolution Pipeline**: Una lista de parches en `db.py` que se ejecutan en cada arranque.
+
+### Reglas para Evolucionar el Esquema:
+- **NUNCA** hagas migraciones manuales en producción.
+- **SIEMPRE** agrega un parche a la lista `patches` en `db.py`.
+- **SINTAXIS**: Usa bloques `DO $$ BEGIN ... END $$` con `IF NOT EXISTS` para cualquier `ALTER TABLE` o `CREATE TABLE`.
+
+**Ejemplo de Parche Seguro:**
 ```sql
-ALTER TABLE appointments ADD COLUMN IF NOT EXISTS triage_notes TEXT;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='professionals' AND column_name='specialty_code') THEN
+        ALTER TABLE professionals ADD COLUMN specialty_code VARCHAR(10);
+    END IF;
+END $$;
 ```
 
-## 4. Integración con Google Calendar
+## 4. Sincronización de Archivos SQL
+Mantén siempre sincronizado el archivo raíz con el del orquestador usando:
+```bash
+powershell -ExecutionPolicy Bypass -File ./sync-schema.ps1
+```
+
+## 5. Integración con Google Calendar
 Sincronizar siempre el `google_calendar_event_id` para evitar duplicados. Si un turno se cancela en la BD, **debe** dispararse la cancelación en el `gcal_service`.
 
-## 5. Checklist de Base de Datos
+## 6. Checklist de Base de Datos
+- [ ] ¿El cambio está en el Evolution Pipeline de `db.py`?
+- [ ] ¿El bloque `DO` verifica la existencia antes de alterar?
+- [ ] ¿Se sincronizó el `dentalogic_schema.sql` para nuevas instalaciones?
 - [ ] ¿La query usa `$1`, `$2` para prevenir SQL Injection?
-- [ ] ¿Los índices están en `phone_number` y `appointment_datetime`?
-- [ ] ¿Se manejan correctamente los husos horarios (TIMESTAMPTZ)?
-- [ ] ¿Se emiten logs precisos en caso de fallo de conexión al pool?
+- [ ] ¿Los índices están en los campos de búsqueda frecuentes?

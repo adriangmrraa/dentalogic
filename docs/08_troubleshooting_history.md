@@ -160,13 +160,16 @@ Este documento registra problemas encontrados y sus soluciones para referencia f
 - **401 Unauthorized**: Frontend fallaba al conectar con Orchestrator por falta de token en build.
 - **404 Not Found**: YCloud enviaba webhooks a `/webhook` pero el servicio esperaba `/webhook/ycloud`.
 - **422 Unprocessable**: Mismatch de nombres en JSON entre WhatsApp de entrada (`from_number`/`text`) y Orchestrator (`phone`/`message`).
-- **500 Internal Error**: `asyncpg` fallaba con errores `NoneType` al procesar scripts SQL grandes.
+- **500 Internal Error**: `asyncpg` fallaba con errores `NoneType` al procesar scripts SQL grandes, y se perdían tablas por filtros de comentarios demasiado estrictos.
 
 **Solución Aplicada:**
 - **Frontend**: Inyectar `VITE_ADMIN_TOKEN` como `ARG` y `ENV` en `frontend_react/Dockerfile`.
 - **WhatsApp Service**: Agregar alias `@app.post("/webhook")` junto al original.
 - **Orchestrator**: Normalizar el modelo `ChatRequest` con Pydantic Aliases/Properties para aceptar ambos formatos.
-- **DB (db.py)**: Implementar un **Smart SQL Splitter** que divide el schema por `;` (respetando `$$`) y ejecuta cada sentencia individualmente.
+- **Maintenance Robot (db.py)**: 
+  - Se implementó un **Smart SQL Splitter** que divide el schema por `;` (respetando bloques `$$`) y ejecuta cada sentencia individualmente.
+  - Se creó un sistema de **Evolución por Parches** que corre bloques `DO $$` en cada inicio, reparando columnas faltantes (ej: `user_id` en `professionals`) sin necesidad de migraciones manuales.
+  - Se agregó sanitización de comentarios para evitar que el splitter descarte sentencias legítimas.
 
 **Estado:**
 - ✅ Completamente estabilizado en v4 "Platinum Resilience".

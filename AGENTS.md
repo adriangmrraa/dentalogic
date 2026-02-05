@@ -40,6 +40,12 @@ El agente tiene una personalidad estricta definida en `sys_template`:
 - **Duración:** **24 horas** (antes era infinito). Se guarda en `human_override_until`.
 - **Enforcement:** El Orchestrator chequea este timestamp al inicio de `/chat`. Si el bloqueo está activo, retorna `ignored` y la IA no se ejecuta.
 
+### 🤖 Maintenance Robot (Self-Healing)
+El orquestador en `orchestrator_service/db.py` gestiona la salud de la DB automáticamente:
+- **Zero-Touch Evolution**: Si necesitas agregar campos, edita la lista `patches` en `db.py` usando bloques `DO $$`.
+- **Idempotencia**: El sistema verifica si la columna existe antes de intentar crearla.
+- **Auto-Bootstrap**: Al primer inicio, aplica el `dentalogic_schema.sql` si no hay tablas.
+
 ### 🛠️ Herramientas (Tools) - Nombres Exactos
 - `search_specific_products`: Búsqueda general por keyword.
 - `search_by_category`: Búsqueda filtrada por categoría.
@@ -69,4 +75,20 @@ El agente tiene una personalidad estricta definida en `sys_template`:
 - Revisa `http_request_completed` en los logs para monitorear latencia del agente.
 
 ---
+
+---
+
+## 🛠️ Available Skills Index
+
+| Skill Name | Trigger | Descripción |
+| :--- | :--- | :--- |
+| **Maintenance Robot Architect** | *db.py, miguel, robot* | Arquitecto de evolución de base de datos segura y self-healing. |
+| **DB Schema Surgeon** | *Postgres, SQL, Schema* | Gestión avanzada de modelos, índices y parches PL/pgSQL. |
+| **Sovereign Backend Engineer** | *FastAPI, Backend* | Experto en lógica de negocio, seguridad y API multi-tenant. |
+| **Nexus UI Developer** | *React, Frontend* | Especialista en interfaces dinámicas y sincronización Socket.IO. |
+| **Spec Architect** | *Spec, .spec.md* | Generador de especificaciones técnicas bajo estándar SDD v2.0. |
+
+---
 **Recuerda:** Este sistema es multi-tenant pero está optimizado para despliegues single-tenant rápidos vía EasyPanel. Mantén las credenciales en variables de entorno siempre que sea posible.
+
+*Actualizado: 2026-02-05 - Protocolo Platinum Resilience*

@@ -431,13 +431,25 @@ pytest tests/ -v
 
 ## 10. Versioning y Migración
 
-### 10.1 Cambios en la BD
+### 10.1 Cambios en la BD (Maintenance Robot)
 
-Si necesitas agregar una columna o tabla:
+Si necesitas agregar una columna o tabla, **NO** edites solo los archivos SQL. Sigue este flujo:
 
-1. Editar `db/init/001_schema.sql` o crear nuevo `002_*.sql`
-2. El Orchestrator ejecuta migraciones en startup (lifespan event)
-3. Migraciones son idempotentes (CREATE TABLE IF NOT EXISTS)
+1.  **Modificar el Foundation (Opcional)**: Agrega el cambio en `db/init/dentalogic_schema.sql` para que las instalaciones nuevas nazcan con el cambio. Sincroniza con `./sync-schema.ps1`.
+2.  **Agregar Parche en Python**: Edita `orchestrator_service/db.py` y agrega un nuevo bloque de código en la lista `patches` dentro de la función `_run_evolution_pipeline`.
+3.  **Usar DO Blocks**: Usa siempre la estructura `DO $$ BEGIN ... END $$` con `IF NOT EXISTS` para asegurar que el parche sea idempotente.
+
+**Ejemplo de Parche:**
+```python
+"""
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='pacientes' AND column_name='nacionalidad') THEN
+        ALTER TABLE pacientes ADD COLUMN nacionalidad TEXT DEFAULT 'Argentina';
+    END IF;
+END $$;
+"""
+```
 
 ### 10.2 Cambios en Modelos Pydantic
 
