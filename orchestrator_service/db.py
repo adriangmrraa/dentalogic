@@ -72,9 +72,30 @@ class Database:
             with open(schema_path, "r", encoding="utf-8") as f:
                 schema_sql = f.read()
             
-            # Ejecutar cada sentencia individualmente para evitar bugs de asyncpg con scripts grandes
-            # y tener mejor visibilidad de qué falla exactamente.
-            statements = [s.strip() for s in schema_sql.split(";") if s.strip()]
+            # Split robusto para manejar funciones PL/pgSQL (evita romper por ; dentro de $$)
+            import re
+            # Regex que busca ; pero ignora los que están dentro de $$...$$
+            # Esta es una aproximación simple pero efectiva para este schema
+            statements = []
+            current_stmt = []
+            in_dollar = False
+            for line in schema_sql.splitlines():
+                if "$$" in line:
+                    in_dollar = not in_dollar
+                
+                if ";" in line and not in_dollar:
+                    parts = line.split(";")
+                    current_stmt.append(parts[0])
+                    statements.append("\n".join(current_stmt).strip())
+                    current_stmt = parts[1:] if len(parts) > 1 else []
+                else:
+                    current_stmt.append(line)
+            
+            if current_stmt:
+                leftover = "\n".join(current_stmt).strip()
+                if leftover: statements.append(leftover)
+
+            statements = [s for s in statements if s.strip()]
             
             logger.info(f"⏳ Ejecutando {len(statements)} sentencias SQL...")
             async with self.pool.acquire() as conn:
