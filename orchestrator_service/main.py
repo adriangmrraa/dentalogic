@@ -33,7 +33,7 @@ from db import db
 from admin_routes import router as admin_router
 
 # --- CONFIGURACIÓN ---
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger("orchestrator")
 
