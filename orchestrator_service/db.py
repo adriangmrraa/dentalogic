@@ -93,16 +93,39 @@ class Database:
                 else:
                     current_stmt.append(line)
             
-            # Limpiar comentarios línea por línea antes de separar
+            # Limpiar comentarios pero preservar saltos de línea para el splitter avanzado
             clean_lines = []
             for line in schema_sql.splitlines():
-                line_clean = line.split('--')[0].strip()
-                if line_clean:
+                line_clean = line.split('--')[0].rstrip()
+                if line_clean or not line.strip(): # Mantener líneas vacías para no pegar palabras
                     clean_lines.append(line_clean)
             
-            clean_sql = " ".join(clean_lines)
-            statements = [s.strip() for s in clean_sql.split(";") if s.strip()]
+            clean_sql = "\n".join(clean_lines)
             
+            # Splitter inteligente que respeta bloques $$
+            statements = []
+            current_stmt = []
+            in_dollar_block = False
+            
+            for line in clean_sql.splitlines():
+                if "$$" in line:
+                    # Contamos cuántas veces aparece $$ para saber si abre o cierra (o ambos)
+                    in_dollar_block = not in_dollar_block if line.count("$$") % 2 != 0 else in_dollar_block
+                
+                current_stmt.append(line)
+                
+                if not in_dollar_block and ";" in line:
+                    # Si la línea tiene un punto y coma fuera de un bloque $$, cerramos la sentencia
+                    full_stmt = "\n".join(current_stmt).strip()
+                    if full_stmt:
+                        statements.append(full_stmt)
+                    current_stmt = []
+            
+            # Agregar lo que quede
+            if current_stmt:
+                leftover = "\n".join(current_stmt).strip()
+                if leftover: statements.append(leftover)
+
             logger.info(f"⏳ Ejecutando {len(statements)} sentencias SQL...")
             async with self.pool.acquire() as conn:
                 async with conn.transaction():
@@ -112,7 +135,7 @@ class Database:
                         except Exception as st_err:
                             logger.error(f"❌ Error en sentencia {i+1}: {st_err}")
                             logger.error(f"Sentencia que falló:\n{stmt}")
-                            raise st_err # Reraise to fail the transaction and log the rollback
+                            raise st_err 
             
             logger.info("✅ Auto-migración completada exitosamente")
             
