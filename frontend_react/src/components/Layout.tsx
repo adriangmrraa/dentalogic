@@ -1,5 +1,6 @@
 import React, { type ReactNode, useState } from 'react';
 import { Sidebar } from './Sidebar';
+import { useAuth } from '../context/AuthContext';
 
 interface LayoutProps {
   children: ReactNode;
@@ -7,20 +8,20 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { user } = useAuth();
 
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
-      <Sidebar 
-        collapsed={sidebarCollapsed} 
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} 
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
-      
+
       {/* Main Content */}
-      <main 
-        className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${
-          sidebarCollapsed ? 'ml-16' : 'ml-64'
-        }`}
+      <main
+        className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-64'
+          }`}
       >
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm">
@@ -29,23 +30,27 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               Sistema de Gestión Dental
             </h1>
           </div>
-          
+
           <div className="flex items-center gap-4">
             {/* Tenant Selector */}
             <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg text-sm">
               <span className="text-gray-500">Sucursal:</span>
               <span className="font-medium text-medical-900">Principal</span>
             </div>
-            
+
             {/* User Menu */}
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-medical-600 flex items-center justify-center text-white font-medium">
-                A
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col items-end">
+                <span className="text-sm font-medium text-medical-900">{user?.email?.split('@')[0]}</span>
+                <span className="text-xs text-secondary uppercase">{user?.role}</span>
+              </div>
+              <div className="w-9 h-9 rounded-full bg-medical-600 flex items-center justify-center text-white font-semibold text-lg border-2 border-white shadow-sm">
+                {user?.email?.[0].toUpperCase() || 'U'}
               </div>
             </div>
           </div>
         </header>
-        
+
         {/* Page Content */}
         <div className="flex-1 overflow-auto bg-gray-100 p-6">
           {children}

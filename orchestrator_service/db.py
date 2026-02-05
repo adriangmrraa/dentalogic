@@ -42,10 +42,10 @@ class Database:
                 tables_exist = await conn.fetchval("""
                     SELECT COUNT(*) FROM information_schema.tables 
                     WHERE table_schema = 'public' 
-                    AND table_name IN ('patients', 'professionals', 'appointments')
+                    AND table_name IN ('patients', 'professionals', 'appointments', 'users')
                 """)
             
-            if tables_exist >= 3:
+            if tables_exist >= 4:
                 logger.info("✅ Tablas principales detectadas, schema OK")
                 return
             

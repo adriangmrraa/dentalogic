@@ -5,7 +5,7 @@ import asyncpg
 import logging
 from datetime import datetime, timedelta, date
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Header, Depends, Request
+from fastapi import APIRouter, HTTPException, Header, Depends, Request, status
 from pydantic import BaseModel
 from db import db
 from gcal_service import gcal_service
@@ -28,14 +28,83 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-token")
 
 router = APIRouter(prefix="/admin", tags=["Dental Admin"])
 
-# --- Dependencia de Seguridad ---
-async def verify_admin_token(x_admin_token: str = Header(None)):
+# --- Dependencia de Seguridad (Triple Capa Nexus v7.6) ---
+async def verify_admin_token(
+    request: Request,
+    x_admin_token: str = Header(None),
+    authorization: str = Header(None)
+):
+    """
+    Implementa la validación de doble factor para administración:
+    1. Validar Token JWT (Identidad y Sesión)
+    2. Validar X-Admin-Token (Autorización Estática de Infraestructura)
+    """
+    # 1. Validar X-Admin-Token
     if not ADMIN_TOKEN:
-        return # Si no hay token configurado, pasamos (inseguro, solo dev)
-    if x_admin_token != ADMIN_TOKEN:
-        raise HTTPException(status_code=401, detail="Token de administración inválido")
+        logger.warning("⚠️ ADMIN_TOKEN no configurado. Validación estática omitida.")
+    elif x_admin_token != ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Token de infraestructura (X-Admin-Token) inválido.")
 
-# --- Modelos Pydantic (Entradas/Salidas) ---
+    # 2. Validar JWT (Capa de Identidad)
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión no válida. Token JWT requerido.")
+    
+    token = authorization.split(" ")[1]
+    from auth_service import auth_service
+    user_data = auth_service.decode_token(token)
+    
+    if not user_data:
+        raise HTTPException(status_code=401, detail="Token de sesión expirado o inválido.")
+    
+    # 3. Validar Rol (Solo CEOs pueden acceder a /admin global)
+    # Algunas rutas podrían permitir 'secretary', pero por defecto restringimos a 'ceo'
+    if user_data.role not in ['ceo', 'secretary']:
+        raise HTTPException(status_code=403, detail="No tienes permisos suficientes para realizar esta acción.")
+
+    # Inyectar datos del usuario en el request state para uso posterior
+    request.state.user = user_data
+    return user_data
+
+# --- Modelos Pydantic ---
+
+class StatusUpdate(BaseModel):
+    status: str # active, suspended, pending
+
+# --- RUTAS DE ADMINISTRACIÓN DE USUARIOS ---
+
+@router.get("/users/pending")
+async def get_pending_users(user_data = Depends(verify_admin_token)):
+    """ Retorna la lista de usuarios con estado 'pending' (Solo CEO) """
+    if user_data.role != 'ceo':
+        raise HTTPException(status_code=403, detail="Solo los CEOs pueden gestionar aprobaciones.")
+        
+    users = await db.fetch("""
+        SELECT id, email, role, status, created_at 
+        FROM users 
+        WHERE status = 'pending'
+        ORDER BY created_at DESC
+    """)
+    return [dict(u) for u in users]
+
+@router.post("/users/{user_id}/status")
+async def update_user_status(user_id: str, payload: StatusUpdate, user_data = Depends(verify_admin_token)):
+    """ Actualiza el estado de un usuario (Aprobación/Suspensión) """
+    if user_data.role != 'ceo':
+        raise HTTPException(status_code=403, detail="Solo los CEOs pueden cambiar estados de usuario.")
+
+    # Validar que el usuario exista
+    target_user = await db.fetchrow("SELECT email, role FROM users WHERE id = $1", user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    # Actualizar estado
+    await db.execute("UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2", payload.status, user_id)
+
+    # Si se aprueba un profesional, activar su perfil médico también
+    if payload.status == 'active' and target_user['role'] == 'professional':
+        await db.execute("UPDATE professionals SET is_active = TRUE WHERE user_id = $1", uuid.UUID(user_id))
+
+    return {"message": f"Usuario {target_user['email']} actualizado a {payload.status}."}
 
 class PatientCreate(BaseModel):
     first_name: str

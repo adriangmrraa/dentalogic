@@ -32,6 +32,7 @@ from langchain.tools import tool
 import socketio
 from db import db
 from admin_routes import router as admin_router
+from auth_routes import router as auth_router
 
 # --- CONFIGURACIÓN ---
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -587,7 +588,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include admin routes
+# --- RUTAS ---
+app.include_router(auth_router)
 app.include_router(admin_router)
 
 # --- SOCKET.IO CONFIGURATION ---

@@ -73,22 +73,27 @@ const api: AxiosInstance = axios.create({
 // Request interceptor: agregar token y X-Tenant-ID
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // 1. Get auth token (from localStorage or Environment Fallback)
-    let token = localStorage.getItem('ADMIN_TOKEN');
+    // 1. Get tokens from localStorage
+    let adminToken = localStorage.getItem('ADMIN_TOKEN');
+    const jwtToken = localStorage.getItem('JWT_TOKEN');
 
-    // Auto-init from environment if empty (Essential for Docker/EasyPanel zero-config)
-    if (!token) {
+    // Auto-init for Admin Token (Compatibility)
+    if (!adminToken) {
       const envToken = import.meta.env.VITE_ADMIN_TOKEN;
       if (envToken) {
-        console.log('[API] 🔑 Initializing ADMIN_TOKEN from Environment');
         localStorage.setItem('ADMIN_TOKEN', envToken);
-        token = envToken;
+        adminToken = envToken;
       }
     }
 
-    if (token && config.headers) {
-      // Backend expects X-Admin-Token (verified in admin_routes.py)
-      config.headers['X-Admin-Token'] = token;
+    if (config.headers) {
+      // Layer 1: Infrastructure Security
+      if (adminToken) config.headers['X-Admin-Token'] = adminToken;
+
+      // Layer 2: Identity Security (Nexus v7.6)
+      if (jwtToken) {
+        config.headers['Authorization'] = `Bearer ${jwtToken}`;
+      }
     }
 
     // 2. Get and set X-Tenant-ID header
