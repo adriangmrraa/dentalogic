@@ -75,7 +75,8 @@ class AuthService:
         Nexus Protocol Omega: 
         Always log the activation link in case of SMTP failure.
         """
-        base_url = os.getenv("PLATFORM_URL", "http://localhost:3000")
+        # Try to use PLATFORM_URL from env, otherwise fallback to frontend production URL
+        base_url = os.getenv("PLATFORM_URL", "https://dentalogic-frontend.ugwrjq.easypanel.host")
         activation_url = f"{base_url}/activate?token={activation_token}&email={email}"
         
         logger.warning("🛡️ [PROTOCOL OMEGA] ACTIVATION LINK GENERATED (SMTP FAIL-SAFE)")

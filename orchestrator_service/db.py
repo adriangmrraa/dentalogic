@@ -120,6 +120,19 @@ class Database:
                 END IF;
             END $$;
             """,
+            # Parche 2: Auto-activación del primer CEO (Protocolo Omega Prime)
+            """
+            DO $$ 
+            BEGIN 
+                -- Si existe un usuario CEO en estado pending, lo activamos
+                UPDATE users SET status = 'active' 
+                WHERE role = 'ceo' AND status = 'pending';
+                
+                -- Aseguramos que su perfil profesional también esté activo
+                UPDATE professionals SET is_active = TRUE 
+                WHERE email IN (SELECT email FROM users WHERE role = 'ceo' AND status = 'active');
+            END $$;
+            """,
             # Agrega más parches aquí en el futuro...
         ]
 
