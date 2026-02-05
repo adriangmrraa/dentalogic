@@ -551,11 +551,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=f"{CLINIC_NAME} Orchestrator", lifespan=lifespan)
 
 # Configurar CORS
-origins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "https://dentalogic-frontend.ugwrjq.easypanel.host",
-]
+allowed_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "")
+if allowed_origins_str:
+    origins = [o.strip() for o in allowed_origins_str.split(",")]
+else:
+    # Default for development
+    origins = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://dentalogic-frontend.ugwrjq.easypanel.host", # Fallback temporal
+    ]
 
 app.add_middleware(
     CORSMiddleware,

@@ -42,6 +42,7 @@ YCLOUD_API_KEY=...
 YCLOUD_WEBHOOK_SECRET=...
 WHATSAPP_SERVICE_URL=http://whatsapp:8002
 ADMIN_TOKEN=admin-secret-token
+CORS_ALLOWED_ORIGINS=https://dentalogic-frontend.ugwrjq.easypanel.host,http://localhost:3000
 ```
 
 ## whatsapp (8002)
