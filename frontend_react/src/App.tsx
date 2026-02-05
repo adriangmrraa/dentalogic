@@ -19,7 +19,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginView />} />
 
-          <Route path="/" element={
+          <Route path="/*" element={
             <ProtectedRoute>
               <Layout>
                 <Routes>
@@ -41,7 +41,7 @@ function App() {
               </Layout>
             </ProtectedRoute>
           } />
-        </Routes>
+          泛        </Routes>
       </AuthProvider>
     </Router>
   );
