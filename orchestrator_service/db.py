@@ -93,11 +93,15 @@ class Database:
                 else:
                     current_stmt.append(line)
             
-            if current_stmt:
-                leftover = "\n".join(current_stmt).strip()
-                if leftover: statements.append(leftover)
-
-            statements = [s for s in statements if s.strip() and not s.strip().startswith('--')]
+            # Limpiar comentarios línea por línea antes de separar
+            clean_lines = []
+            for line in schema_sql.splitlines():
+                line_clean = line.split('--')[0].strip()
+                if line_clean:
+                    clean_lines.append(line_clean)
+            
+            clean_sql = " ".join(clean_lines)
+            statements = [s.strip() for s in clean_sql.split(";") if s.strip()]
             
             logger.info(f"⏳ Ejecutando {len(statements)} sentencias SQL...")
             async with self.pool.acquire() as conn:
