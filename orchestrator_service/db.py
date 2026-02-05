@@ -12,9 +12,18 @@ class Database:
     async def connect(self):
         """Conecta al pool de PostgreSQL y ejecuta auto-migraciones."""
         if not self.pool:
+            if not POSTGRES_DSN:
+                print("❌ ERROR: POSTGRES_DSN environment variable is not set!")
+                return
+
             # asyncpg no soporta el esquema 'postgresql+asyncpg', solo 'postgresql' o 'postgres'
-            dsn = POSTGRES_DSN.replace("postgresql+asyncpg://", "postgresql://") if POSTGRES_DSN else None
-            self.pool = await asyncpg.create_pool(dsn)
+            dsn = POSTGRES_DSN.replace("postgresql+asyncpg://", "postgresql://")
+            
+            try:
+                self.pool = await asyncpg.create_pool(dsn)
+            except Exception as e:
+                print(f"❌ ERROR: Failed to create database pool: {e}")
+                return
             
             # Auto-Migration: Ejecutar dentalogic_schema.sql si las tablas no existen
             await self._run_auto_migrations()

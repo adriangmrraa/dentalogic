@@ -133,7 +133,8 @@ async def verify_signature(request: Request):
     if not t or not s: raise HTTPException(status_code=401, detail="Missing timestamp or signature")
     if abs(time.time() - int(t)) > 300: raise HTTPException(status_code=401, detail="Timestamp out of tolerance")
     raw_body = await request.body()
-    signed_payload = f"{t}.{raw_body.decode('utf-8')}"
+    body_str = raw_body.decode('utf-8') if raw_body else ""
+    signed_payload = f"{t}.{body_str}"
     
     # Fetch secret dynamically to support DB-stored credentials
     v_secret = await get_config("YCLOUD_WEBHOOK_SECRET", YCLOUD_WEBHOOK_SECRET)
@@ -338,6 +339,7 @@ def ready():
 @app.get("/health")
 def health(): return {"status": "ok"}
 
+@app.post("/webhook")
 @app.post("/webhook/ycloud")
 async def ycloud_webhook(request: Request):
     logger.info("webhook_hit", headers=str(request.headers))
