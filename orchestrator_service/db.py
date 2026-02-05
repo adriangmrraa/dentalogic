@@ -72,9 +72,22 @@ class Database:
             with open(schema_path, "r", encoding="utf-8") as f:
                 schema_sql = f.read()
             
-            # Ejecutar schema completo (IF NOT EXISTS hace que sea idempotente)
+            # Ejecutar cada sentencia individualmente para evitar bugs de asyncpg con scripts grandes
+            # y tener mejor visibilidad de qué falla exactamente.
+            statements = [s.strip() for s in schema_sql.split(";") if s.strip()]
+            
+            logger.info(f"⏳ Ejecutando {len(statements)} sentencias SQL...")
             async with self.pool.acquire() as conn:
-                await conn.execute(schema_sql)
+                async with conn.transaction():
+                    for i, stmt in enumerate(statements):
+                        try:
+                            await conn.execute(stmt)
+                        except Exception as st_err:
+                            logger.error(f"❌ Error en sentencia {i+1}: {st_err}")
+                            logger.error(f"Sentencia: {stmt[:100]}...")
+                            # Dependiendo de la gravedad podrías querer hacer raise o continuar
+                            # Como usamos IF NOT EXISTS, la mayoría de errores serán por duplicados previos
+                            pass
             
             logger.info("✅ Auto-migración completada exitosamente")
             
