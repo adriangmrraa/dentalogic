@@ -570,15 +570,19 @@ app = FastAPI(title=f"{CLINIC_NAME} Orchestrator", lifespan=lifespan)
 
 # Configurar CORS
 allowed_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "")
+origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://dentalogic-frontend.ugwrjq.easypanel.host",
+    "https://dentalogic-orchestrator.ugwrjq.easypanel.host",
+]
+
 if allowed_origins_str:
-    origins = [o.strip() for o in allowed_origins_str.split(",")]
-else:
-    # Default for development
-    origins = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://dentalogic-frontend.ugwrjq.easypanel.host", # Fallback temporal
-    ]
+    extra_origins = [o.strip() for o in allowed_origins_str.split(",") if o.strip()]
+    origins.extend(extra_origins)
+
+# Eliminar duplicados manteniendo el orden lógico
+origins = list(dict.fromkeys(origins))
 
 app.add_middleware(
     CORSMiddleware,

@@ -36,17 +36,18 @@ class Database:
         import logging
         logger = logging.getLogger("db")
         
-        try:
             # Verificar si las tablas principales existen
             async with self.pool.acquire() as conn:
-                tables_exist = await conn.fetchval("""
-                    SELECT COUNT(*) FROM information_schema.tables 
-                    WHERE table_schema = 'public' 
-                    AND table_name IN ('patients', 'professionals', 'appointments', 'users')
+                # Específicamente necesitamos la tabla 'users' para el nuevo sistema
+                users_table_exists = await conn.fetchval("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'users'
+                    )
                 """)
             
-            if tables_exist >= 4:
-                logger.info("✅ Tablas principales detectadas, schema OK")
+            if users_table_exists:
+                logger.info("✅ Tabla 'users' detectada, schema OK")
                 return
             
             logger.warning("⚠️ Tablas faltantes detectadas, ejecutando auto-migración...")
@@ -105,10 +106,8 @@ class Database:
                             await conn.execute(stmt)
                         except Exception as st_err:
                             logger.error(f"❌ Error en sentencia {i+1}: {st_err}")
-                            logger.error(f"Sentencia: {stmt[:100]}...")
-                            # Dependiendo de la gravedad podrías querer hacer raise o continuar
-                            # Como usamos IF NOT EXISTS, la mayoría de errores serán por duplicados previos
-                            pass
+                            logger.error(f"Sentencia que falló:\n{stmt}")
+                            raise st_err # Reraise to fail the transaction and log the rollback
             
             logger.info("✅ Auto-migración completada exitosamente")
             

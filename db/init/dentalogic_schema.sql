@@ -113,9 +113,23 @@ CREATE TABLE IF NOT EXISTS professionals (
     id SERIAL PRIMARY KEY,
     tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id) ON DELETE SET NULL, -- Vínculo a la tabla de usuarios
+    
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    email VARCHAR(255),
+    phone_number VARCHAR(20),
+    specialty VARCHAR(100),
+    registration_id VARCHAR(50), -- Matrícula
+    
+    is_active BOOLEAN DEFAULT TRUE,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 CREATE INDEX IF NOT EXISTS idx_professionals_tenant ON professionals(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_professionals_active ON professionals(is_active);
+CREATE INDEX IF NOT EXISTS idx_professionals_user_id ON professionals(user_id);
 
 -- ==================== TABLA DE PACIENTES ====================
 
