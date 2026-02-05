@@ -92,7 +92,8 @@ class OrchestratorResult(BaseModel):
 
 class SendMessage(BaseModel):
     to: str
-    text: str
+    text: Optional[str] = None
+    message: Optional[str] = None # Support both
 
 # FastAPI App
 app = FastAPI(
@@ -498,7 +499,7 @@ async def ycloud_webhook(request: Request):
                  
     return {"status": "ignored_event_type", "type": event_type}
 
-@app.post("/messages/send")
+@app.post("/send")
 async def send_message(message: SendMessage, request: Request):
     """Internal endpoint for sending manual messages from orchestrator."""
     token = request.headers.get("X-Internal-Token")
@@ -544,8 +545,13 @@ async def send_message(message: SendMessage, request: Request):
         # Initialize Client
         client = YCloudClient(v_ycloud, business_number)
         
+        # Use either text or message field
+        content = message.text or message.message
+        if not content:
+            raise HTTPException(status_code=400, detail="Missing message content")
+            
         # Send
-        await client.send_text(message.to, message.text, correlation_id)
+        await client.send_text(message.to, content, correlation_id)
         return {"status": "sent", "correlation_id": correlation_id}
         
     except Exception as e:

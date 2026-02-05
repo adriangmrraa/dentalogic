@@ -678,9 +678,10 @@ async def chat_endpoint(req: ChatRequest):
         logger.info(f"✅ Chat procesado para {req.phone} (correlation_id={correlation_id})")
         
         return {
-            "output": assistant_response,
-            "correlation_id": correlation_id,
-            "status": "ok"
+            "status": "ok",
+            "send": True,
+            "text": assistant_response,
+            "correlation_id": correlation_id
         }
         
     except Exception as e:
