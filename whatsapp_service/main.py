@@ -133,7 +133,14 @@ async def verify_signature(request: Request):
     if abs(time.time() - int(t)) > 300: raise HTTPException(status_code=401, detail="Timestamp out of tolerance")
     raw_body = await request.body()
     signed_payload = f"{t}.{raw_body.decode('utf-8')}"
-    expected = hmac.new(YCLOUD_WEBHOOK_SECRET.encode("utf-8"), signed_payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    
+    # Fetch secret dynamically to support DB-stored credentials
+    v_secret = await get_config("YCLOUD_WEBHOOK_SECRET", YCLOUD_WEBHOOK_SECRET)
+    if not v_secret:
+        logger.error("missing_webhook_secret", note="Cannot verify signature without secret")
+        raise HTTPException(status_code=500, detail="Webhook configuration error")
+
+    expected = hmac.new(v_secret.encode("utf-8"), signed_payload.encode("utf-8"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, s): raise HTTPException(status_code=401, detail="Invalid signature")
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10),

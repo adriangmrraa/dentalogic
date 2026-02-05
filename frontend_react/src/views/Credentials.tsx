@@ -22,6 +22,7 @@ export const Credentials: React.FC = () => {
     const { fetchApi, loading } = useApi();
     const [credentials, setCredentials] = useState<Credential[]>([]);
     const [tenants, setTenants] = useState<Tenant[]>([]);
+    const [deploymentConfig, setDeploymentConfig] = useState<any>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCred, setEditingCred] = useState<Credential | null>(null);
 
@@ -37,12 +38,14 @@ export const Credentials: React.FC = () => {
 
     const loadData = async () => {
         try {
-            const [credsData, tenantsData] = await Promise.all([
+            const [credsData, tenantsData, deployData] = await Promise.all([
                 fetchApi('/admin/credentials'),
-                fetchApi('/admin/tenants')
+                fetchApi('/admin/tenants'),
+                fetchApi('/admin/config/deployment')
             ]);
             setCredentials(credsData);
             setTenants(tenantsData);
+            setDeploymentConfig(deployData);
         } catch (e) {
             console.error(e);
         }
@@ -114,6 +117,36 @@ export const Credentials: React.FC = () => {
                     Nueva Credencial
                 </button>
             </div>
+
+            {deploymentConfig && (
+                <div className="glass" style={{ padding: '20px', marginBottom: '20px', borderLeft: '4px solid var(--accent)' }}>
+                    <h3 style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <Globe size={18} color="var(--accent)" /> Configuración de Despliegue
+                    </h3>
+                    <div className="form-group">
+                        <label>YCloud Webhook URL</label>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <input
+                                readOnly
+                                value={deploymentConfig.webhook_ycloud_url}
+                                style={{ flex: 1, background: 'rgba(0,0,0,0.2)' }}
+                            />
+                            <button
+                                className="btn-secondary"
+                                onClick={() => {
+                                    navigator.clipboard.writeText(deploymentConfig.webhook_ycloud_url);
+                                    alert('URL copiada!');
+                                }}
+                            >
+                                Copiar
+                            </button>
+                        </div>
+                        <p style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '5px' }}>
+                            Pegá esta URL en tu panel de YCloud para recibir mensajes. (Puerto interno: {deploymentConfig.webhook_ycloud_internal_port})
+                        </p>
+                    </div>
+                </div>
+            )}
 
             <div className="glass" style={{ padding: '20px' }}>
                 <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>

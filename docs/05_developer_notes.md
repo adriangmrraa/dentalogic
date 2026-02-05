@@ -1,6 +1,6 @@
 # Guía para Desarrolladores - Mantenimiento y Extensión
 
-Este documento contiene tips técnicos para mantener, debugear y extender Nexus v3.
+Este documento contiene tips técnicos para mantener, debugear y extender **Dentalogic**, la plataforma de gestión clínica dental.
 
 ## 1. Agregar una Nueva Herramienta (Tool)
 
@@ -43,10 +43,9 @@ Busca alrededor de línea 860:
 
 ```python
 tools = [
-    search_specific_products,
-    search_by_category,
-    browse_general_storefront,
-    orders,
+    check_availability,
+    book_appointment,
+    triage_urgency,
     derivhumano,
     mi_nueva_herramienta,  # ← Agregar aquí
 ]
@@ -60,9 +59,10 @@ Si la nueva tool necesita explicación, agrégala al system prompt para que el L
 sys_template = """
 ...
 HERRAMIENTAS DISPONIBLES:
-1. search_specific_products: Para búsquedas generales
-2. search_by_category: Para búsquedas dentro de una categoría
-3. mi_nueva_herramienta: Para [propósito específico]
+1. check_availability: Para consultar disponibilidad en la agenda
+2. book_appointment: Para agendar turnos dentales
+3. triage_urgency: Para clasificar urgencias médicas
+4. mi_nueva_herramienta: Para [propósito específico]
 ...
 """
 ```
@@ -501,4 +501,4 @@ def validate_signature(payload: str, signature: str, secret: str) -> bool:
 
 ---
 
-*Guía de Desarrolladores Nexus v3 © 2025*
+*Guía de Desarrolladores Dentalogic © 2026*

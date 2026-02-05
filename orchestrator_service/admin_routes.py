@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Header, Depends, Request
 from pydantic import BaseModel
 from db import db
+from gcal_service import gcal_service
 
 # Configuración
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-token")
@@ -95,6 +96,21 @@ async def get_dashboard_stats():
         "active_urgencies": urgencies,
         "total_patients": total_patients,
         "system_status": "online"
+    }
+
+@router.get("/config/deployment", dependencies=[Depends(verify_admin_token)])
+async def get_deployment_config(request: Request):
+    """Retorna configuración dinámica de despliegue (Webhooks, URLs)."""
+    # Detectamos la URL base actual si no está forzada en ENV
+    host = request.headers.get("host", "localhost:8000")
+    protocol = "https" if request.headers.get("x-forwarded-proto") == "https" else "http"
+    base_url = f"{protocol}://{host}"
+    
+    return {
+        "webhook_ycloud_url": f"{base_url}/webhook/ycloud",
+        "webhook_ycloud_internal_port": os.getenv("WHATSAPP_SERVICE_PORT", "8002"),
+        "orchestrator_url": base_url,
+        "environment": os.getenv("ENVIRONMENT", "development")
     }
 
 # ==================== ENDPOINTS BÚSQUEDA SEMÁNTICA ====================
@@ -436,19 +452,28 @@ async def create_appointment_manual(apt: AppointmentCreate, request: Request):
             ) VALUES ($1, $2, $3, $4, 60, $5, 'confirmed', 'normal', 'manual', NOW())
         """, new_id, pid, apt.professional_id, apt.datetime, apt.type)
         
-        # 5. Emitir evento de Socket.IO para actualización en tiempo real
-        # Obtener datos completos del turno para emitir
-        appointment_data = await db.pool.fetchrow("""
-            SELECT a.id, a.patient_id, a.professional_id, a.appointment_datetime, 
-                   a.appointment_type, a.status, a.urgency_level, a.source,
-                   p.first_name, p.last_name, p.phone_number,
-                   prof.first_name as professional_name
-            FROM appointments a
-            JOIN patients p ON a.patient_id = p.id
-            JOIN professionals prof ON a.professional_id = prof.id
-            WHERE a.id = $1
-        """, new_id)
-        
+        # 5. Sincronizar con Google Calendar
+        try:
+            summary = f"Cita Dental: {appointment_data['first_name']} {appointment_data['last_name'] or ''} - {apt.type}"
+            start_time = apt.datetime.isoformat()
+            end_time = (apt.datetime + timedelta(minutes=60)).isoformat()
+            
+            gcal_event = gcal_service.create_event(
+                summary=summary,
+                start_time=start_time,
+                end_time=end_time,
+                description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['phone_number']}\nNotas: {apt.notes or ''}"
+            )
+            
+            if gcal_event:
+                await db.pool.execute(
+                    "UPDATE appointments SET google_calendar_event_id = $1, google_calendar_sync_status = 'synced' WHERE id = $2",
+                    gcal_event['id'], new_id
+                )
+        except Exception as ge:
+            print(f"Error syncing with GCal: {ge}")
+
+        # 6. Emitir evento de Socket.IO para actualización en tiempo real
         if appointment_data:
             await emit_appointment_event("NEW_APPOINTMENT", dict(appointment_data), request)
         
@@ -473,7 +498,8 @@ async def update_appointment_status(id: str, status: str, request: Request):
         SELECT a.id, a.patient_id, a.professional_id, a.appointment_datetime, 
                a.appointment_type, a.status, a.urgency_level,
                p.first_name, p.last_name, p.phone_number,
-               prof.first_name as professional_name
+               prof.first_name as professional_name,
+               a.google_calendar_event_id, a.google_calendar_sync_status
         FROM appointments a
         JOIN patients p ON a.patient_id = p.id
         JOIN professionals prof ON a.professional_id = prof.id
@@ -481,7 +507,18 @@ async def update_appointment_status(id: str, status: str, request: Request):
     """, id)
     
     if appointment_data:
-        # Emitir evento según el nuevo estado
+        # 1. Sincronizar cancelación con Google Calendar
+        if status == 'cancelled' and appointment_data['google_calendar_event_id']:
+            try:
+                gcal_service.delete_event(appointment_data['google_calendar_event_id'])
+                await db.pool.execute(
+                    "UPDATE appointments SET google_calendar_sync_status = 'cancelled' WHERE id = $1",
+                    id
+                )
+            except Exception as ge:
+                print(f"Error deleting GCal event: {ge}")
+
+        # 2. Emitir evento según el nuevo estado
         if status == 'cancelled':
             await emit_appointment_event("APPOINTMENT_DELETED", {"id": id}, request)
         else:
@@ -695,48 +732,81 @@ async def delete_calendar_block(block_id: str):
 @router.post("/sync/calendar", dependencies=[Depends(verify_admin_token)])
 async def trigger_sync():
     """
-    Forzar sincronización con Google Calendar.
-    
-    Este endpoint:
-    1. Obtiene eventos de GCalendar (simulado)
-    2. Crea/actualiza bloques en la DB local
-    3. Emite evento de actualización a todos los clientes conectados
-    
-    Returns:
-        sync_id: ID del log de sincronización
-        events_processed: Cantidad de eventos procesados
-        status: 'success' | 'partial' | 'error'
+    Sincronización REAL con Google Calendar.
+    Trae eventos de GCal que NO son appointments y los guarda como bloqueos.
     """
-    import random
-    
     try:
-        # Simular sincronización exitosa
-        events_count = random.randint(0, 5)
+        # 1. Obtener eventos de los próximos 30 días
+        time_min = datetime.now().isoformat() + 'Z'
+        time_max = (datetime.now() + timedelta(days=30)).isoformat() + 'Z'
+        
+        events = gcal_service.list_events(time_min=time_min, time_max=time_max)
+        
+        created = 0
+        updated = 0
+        
+        # Obtener IDs de eventos que ya tenemos para saber si es update o create
+        existing_google_ids = await db.pool.fetch("SELECT google_event_id FROM google_calendar_blocks")
+        existing_ids_set = {row['google_event_id'] for row in existing_google_ids}
+        
+        # Tambien obtener los IDs de eventos que son APPOINTMENTS para no duplicarlos
+        appointment_google_ids = await db.pool.fetch("SELECT google_calendar_event_id FROM appointments WHERE google_calendar_event_id IS NOT NULL")
+        apt_ids_set = {row['google_calendar_event_id'] for row in appointment_google_ids}
+
+        tenant_id = await db.pool.fetchval("SELECT id FROM tenants LIMIT 1")
+
+        for event in events:
+            g_id = event['id']
+            
+            # Si el evento es un turno nuestro, lo ignoramos para no duplicarlo como "bloqueo"
+            if g_id in apt_ids_set:
+                continue
+                
+            summary = event.get('summary', 'Bloqueo GCal')
+            description = event.get('description', '')
+            start = event['start'].get('dateTime') or event['start'].get('date')
+            end = event['end'].get('dateTime') or event['end'].get('date')
+            all_day = 'date' in event['start']
+            
+            if g_id in existing_ids_set:
+                await db.pool.execute("""
+                    UPDATE google_calendar_blocks SET
+                        title = $1, description = $2, start_datetime = $3, end_datetime = $4,
+                        all_day = $5, updated_at = NOW()
+                    WHERE google_event_id = $6
+                """, summary, description, datetime.fromisoformat(start.replace('Z', '+00:00')), 
+                     datetime.fromisoformat(end.replace('Z', '+00:00')), all_day, g_id)
+                updated += 1
+            else:
+                await db.pool.execute("""
+                    INSERT INTO google_calendar_blocks (
+                        tenant_id, google_event_id, title, description,
+                        start_datetime, end_datetime, all_day
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                """, tenant_id, g_id, summary, description, 
+                     datetime.fromisoformat(start.replace('Z', '+00:00')), 
+                     datetime.fromisoformat(end.replace('Z', '+00:00')), all_day)
+                created += 1
         
         # Registrar sync en log
-        sync_log_id = await db.pool.fetchval("""
+        await db.pool.execute("""
             INSERT INTO calendar_sync_log (
                 tenant_id, sync_type, direction, events_processed, 
                 events_created, events_updated, completed_at
-            ) VALUES (
-                (SELECT id FROM tenants LIMIT 1),
-                'manual', 'bidirectional', $1, $1, 0, NOW()
-            )
-            RETURNING id
-        """, events_count)
+            ) VALUES ($1, 'manual', 'inbound', $2, $3, $4, NOW())
+        """, tenant_id, len(events), created, updated)
         
         return {
             "status": "success",
-            "sync_id": sync_log_id,
-            "events_processed": events_count,
-            "message": f"Sincronización completada. {events_count} eventos de GCalendar procesados.",
-            "timestamp": datetime.now().isoformat()
+            "events_processed": len(events),
+            "created": created,
+            "updated": updated,
+            "message": f"Sincronización completada. {created} nuevos, {updated} actualizados."
         }
     except Exception as e:
         return {
             "status": "error",
-            "message": f"Error en sincronización: {str(e)}",
-            "timestamp": datetime.now().isoformat()
+            "message": f"Error en sincronización: {str(e)}"
         }
 # --- Función Helper de Entorno (Legacy support) ---
 async def sync_environment():

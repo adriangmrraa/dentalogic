@@ -52,6 +52,10 @@ docker-compose up --build
 ### 📊 [11. Análisis de Gaps (Nexus vs Dentalogic)](docs/11_gap_analysis_nexus_to_dental.md)
 - Estado actual de la implementación vs requerimientos finales.
 
+### 🕵️ [Audit Report (Latest)](C:\Users\Asus\.gemini\antigravity\brain\d01b6032-f575-4ca0-8860-f5ec951011d8\audit_report.md)
+- Detección de spec drift y validación de documentación.
+- Última auditoría: 2026-02-05.
+
 ---
 
 ## 🏗️ Tecnologías Core

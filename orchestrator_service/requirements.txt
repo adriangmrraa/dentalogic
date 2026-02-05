@@ -15,3 +15,7 @@ requests
 python-dateutil
 python-socketio
 aiofiles
+google-api-python-client
+google-auth
+google-auth-httplib2
+google-auth-oauthlib

@@ -9,6 +9,7 @@ from contextvars import ContextVar
 from contextlib import asynccontextmanager
 from dateutil.parser import parse as dateutil_parse
 import re
+from gcal_service import gcal_service
 
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
@@ -236,8 +237,7 @@ async def book_appointment(date_time: str, treatment_reason: str):
         logger.info(f"✅ Turno registrado: {apt_id} para {phone}")
         current_patient_id.set(patient['id'])
         
-        # 6. Emitir evento de Socket.IO para actualización en tiempo real
-        # Obtener datos completos del turno para emitir
+        # 6. Obtener datos completos del turno para emitir evento y sincronizar GCal
         appointment_data = await db.pool.fetchrow("""
             SELECT a.id, a.patient_id, a.professional_id, a.appointment_datetime, 
                    a.appointment_type, a.status, a.urgency_level,
@@ -248,10 +248,34 @@ async def book_appointment(date_time: str, treatment_reason: str):
             JOIN professionals prof ON a.professional_id = prof.id
             WHERE a.id = $1
         """, apt_id)
-        
+
+        # 7. Sincronizar con Google Calendar
+        try:
+            summary = f"Cita Dental AI: {appointment_data['first_name']} {appointment_data['last_name'] or ''} - {treatment_reason}"
+            start_time = apt_datetime.isoformat()
+            end_time = (apt_datetime + timedelta(minutes=60)).isoformat()
+            
+            gcal_event = gcal_service.create_event(
+                summary=summary,
+                start_time=start_time,
+                end_time=end_time,
+                description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['phone_number']}\nMotivo: {treatment_reason}\nCreado por Asistente IA"
+            )
+            
+            if gcal_event:
+                await db.pool.execute(
+                    "UPDATE appointments SET google_calendar_event_id = $1, google_calendar_sync_status = 'synced' WHERE id = $2",
+                    gcal_event['id'], apt_id
+                )
+        except Exception as ge:
+            logger.error(f"Error sincronizando con GCal (AI Tool): {ge}")
+
         if appointment_data:
-            await emit_appointment_event("NEW_APPOINTMENT", dict(appointment_data))
+            # Re-definir localmente para evitar problemas de request o importar
+            from main import sio
+            await sio.emit("NEW_APPOINTMENT", dict(appointment_data))
         
+        from main import CLINIC_NAME
         return f"✅ ¡Turno confirmado para {apt_datetime.strftime('%d/%m/%Y a las %H:%M')}! Te esperamos en {CLINIC_NAME}. Confirmación: #{apt_id[:8]}"
         
     except Exception as e:
@@ -289,46 +313,180 @@ async def triage_urgency(symptoms: str):
     return responses.get(urgency_level, responses['normal'])
 
 @tool
-async def derivhumano(reason: str = "Consulta general"):
+async def cancel_appointment(date_query: str):
     """
-    Deriva a humano: silencia el bot y conecta con la secretaria.
-    Bloquea el bot por 24h (human_override_until).
+    Cancela un turno existente. 
+    date_query: Fecha del turno a cancelar (ej: 'mañana', '2025-05-10')
     """
     phone = current_customer_phone.get()
-    
     if not phone:
-        return "⚠️ No pude procesar tu solicitud. Intenta nuevamente."
-    
+        return "⚠️ No pude identificar tu teléfono. Por favor, contactame de nuevo."
+
     try:
-        # Actualizar conversación para bloquear bot
-        await db.pool.execute("""
-            UPDATE chat_conversations
-            SET status = 'human_handling',
-                human_override_until = NOW() + INTERVAL '24 hours'
-            WHERE phone_number = $1
-        """, phone)
+        target_date = parse_date(date_query)
         
-        logger.info(f"🤝 Derivación a humano: {phone} ({reason})")
-        return "👋 Se ha solicitado la intervención de nuestra secretaria. En breve te contactaremos por WhatsApp. ¡Gracias!"
+        # Buscar el turno en la BD
+        apt = await db.pool.fetchrow("""
+            SELECT id, google_calendar_event_id FROM appointments
+            WHERE phone_number = $1 AND DATE(appointment_datetime) = $2
+            AND status IN ('scheduled', 'confirmed')
+        """, phone, target_date)
+        
+        if not apt:
+            return f"No encontré ningún turno activo para el día {date_query}. ¿Querés que revisemos otra fecha?"
+
+        # 1. Cancelar en GCal
+        if apt['google_calendar_event_id']:
+            gcal_service.delete_event(apt['google_calendar_event_id'])
+            
+        # 2. Marcar como cancelado en BD
+        await db.pool.execute("""
+            UPDATE appointments SET status = 'cancelled', google_calendar_sync_status = 'cancelled'
+            WHERE id = $1
+        """, apt['id'])
+        
+        logger.info(f"🚫 Turno cancelado por IA: {apt['id']} ({phone})")
+        return f"Entendido. He cancelado tu turno del {date_query}. ¿Te puedo ayudar con algo más?"
         
     except Exception as e:
-        logger.error(f"Error en derivhumano: {e}")
-        return "⚠️ Error al procesar la derivación. Intenta nuevamente."
+        logger.error(f"Error en cancel_appointment: {e}")
+        return "⚠️ Hubo un error al intentar cancelar el turno. Por favor, intenta nuevamente."
 
-DENTAL_TOOLS = [check_availability, book_appointment, triage_urgency, derivhumano]
+@tool
+async def reschedule_appointment(original_date: str, new_date_time: str):
+    """
+    Reprograma un turno existente a una nueva fecha/hora.
+    original_date: Fecha del turno actual (ej: 'hoy', 'lunes')
+    new_date_time: Nueva fecha y hora deseada (ej: 'mañana 15:00')
+    """
+    phone = current_customer_phone.get()
+    if not phone:
+        return "⚠️ No pude identificar tu teléfono."
 
-# --- SYSTEM PROMPT ---
-sys_template = f"""Eres el Asistente Virtual de {CLINIC_NAME}, ubicada en {CLINIC_LOCATION}.
-Tu objetivo es ayudar a los pacientes a agendar turnos, resolver dudas sobre tratamientos y realizar un triaje inicial.
+    try:
+        orig_date = parse_date(original_date)
+        new_dt = parse_datetime(new_date_time)
+        
+        # 1. Buscar turno original
+        apt = await db.pool.fetchrow("""
+            SELECT id, google_calendar_event_id FROM appointments
+            WHERE phone_number = $1 AND DATE(appointment_datetime) = $2
+            AND status IN ('scheduled', 'confirmed')
+        """, phone, orig_date)
+        
+        if not apt:
+            return f"No encontré tu turno para el {original_date}. ¿Podrías confirmarme la fecha original?"
 
-REGLAS DE ORO:
-1. TONO: Sos una asistente dental profesional argentina. Usá el voseo ("vos", "te cuento", "fijate", "mirá") de forma cálida y educada.
-2. AGENDAMIENTO: Antes de confirmar un turno, siempre consultá disponibilidad con la herramienta 'check_availability'.
-3. TRIAJE: Si el paciente menciona DOLOR, MOLESTIA o un accidente, usá 'triage_urgency' inmediatamente.
-4. NO DIAGNOSTICAR: Nunca digas qué tiene el paciente ni recetes medicación. Limitáte a decir "el doctor deberá evaluarte en el consultorio".
-5. BREVEDAD: Respuestas cortas y al grano. Usá emojis de forma moderada (🦷, ✨).
+        # 2. Verificar disponibilidad para el nuevo horario
+        # (Llamamos a la lógica de overlap directamente)
+        prof = await db.pool.fetchrow("SELECT id FROM professionals WHERE is_active = true LIMIT 1")
+        overlap = await db.pool.fetchval("""
+            SELECT COUNT(*) FROM appointments
+            WHERE professional_id = $1 AND appointment_datetime = $2
+            AND status IN ('scheduled', 'confirmed') AND id != $3
+        """, prof['id'], new_dt, apt['id'])
+        
+        if overlap > 0:
+            return f"Lo siento, el horario {new_date_time} ya está ocupado. ¿Probamos con otro?"
 
-Si el paciente se pone agresivo o pide hablar con una persona, usá 'derivhumano'.
+        # 3. Actualizar GCal
+        if apt['google_calendar_event_id']:
+            # Podríamos usar gcal_service.update_event si existiera, o delete/create
+            # Para simplificar, borramos el viejo y creamos uno nuevo (o implementamos update en el service)
+            gcal_service.delete_event(apt['google_calendar_event_id'])
+            
+        summary = f"Cita Dental AI (Reprogramada): {phone}"
+        new_gcal = gcal_service.create_event(
+            summary=summary,
+            start_time=new_dt.isoformat(),
+            end_time=(new_dt + timedelta(minutes=60)).isoformat()
+        )
+        
+        # 4. Actualizar BD
+        await db.pool.execute("""
+            UPDATE appointments SET 
+                appointment_datetime = $1, 
+                google_calendar_event_id = $2,
+                google_calendar_sync_status = 'synced',
+                updated_at = NOW()
+            WHERE id = $3
+        """, new_dt, new_gcal['id'] if new_gcal else None, apt['id'])
+        
+        logger.info(f"🔄 Turno reprogramado por IA: {apt['id']} para {new_dt}")
+        return f"¡Listo! Tu turno ha sido reprogramado para el {new_date_time}. Te esperamos."
+
+    except Exception as e:
+        logger.error(f"Error en reschedule_appointment: {e}")
+        return "⚠️ No pude reprogramar el turno. Por favor, intenta de nuevo."
+
+@tool
+async def list_services(category: str = None):
+    """
+    Lista los servicios/tratamientos dentales disponibles.
+    category: Filtro opcional (prevention, restorative, surgical, orthodontics, emergency)
+    """
+    try:
+        query = "SELECT code, name, description, default_duration_minutes FROM treatment_types WHERE is_active = true"
+        params = []
+        if category:
+            query += " AND category = $1"
+            params.append(category)
+        
+        rows = await db.pool.fetch(query, *params)
+        if not rows:
+            return "No encontré servicios disponibles en esa categoría."
+        
+        res = "🦷 Nuestros servicios:\n"
+        for r in rows:
+            res += f"• {r['name']} ({r['default_duration_minutes']} min): {r['description']}\n"
+        return res
+    except Exception as e:
+        logger.error(f"Error en list_services: {e}")
+        return "⚠️ Error al consultar servicios."
+
+DENTAL_TOOLS = [check_availability, book_appointment, triage_urgency, derivhumano, cancel_appointment, reschedule_appointment, list_services]
+
+# --- SYSTEM PROMPT (DENTALOGIC V3 - GALA INSPIRED) ---
+sys_template = f"""Eres Mercedes, la asistente virtual experta de {CLINIC_NAME} ({CLINIC_LOCATION}). 
+Tu objetivo es ayudar a pacientes a: (a) informarse sobre tratamientos, (b) consultar disponibilidad, (c) agendar/reprogramar/cancelar turnos y (d) realizar triaje inicial de urgencias.
+
+POLÍTICAS DURAS:
+• TONO: Sos una asistente dental profesional argentina (estilo Formosa). Usá el voseo cálido ("vos", "te cuento", "fijate").
+• NUNCA INVENTES: No inventes horarios ni disponibilidad. Siempre usá 'check_availability'.
+• NO DIAGNOSTICAR: Ante dudas clínicas, decí: "El doctor deberá evaluarte en el consultorio para darte un diagnóstico preciso".
+• ZONA HORARIA: America/Argentina/Buenos_Aires. 
+• HORARIOS DE ATENCIÓN: Lunes a Sábados de 09:00 a 13:00 y 14:00 a 18:00 (Domingos cerrado).
+• CANCELACIONES/CAMBIOS: Solo permitidos con 24h de anticipación.
+• DERIVACIÓN: Si el usuario pide hablar con una persona, está frustrado o rechaza a la IA, usá 'derivhumano' de inmediato.
+
+---
+FLUJO DE AGENDAMIENTO:
+Paso 1 - Disponibilidad: 
+• Si piden "horarios" o proponen una fecha, llamá a 'check_availability'.
+• Mostrá 3-5 slots claros. Un turno estándar dura 30-60 min (según el tratamiento).
+Paso 2 - Información mínima: 
+• Requerís: Nombre completo y Motivo de consulta (si no lo tenés, pedilo tras listar horarios).
+Paso 3 - Confirmación: 
+• Solo cuando el paciente elija un horario válido, llamás a 'book_appointment'.
+
+---
+GESTIÓN DE CALENDARIO (REPROgramación/CANCELACIÓN):
+• Si el paciente quiere cambiar un turno, verificá que falten más de 24h.
+• Si no tenés el ID del turno, pedí la fecha original y usá 'reschedule_appointment' o 'cancel_appointment' enviando el query de fecha. El sistema buscará el turno asociado a su número de teléfono.
+
+---
+TRIAJE Y URGENCIAS:
+• Si mencionan DOLOR, GOLPE, SANGRE o "se me salió un arreglo", usá 'triage_urgency' ANTES que cualquier otra tool.
+• Si la urgencia es 'emergency', priorizá ofrecer horarios para HOY mismo.
+
+---
+FORMATO DE SERVICIOS (OBLIGATORIO):
+Cuando listes tratamientos con 'list_services', usá este formato:
+✨ [Categoría]
+• [Nombre del Tratamiento] — [Duración]
+[Beneficio o breve descripción en 1 oración]
+
+Usa solo las tools MCP proporcionadas. Si falta un dato para usar la tool, pedí solo 1 aclaración y procedé.
 """
 
 # --- AGENT SETUP ---
