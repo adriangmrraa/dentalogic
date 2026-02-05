@@ -44,23 +44,21 @@ python -c "from dateutil.parser import parse; print('✅ python-dateutil OK')"
 
 ---
 
-## 📋 PASO 2: EJECUTAR MIGRACIONES SQL
+## 📋 PASO 2: EJECUTAR SCHEMA SQL
 
-### Opción A: PowerShell Script (RECOMENDADO)
+### Opción A: Command Line (RECOMENDADO)
 
-Ejecuta el script preconfigurado:
+Ejecuta el schema unificado:
 ```powershell
 cd "c:\Users\Asus\Downloads\Clinica Dental"
-.\run_migrations.ps1
+psql -U postgres -d postgres -c "CREATE DATABASE clinica_dental;"
+psql -U postgres -d clinica_dental -f db/init/dentalogic_schema.sql
 ```
 
 **Qué hace:**
-1. ✅ Verifica que PostgreSQL está disponible
-2. ✅ Crea BD `clinica_dental` si no existe
-3. ✅ Ejecuta 001_schema.sql (inbound_messages, chat_messages)
-4. ✅ Ejecuta 002_platform_schema.sql (tenants, credentials, system_events)
-5. ✅ Ejecuta 004_dental_phase1_schema.sql (professionals, patients, appointments, clinical_records, accounting_transactions, daily_cash_flow, chat_conversations)
-6. ✅ Verifica que todas las 12+ tablas se crearon
+1. ✅ Crea BD `clinica_dental` si no existe
+2. ✅ Ejecuta dentalogic_schema.sql (schema unificado completo)
+3. ✅ Verifica automáticamente la creación de tablas
 
 **Tiempo esperado:** 2-3 min
 
@@ -74,13 +72,11 @@ psql -U postgres -h localhost
 CREATE DATABASE clinica_dental;
 \c clinica_dental
 
-# 3. Ejecutar scripts SQL (uno por uno)
-\i 'db/init/001_schema.sql'
-\i 'db/init/002_platform_schema.sql'
-\i 'db/init/004_dental_phase1_schema.sql'
+# 3. Ejecutar schema unificado
+\i 'db/init/dentalogic_schema.sql'
 
 # 4. Verificar
-\dt  # Debe mostrar 12+ tablas
+\dt  # Debe mostrar 14+ tablas
 ```
 
 **Tiempo esperado:** 5 min
@@ -215,7 +211,7 @@ Deberías ver Swagger UI con todos los endpoints documentados.
 ### Checklist de Confirmación
 
 - [ ] `python -m pip install -r orchestrator_service/requirements.txt` ejecutado sin errores
-- [ ] `run_migrations.ps1` ejecutado → Todas las tablas creadas
+- [ ] `dentalogic_schema.sql` ejecutado → Todas las tablas creadas
 - [ ] `python -m py_compile orchestrator_service/main.py` sin errores
 - [ ] `python -m py_compile orchestrator_service/admin_routes.py` sin errores
 - [ ] Servidor uvicorn inicia sin errores (startup complete)

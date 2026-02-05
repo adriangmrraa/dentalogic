@@ -444,7 +444,34 @@ async def list_services(category: str = None):
         logger.error(f"Error en list_services: {e}")
         return "⚠️ Error al consultar servicios."
 
-DENTAL_TOOLS = [check_availability, book_appointment, triage_urgency, cancel_appointment, reschedule_appointment, list_services]
+@tool
+async def derivhumano(reason: str):
+    """
+    Deriva la conversación a un humano cuando la IA no puede ayudar, el paciente lo solicita 
+    o hay una situación que requiere atención personalizada.
+    reason: El motivo de la derivación.
+    """
+    phone = current_customer_phone.get()
+    try:
+        # 1. Marcar conversación para intervención humana (Lockout)
+        # Esto silencia al bot en el orquestador por 24hs
+        await db.execute("""
+            UPDATE patients SET human_handoff_requested = true, updated_at = NOW()
+            WHERE phone_number = $1
+        """, phone)
+        
+        logger.info(f"👤 Derivación humana solicitada para {phone}: {reason}")
+        
+        # 2. Notificar vía Socket (para que aparezca en el dashboard)
+        from main import sio
+        await sio.emit("HUMAN_HANDOFF", {"phone": phone, "reason": reason})
+        
+        return "He solicitado que un representante humano te atienda lo antes posible. En breve se comunicarán con vos."
+    except Exception as e:
+        logger.error(f"Error en derivhumano: {e}")
+        return "Hubo un problema al derivarte, pero ya he dado aviso. Por favor, aguardá un momento."
+
+DENTAL_TOOLS = [check_availability, book_appointment, triage_urgency, cancel_appointment, reschedule_appointment, list_services, derivhumano]
 
 # --- SYSTEM PROMPT (DENTALOGIC V3 - GALA INSPIRED) ---
 sys_template = f"""Eres Mercedes, la asistente virtual experta de {CLINIC_NAME} ({CLINIC_LOCATION}). 
@@ -555,6 +582,43 @@ async def chat_endpoint(req: ChatRequest):
     correlation_id = str(uuid.uuid4())
     
     try:
+        # 0. Verificar si hay intervención humana activa
+        handoff_check = await db.pool.fetchrow("""
+            SELECT human_handoff_requested, human_override_until 
+            FROM patients 
+            WHERE phone_number = $1
+        """, req.phone)
+        
+        if handoff_check:
+            is_handoff_active = handoff_check['human_handoff_requested']
+            override_until = handoff_check['human_override_until']
+            
+            # Si hay override activo y no ha expirado, la IA permanece silenciosa
+            if is_handoff_active and override_until:
+                if override_until > datetime.now():
+                    logger.info(f"🔇 IA silenciada para {req.phone} hasta {override_until}")
+                    # Guardar el mensaje del usuario pero NO responder
+                    await db.append_chat_message(
+                        from_number=req.phone,
+                        role='user',
+                        content=req.message,
+                        correlation_id=correlation_id
+                    )
+                    return {
+                        "output": "",  # Sin respuesta
+                        "correlation_id": correlation_id,
+                        "status": "silenced",
+                        "reason": "human_intervention_active"
+                    }
+                else:
+                    # Override expirado, limpiar flags
+                    await db.pool.execute("""
+                        UPDATE patients 
+                        SET human_handoff_requested = FALSE, 
+                            human_override_until = NULL 
+                        WHERE phone_number = $1
+                    """, req.phone)
+        
         # 1. Cargar historial de BD (últimos 20 mensajes)
         chat_history = await db.get_chat_history(req.phone, limit=20)
         

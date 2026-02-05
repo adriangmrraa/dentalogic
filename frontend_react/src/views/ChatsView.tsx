@@ -69,12 +69,12 @@ export default function ChatsView() {
   const [sending, setSending] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  
+
   // Estados de UI
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showToast, setShowToast] = useState<Toast | null>(null);
   const [highlightedSession, setHighlightedSession] = useState<string | null>(null);
-  
+
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -87,24 +87,24 @@ export default function ChatsView() {
   useEffect(() => {
     // Conectar al WebSocket
     socketRef.current = io(BACKEND_URL);
-    
+
     // Evento: Nueva derivación humana (derivhumano)
     socketRef.current.on('DERIVHUMANO_TRIGGERED', (data: { phone_number: string; reason: string }) => {
-      setSessions(prev => prev.map(s => 
-        s.phone_number === data.phone_number 
-          ? { 
-              ...s, 
-              status: 'human_handling' as const,
-              human_override_until: new Date(Date.now() + 86400000).toISOString(),
-              last_derivhumano_at: new Date().toISOString()
-            }
+      setSessions(prev => prev.map(s =>
+        s.phone_number === data.phone_number
+          ? {
+            ...s,
+            status: 'human_handling' as const,
+            human_override_until: new Date(Date.now() + 86400000).toISOString(),
+            last_derivhumano_at: new Date().toISOString()
+          }
           : s
       ));
-      
+
       // Resaltar el chat en la lista
       setHighlightedSession(data.phone_number);
       setTimeout(() => setHighlightedSession(null), 5000);
-      
+
       // Mostrar toast
       setShowToast({
         id: Date.now().toString(),
@@ -112,7 +112,7 @@ export default function ChatsView() {
         title: '🔔 Derivación Humana',
         message: `El bot derivó a ${data.phone_number}: ${data.reason}`,
       });
-      
+
       // Reproducir sonido
       if (soundEnabled) {
         playNotificationSound();
@@ -121,17 +121,17 @@ export default function ChatsView() {
 
     // Evento: Nuevo mensaje en chat
     socketRef.current.on('NEW_MESSAGE', (data: { phone_number: string; message: string; role: string }) => {
-      setSessions(prev => prev.map(s => 
-        s.phone_number === data.phone_number 
-          ? { 
-              ...s, 
-              last_message: data.message,
-              last_message_time: new Date().toISOString(),
-              unread_count: s.phone_number === selectedSession?.phone_number ? 0 : s.unread_count + 1
-            }
+      setSessions(prev => prev.map(s =>
+        s.phone_number === data.phone_number
+          ? {
+            ...s,
+            last_message: data.message,
+            last_message_time: new Date().toISOString(),
+            unread_count: s.phone_number === selectedSession?.phone_number ? 0 : s.unread_count + 1
+          }
           : s
       ));
-      
+
       // Si es del chat seleccionado, actualizar mensajes
       if (data.phone_number === selectedSession?.phone_number && data.role === 'user') {
         fetchMessages(data.phone_number);
@@ -140,20 +140,20 @@ export default function ChatsView() {
 
     // Evento: Estado de override cambiado
     socketRef.current.on('HUMAN_OVERRIDE_CHANGED', (data: { phone_number: string; enabled: boolean; until?: string }) => {
-      setSessions(prev => prev.map(s => 
-        s.phone_number === data.phone_number 
-          ? { 
-              ...s, 
-              status: data.enabled ? 'silenced' as const : 'active' as const,
-              human_override_until: data.until
-            }
+      setSessions(prev => prev.map(s =>
+        s.phone_number === data.phone_number
+          ? {
+            ...s,
+            status: data.enabled ? 'silenced' as const : 'active' as const,
+            human_override_until: data.until
+          }
           : s
       ));
     });
 
     // Evento: Chat seleccionado actualizado (para sincronización)
     socketRef.current.on('CHAT_UPDATED', (data: Partial<ChatSession> & { phone_number: string }) => {
-      setSessions(prev => prev.map(s => 
+      setSessions(prev => prev.map(s =>
         s.phone_number === data.phone_number ? { ...s, ...data } : s
       ));
     });
@@ -198,45 +198,13 @@ export default function ChatsView() {
       setSessions(response.data);
     } catch (error) {
       console.error('Error fetching sessions:', error);
-      // Mock data for demo
-      setSessions([
-        {
-          phone_number: '+5491112345678',
-          patient_name: 'Juan Pérez',
-          last_message: 'Hola, quiero agendar un turno',
-          last_message_time: new Date().toISOString(),
-          unread_count: 2,
-          status: 'active',
-        },
-        {
-          phone_number: '+5491198765432',
-          patient_name: 'María García',
-          last_message: 'Gracias por la atención',
-          last_message_time: new Date(Date.now() - 3600000).toISOString(),
-          unread_count: 0,
-          status: 'active',
-        },
-        {
-          phone_number: '+5491155522334',
-          patient_name: 'Carlos Rodríguez',
-          last_message: 'Tengo dolor de muela muy fuerte',
-          last_message_time: new Date(Date.now() - 7200000).toISOString(),
-          unread_count: 1,
-          status: 'human_handling',
-          human_override_until: new Date(Date.now() + 86400000).toISOString(),
-          last_derivhumano_at: new Date(Date.now() - 3600000).toISOString(),
-          urgency_level: 'HIGH',
-        },
-        {
-          phone_number: '+5491166677788',
-          patient_name: 'Ana Martínez',
-          last_message: 'Información sobre precios',
-          last_message_time: new Date(Date.now() - 1800000).toISOString(),
-          unread_count: 3,
-          status: 'silenced',
-          human_override_until: new Date(Date.now() + 43200000).toISOString(),
-        },
-      ]);
+      setSessions([]);
+      setShowToast({
+        id: Date.now().toString(),
+        type: 'error',
+        title: 'Error de Conexión',
+        message: 'No se pudieron cargar las conversaciones. Verificá la conexión con el servidor.',
+      });
     } finally {
       setLoading(false);
     }
@@ -248,38 +216,7 @@ export default function ChatsView() {
       setMessages(response.data);
     } catch (error) {
       console.error('Error fetching messages:', error);
-      // Mock messages for demo
-      setMessages([
-        {
-          id: 1,
-          from_number: phone,
-          role: 'user',
-          content: 'Hola, tengo un dolor de muela muy fuerte',
-          created_at: new Date(Date.now() - 3600000).toISOString(),
-        },
-        {
-          id: 2,
-          from_number: phone,
-          role: 'assistant',
-          content: 'Entiendo tu preocupación. Para evaluar el problema, necesito que me indiques hace cuánto tiempo empezó el dolor y si es constante o solo al masticar.',
-          created_at: new Date(Date.now() - 3500000).toISOString(),
-        },
-        {
-          id: 3,
-          from_number: phone,
-          role: 'user',
-          content: 'Empezó ayer y me duele mucho cuando como',
-          created_at: new Date(Date.now() - 3000000).toISOString(),
-        },
-        {
-          id: 4,
-          from_number: phone,
-          role: 'assistant',
-          content: 'Basándome en tus síntomas, esto podría requerir atención urgente. Voy a derivarte con un profesional para una evaluación inmediata.',
-          created_at: new Date(Date.now() - 2500000).toISOString(),
-          is_derivhumano: true,
-        },
-      ]);
+      setMessages([]);
     }
   };
 
@@ -289,29 +226,14 @@ export default function ChatsView() {
       setPatientContext(response.data);
     } catch (error) {
       console.error('Error fetching patient context:', error);
-      setPatientContext({
-        patient_id: 1,
-        patient_name: selectedSession?.patient_name || 'Paciente',
-        last_appointment: {
-          date: new Date(Date.now() - 30 * 86400000).toISOString(),
-          type: 'Limpieza',
-          professional: 'Dra. Smith',
-        },
-        upcoming_appointment: {
-          date: new Date(Date.now() + 7 * 86400000).toISOString(),
-          type: 'Control',
-          professional: 'Dra. Smith',
-        },
-        treatment_plan: 'Control cada 6 meses + limpieza trimestral',
-        last_appointment_type: 'Limpieza',
-      });
+      setPatientContext(null);
     }
   };
 
   const markAsRead = async (phone: string) => {
     try {
       await api.put(`/admin/chat/sessions/${phone}/read`);
-      setSessions(prev => prev.map(s => 
+      setSessions(prev => prev.map(s =>
         s.phone_number === phone ? { ...s, unread_count: 0 } : s
       ));
     } catch (error) {
@@ -335,7 +257,7 @@ export default function ChatsView() {
       });
       setNewMessage('');
       fetchMessages(selectedSession.phone_number);
-      
+
       // Emitir evento de mensaje manual
       socketRef.current?.emit('MANUAL_MESSAGE', {
         phone: selectedSession.phone_number,
@@ -350,10 +272,10 @@ export default function ChatsView() {
 
   const handleToggleHumanMode = async () => {
     if (!selectedSession) return;
-    
+
     const isCurrentlyHandled = selectedSession.status === 'human_handling' || selectedSession.status === 'silenced';
     const activate = !isCurrentlyHandled;
-    
+
     try {
       await api.post('/admin/chat/human-intervention', {
         phone: selectedSession.phone_number,
@@ -361,7 +283,7 @@ export default function ChatsView() {
         duration: 24 * 60 * 60 * 1000, // 24 horas
       });
       fetchSessions();
-      
+
       // Emitir evento
       socketRef.current?.emit('HUMAN_OVERRIDE_TOGGLE', {
         phone: selectedSession.phone_number,
@@ -374,13 +296,13 @@ export default function ChatsView() {
 
   const handleRemoveSilence = async () => {
     if (!selectedSession || !selectedSession.human_override_until) return;
-    
+
     try {
       await api.post('/admin/chat/remove-silence', {
         phone: selectedSession.phone_number,
       });
       fetchSessions();
-      
+
       socketRef.current?.emit('HUMAN_OVERRIDE_TOGGLE', {
         phone: selectedSession.phone_number,
         activate: false,
@@ -392,7 +314,7 @@ export default function ChatsView() {
 
   const playNotificationSound = () => {
     if (audioRef.current) {
-      audioRef.current.play().catch(() => {});
+      audioRef.current.play().catch(() => { });
     }
   };
 
@@ -413,7 +335,7 @@ export default function ChatsView() {
     const date = new Date(dateStr);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
-    
+
     if (diff < 60000) return 'Ahora';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
@@ -433,8 +355,8 @@ export default function ChatsView() {
             {session.status === 'silenced' ? 'Silenciado' : 'Manual'}
           </span>
         ),
-        avatarBg: session.urgency_level === 'HIGH' || session.urgency_level === 'CRITICAL' 
-          ? 'bg-red-500 animate-pulse' 
+        avatarBg: session.urgency_level === 'HIGH' || session.urgency_level === 'CRITICAL'
+          ? 'bg-red-500 animate-pulse'
           : 'bg-orange-500',
         cardBorder: session.last_derivhumano_at ? 'border-l-4 border-orange-500' : '',
       };
@@ -452,14 +374,14 @@ export default function ChatsView() {
 
   const getUrgencyBadge = (level?: string) => {
     if (!level) return null;
-    
+
     const colors = {
       LOW: 'bg-green-100 text-green-800',
       MEDIUM: 'bg-yellow-100 text-yellow-800',
       HIGH: 'bg-orange-100 text-orange-800',
       CRITICAL: 'bg-red-100 text-red-800',
     };
-    
+
     return (
       <span className={`text-xs px-2 py-0.5 rounded-full ${colors[level as keyof typeof colors]}`}>
         {level}
@@ -487,7 +409,7 @@ export default function ChatsView() {
               <p className="font-semibold">{showToast.title}</p>
               <p className="text-sm opacity-90">{showToast.message}</p>
             </div>
-            <button 
+            <button
               onClick={() => setShowToast(null)}
               className="ml-4 hover:opacity-80"
             >
@@ -531,16 +453,15 @@ export default function ChatsView() {
             filteredSessions.map(session => {
               const { badge, avatarBg, cardBorder } = getStatusConfig(session);
               const isHighlighted = highlightedSession === session.phone_number;
-              
+
               return (
                 <div
                   key={session.phone_number}
                   onClick={() => setSelectedSession(session)}
-                  className={`p-4 border-b cursor-pointer transition-all ${
-                    selectedSession?.phone_number === session.phone_number 
-                      ? 'bg-primary-light' 
+                  className={`p-4 border-b cursor-pointer transition-all ${selectedSession?.phone_number === session.phone_number
+                      ? 'bg-primary-light'
                       : 'hover:bg-gray-50'
-                  } ${isHighlighted ? 'bg-orange-50 animate-pulse' : ''} ${cardBorder}`}
+                    } ${isHighlighted ? 'bg-orange-50 animate-pulse' : ''} ${cardBorder}`}
                 >
                   <div className="flex items-start gap-3">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${avatarBg}`}>
@@ -591,11 +512,10 @@ export default function ChatsView() {
                 >
                   <ChevronLeft size={20} />
                 </button>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${
-                  selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
-                    ? 'bg-orange-500' 
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
+                    ? 'bg-orange-500'
                     : 'bg-primary'
-                }`}>
+                  }`}>
                   {(selectedSession.patient_name || selectedSession.phone_number).charAt(0)}
                 </div>
                 <div>
@@ -603,7 +523,7 @@ export default function ChatsView() {
                   <p className="text-sm text-gray-500">{selectedSession.phone_number}</p>
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-2">
                 {/* Mostrar estado de silencio override */}
                 {selectedSession.human_override_until && (
@@ -614,15 +534,14 @@ export default function ChatsView() {
                     </span>
                   </div>
                 )}
-                
+
                 {/* Botón de control */}
                 <button
                   onClick={handleToggleHumanMode}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
                       ? 'bg-green-100 text-green-700 hover:bg-green-200'
                       : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                  }`}
+                    }`}
                 >
                   {selectedSession.status === 'human_handling' || selectedSession.status === 'silenced' ? (
                     <><Play size={16} /> Activar IA</>
@@ -640,7 +559,7 @@ export default function ChatsView() {
                 <span className="text-sm text-orange-700">
                   El bot derivó este chat a las {new Date(selectedSession.last_derivhumano_at).toLocaleTimeString()}
                 </span>
-                <button 
+                <button
                   onClick={handleRemoveSilence}
                   className="ml-auto text-xs text-orange-600 hover:underline"
                 >
@@ -657,13 +576,12 @@ export default function ChatsView() {
                   className={`flex ${message.role === 'user' ? 'justify-start' : 'justify-end'}`}
                 >
                   <div
-                    className={`max-w-[70%] rounded-lg px-4 py-3 ${
-                      message.role === 'user'
+                    className={`max-w-[70%] rounded-lg px-4 py-3 ${message.role === 'user'
                         ? 'bg-white shadow-sm'
                         : message.is_derivhumano
                           ? 'bg-orange-100 border border-orange-300 shadow-sm'
                           : 'bg-primary text-white shadow-sm'
-                    }`}
+                      }`}
                   >
                     {message.is_derivhumano && (
                       <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
@@ -672,9 +590,8 @@ export default function ChatsView() {
                       </div>
                     )}
                     <p className="text-sm">{message.content}</p>
-                    <p className={`text-xs mt-1 ${
-                      message.role === 'user' ? 'text-gray-400' : 'text-blue-200'
-                    }`}>
+                    <p className={`text-xs mt-1 ${message.role === 'user' ? 'text-gray-400' : 'text-blue-200'
+                      }`}>
                       {new Date(message.created_at).toLocaleTimeString()}
                     </p>
                   </div>
@@ -715,11 +632,10 @@ export default function ChatsView() {
 
             <div className="p-4 space-y-4">
               {/* AI Status */}
-              <div className={`p-3 rounded-lg ${
-                selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
+              <div className={`p-3 rounded-lg ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
                   ? 'bg-orange-50 border border-orange-200'
                   : 'bg-green-50 border border-green-200'
-              }`}>
+                }`}>
                 <div className="flex items-center gap-2 mb-1">
                   {selectedSession.status === 'human_handling' || selectedSession.status === 'silenced' ? (
                     <User size={16} className="text-orange-600" />
@@ -734,8 +650,8 @@ export default function ChatsView() {
                   {selectedSession.status === 'human_handling'
                     ? 'Atendido por persona'
                     : selectedSession.status === 'silenced'
-                    ? 'Silenciado (24h override)'
-                    : 'IA activa'}
+                      ? 'Silenciado (24h override)'
+                      : 'IA activa'}
                 </p>
                 {selectedSession.human_override_until && (
                   <p className="text-xs text-gray-500 mt-1">

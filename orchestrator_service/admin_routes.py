@@ -2,12 +2,15 @@ import os
 import uuid
 import json
 import asyncpg
+import logging
 from datetime import datetime, timedelta, date
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Header, Depends, Request
 from pydantic import BaseModel
 from db import db
 from gcal_service import gcal_service
+
+logger = logging.getLogger(__name__)
 
 # Configuración
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-token")
@@ -68,6 +71,227 @@ class ProfessionalUpdate(BaseModel):
     name: str
     specialty: str
     active: bool
+
+class ChatSendMessage(BaseModel):
+    phone: str
+    message: str
+
+class HumanInterventionToggle(BaseModel):
+    phone: str
+    activate: bool
+    duration: Optional[int] = 86400000  # 24 horas en ms
+
+# ==================== ENDPOINTS CHAT MANAGEMENT ====================
+
+@router.get("/chat/sessions", dependencies=[Depends(verify_admin_token)])
+async def get_chat_sessions():
+    """
+    Obtiene todas las sesiones de chat activas con su estado.
+    Devuelve información de paciente, último mensaje, y estado de intervención humana.
+    """
+    rows = await db.pool.fetch("""
+        SELECT DISTINCT ON (p.phone_number)
+            p.phone_number,
+            p.id as patient_id,
+            p.first_name || ' ' || COALESCE(p.last_name, '') as patient_name,
+            cm.content as last_message,
+            cm.created_at as last_message_time,
+            p.human_handoff_requested,
+            p.human_override_until,
+            p.last_derivhumano_at,
+            CASE 
+                WHEN p.human_handoff_requested AND p.human_override_until > NOW() THEN 'human_handling'
+                WHEN p.human_override_until > NOW() THEN 'silenced'
+                ELSE 'active'
+            END as status,
+            urgency.urgency_level
+        FROM patients p
+        LEFT JOIN LATERAL (
+            SELECT content, created_at, role
+            FROM chat_messages
+            WHERE from_number = p.phone_number
+            ORDER BY created_at DESC
+            LIMIT 1
+        ) cm ON true
+        LEFT JOIN LATERAL (
+            SELECT urgency_level
+            FROM appointments
+            WHERE patient_id = p.id
+            ORDER BY created_at DESC
+            LIMIT 1
+        ) urgency ON true
+        WHERE EXISTS (
+            SELECT 1 FROM chat_messages 
+            WHERE from_number = p.phone_number
+        )
+        ORDER BY p.phone_number, cm.created_at DESC
+    """)
+    
+    sessions = []
+    for row in rows:
+        # Calcular mensajes no leídos (simplificado: últimos mensajes del usuario sin respuesta)
+        unread = await db.pool.fetchval("""
+            SELECT COUNT(*) 
+            FROM chat_messages 
+            WHERE from_number = $1 
+            AND role = 'user' 
+            AND created_at > COALESCE(
+                (SELECT created_at FROM chat_messages 
+                 WHERE from_number = $1 AND role = 'assistant' 
+                 ORDER BY created_at DESC LIMIT 1),
+                '1970-01-01'::timestamptz
+            )
+        """, row['phone_number'])
+        
+        sessions.append({
+            "phone_number": row['phone_number'],
+            "patient_id": row['patient_id'],
+            "patient_name": row['patient_name'],
+            "last_message": row['last_message'] or "",
+            "last_message_time": row['last_message_time'].isoformat() if row['last_message_time'] else None,
+            "unread_count": unread or 0,
+            "status": row['status'],
+            "human_override_until": row['human_override_until'].isoformat() if row['human_override_until'] else None,
+            "urgency_level": row['urgency_level'],
+            "last_derivhumano_at": row['last_derivhumano_at'].isoformat() if row['last_derivhumano_at'] else None
+        })
+    
+    return sessions
+
+
+@router.get("/chat/messages/{phone}", dependencies=[Depends(verify_admin_token)])
+async def get_chat_messages(phone: str, limit: int = 100):
+    """Obtiene el historial de mensajes para un número de teléfono específico."""
+    rows = await db.pool.fetch("""
+        SELECT id, from_number, role, content, created_at, correlation_id
+        FROM chat_messages
+        WHERE from_number = $1
+        ORDER BY created_at ASC
+        LIMIT $2
+    """, phone, limit)
+    
+    messages = []
+    for row in rows:
+        # Detectar si es un mensaje de derivhumano (sistema indica handoff)
+        is_derivhumano = row['role'] == 'assistant' and 'representante humano' in row['content'].lower()
+        
+        messages.append({
+            "id": row['id'],
+            "from_number": row['from_number'],
+            "role": row['role'],
+            "content": row['content'],
+            "created_at": row['created_at'].isoformat(),
+            "is_derivhumano": is_derivhumano
+        })
+    
+    return messages
+
+
+@router.post("/chat/send", dependencies=[Depends(verify_admin_token)])
+async def send_manual_message(payload: ChatSendMessage):
+    """
+    Envía un mensaje manual desde el admin al paciente vía WhatsApp.
+    Registra el mensaje en la BD y lo envía a través del WhatsApp Service.
+    """
+    import httpx
+    import os
+    
+    # 1. Guardar mensaje en BD
+    correlation_id = str(uuid.uuid4())
+    await db.append_chat_message(
+        from_number=payload.phone,
+        role='assistant',
+        content=payload.message,
+        correlation_id=correlation_id
+    )
+    
+    # 2. Enviar vía WhatsApp Service
+    try:
+        whatsapp_url = os.getenv("WHATSAPP_SERVICE_URL", "http://whatsapp_service:8002")
+        internal_token = os.getenv("INTERNAL_API_TOKEN", "")
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{whatsapp_url}/send",
+                json={
+                    "to": payload.phone,
+                    "message": payload.message
+                },
+                headers={"X-Internal-Token": internal_token},
+                timeout=10.0
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(status_code=500, detail=f"Error enviando mensaje: {response.text}")
+        
+        return {"status": "sent", "correlation_id": correlation_id}
+        
+    except Exception as e:
+        logger.error(f"Error enviando mensaje manual: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/chat/human-intervention", dependencies=[Depends(verify_admin_token)])
+async def toggle_human_intervention(payload: HumanInterventionToggle):
+    """
+    Activa o desactiva la intervención humana para un chat específico.
+    Cuando está activo, la IA permanece silenciada por la duración especificada.
+    """
+    if payload.activate:
+        # Activar intervención humana
+        override_until = datetime.now() + timedelta(milliseconds=payload.duration)
+        
+        await db.pool.execute("""
+            UPDATE patients 
+            SET human_handoff_requested = TRUE,
+                human_override_until = $1,
+                last_derivhumano_at = NOW(),
+                updated_at = NOW()
+            WHERE phone_number = $2
+        """, override_until, payload.phone)
+        
+        logger.info(f"👤 Intervención humana activada para {payload.phone} hasta {override_until}")
+        
+        return {
+            "status": "activated",
+            "phone": payload.phone,
+            "until": override_until.isoformat()
+        }
+    else:
+        # Desactivar intervención humana
+        await db.pool.execute("""
+            UPDATE patients 
+            SET human_handoff_requested = FALSE,
+                human_override_until = NULL,
+                updated_at = NOW()
+            WHERE phone_number = $1
+        """, payload.phone)
+        
+        logger.info(f"🤖 IA reactivada para {payload.phone}")
+        
+        return {
+            "status": "deactivated",
+            "phone": payload.phone
+        }
+
+
+@router.post("/chat/remove-silence", dependencies=[Depends(verify_admin_token)])
+async def remove_silence(payload: dict):
+    """Remueve el silencio de la IA para un número específico."""
+    phone = payload.get("phone")
+    if not phone:
+        raise HTTPException(status_code=400, detail="Phone number required")
+    
+    await db.pool.execute("""
+        UPDATE patients 
+        SET human_handoff_requested = FALSE,
+            human_override_until = NULL,
+            updated_at = NOW()
+        WHERE phone_number = $1
+    """, phone)
+    
+    return {"status": "removed", "phone": phone}
+
 
 # ==================== ENDPOINTS DASHBOARD ====================
 
@@ -561,30 +785,7 @@ async def get_next_available_slots(
     """)
     
     if not professionals:
-        # Return mock data for development if no professionals exist
-        return [
-            {
-                "slot_start": datetime.now().replace(hour=10, minute=0, second=0, microsecond=0).isoformat(),
-                "slot_end": datetime.now().replace(hour=10, minute=20, second=0, microsecond=0).isoformat(),
-                "duration_minutes": 20,
-                "professional_id": 1,
-                "professional_name": "Dr. Demo"
-            },
-            {
-                "slot_start": datetime.now().replace(hour=11, minute=0, second=0, microsecond=0).isoformat(),
-                "slot_end": datetime.now().replace(hour=11, minute=20, second=0, microsecond=0).isoformat(),
-                "duration_minutes": 20,
-                "professional_id": 1,
-                "professional_name": "Dr. Demo"
-            },
-            {
-                "slot_start": datetime.now().replace(hour=14, minute=30, second=0, microsecond=0).isoformat(),
-                "slot_end": datetime.now().replace(hour=14, minute=50, second=0, microsecond=0).isoformat(),
-                "duration_minutes": 20,
-                "professional_id": 1,
-                "professional_name": "Dr. Demo"
-            }
-        ]
+        return []
     
     available_slots: List[Dict[str, Any]] = []
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)

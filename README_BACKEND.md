@@ -49,10 +49,7 @@ orchestrator_service/
 
 db/
 ├── init/
-│   ├── 001_schema.sql           # Base schema (inbound messages)
-│   ├── 002_platform_schema.sql  # Multi-tenancy
-│   ├── 004_dental_phase1_schema.sql  # Patients, appointments
-│   └── RUN_MIGRATIONS.sql       # Script to run all migrations
+│   └── dentalogic_schema.sql   # Unified schema (all tables)
 └── models_dental.py    # SQLAlchemy models (shared)
 
 shared/
@@ -70,11 +67,11 @@ cp .env.example .env
 # Editar .env con tus valores
 ```
 
-### 2. Ejecutar Migraciones
+### 2. Ejecutar Schema SQL
 
 ```bash
 # En PostgreSQL
-psql -d dental_clinic -f db/init/RUN_MIGRATIONS.sql
+psql -d dental_clinic -f db/init/dentalogic_schema.sql
 ```
 
 ### 3. Iniciar Servidor

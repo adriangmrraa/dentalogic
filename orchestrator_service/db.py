@@ -10,10 +10,57 @@ class Database:
         self.pool: Optional[asyncpg.Pool] = None
 
     async def connect(self):
+        """Conecta al pool de PostgreSQL y ejecuta auto-migraciones."""
         if not self.pool:
             # asyncpg no soporta el esquema 'postgresql+asyncpg', solo 'postgresql' o 'postgres'
             dsn = POSTGRES_DSN.replace("postgresql+asyncpg://", "postgresql://") if POSTGRES_DSN else None
             self.pool = await asyncpg.create_pool(dsn)
+            
+            # Auto-Migration: Ejecutar dentalogic_schema.sql si las tablas no existen
+            await self._run_auto_migrations()
+    
+    async def _run_auto_migrations(self):
+        """
+        Sistema de Auto-Migración (Maintenance Robot).
+        Lee dentalogic_schema.sql y lo ejecuta de forma idempotente.
+        """
+        import logging
+        logger = logging.getLogger("db")
+        
+        try:
+            # Verificar si las tablas principales existen
+            async with self.pool.acquire() as conn:
+                tables_exist = await conn.fetchval("""
+                    SELECT COUNT(*) FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name IN ('patients', 'professionals', 'appointments')
+                """)
+            
+            if tables_exist >= 3:
+                logger.info("✅ Tablas principales detectadas, schema OK")
+                return
+            
+            logger.warning("⚠️ Tablas faltantes detectadas, ejecutando auto-migración...")
+            
+            # Leer dentalogic_schema.sql
+            schema_path = os.path.join(os.path.dirname(__file__), "..", "db", "init", "dentalogic_schema.sql")
+            
+            if not os.path.exists(schema_path):
+                logger.error(f"❌ Schema file not found: {schema_path}")
+                return
+            
+            with open(schema_path, 'r', encoding='utf-8') as f:
+                schema_sql = f.read()
+            
+            # Ejecutar schema completo (IF NOT EXISTS hace que sea idempotente)
+            async with self.pool.acquire() as conn:
+                await conn.execute(schema_sql)
+            
+            logger.info("✅ Auto-migración completada exitosamente")
+            
+        except Exception as e:
+            logger.error(f"❌ Error en auto-migración: {e}")
+            # No fallar el startup, solo loguear
 
     async def disconnect(self):
         if self.pool:

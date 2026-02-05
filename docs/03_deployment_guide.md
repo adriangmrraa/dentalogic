@@ -140,16 +140,13 @@ async def lifespan(app: FastAPI):
     # Conecta a DB
     await db.connect()
     
-    # Ejecuta migrations (001_schema.sql, 002_platform_schema.sql, etc.)
-    for step in migration_steps:
-        await db.pool.execute(step)
-    
+    # Ejecuta schema (dentalogic_schema.sql aplicado manualmente)
     # Sincroniza variables de entorno con DB
     await sync_environment()
 ```
 
 **Si la BD es nueva:**
-- Se crean tablas: `tenants`, `chat_conversations`, `chat_messages`, `system_events`, etc.
+- Se crean tablas desde `dentalogic_schema.sql` (ejecutar manualmente)
 - Se crea un "default tenant" usando las variables de entorno
 
 **Si ya existe:**
