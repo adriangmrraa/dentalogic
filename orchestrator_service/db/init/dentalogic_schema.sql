@@ -91,33 +91,45 @@ INSERT INTO tenants (
     'Argentina'
 ) ON CONFLICT (bot_phone_number) DO NOTHING;
 
+-- ==================== TABLA DE USUARIOS (RBAC) ====================
+
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL CHECK (role IN ('ceo', 'professional', 'secretary')),
+    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'suspended')),
+    professional_id INTEGER NULL, -- Se vincula si el rol es professional
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
+
 -- ==================== TABLA DE PROFESIONALES ====================
 
 CREATE TABLE IF NOT EXISTS professionals (
     id SERIAL PRIMARY KEY,
     tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL, -- Vínculo a la tabla de usuarios
     
-    -- Identidad
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
-    license_number VARCHAR(100) UNIQUE,
-    specialization VARCHAR(100),
-    
-    -- Disponibilidad
-    is_active BOOLEAN DEFAULT TRUE,
-    schedule_json JSONB DEFAULT '{}',
-    
-    -- Contacto
     email VARCHAR(255),
-    phone VARCHAR(20),
+    phone_number VARCHAR(20),
+    specialty VARCHAR(100),
+    registration_id VARCHAR(50), -- Matrícula
     
-    -- Auditoría
+    is_active BOOLEAN DEFAULT TRUE,
+    
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_professionals_tenant ON professionals(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_professionals_active ON professionals(is_active);
+CREATE INDEX IF NOT EXISTS idx_professionals_user_id ON professionals(user_id);
 
 -- ==================== TABLA DE PACIENTES ====================
 
@@ -511,5 +523,3 @@ BEGIN
     END IF;
 END;
 $$ LANGUAGE plpgsql;
-
--- ==================== VERIFICACIÓN (Completado) ====================

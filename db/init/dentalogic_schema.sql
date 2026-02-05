@@ -523,14 +523,3 @@ BEGIN
     END IF;
 END;
 $$ LANGUAGE plpgsql;
-
--- ==================== VERIFICACIÓN ====================
-
-\echo '✅ Schema Dentalogic creado exitosamente'
-\echo 'Tablas principales:'
-\echo '  - inbound_messages, chat_messages'
-\echo '  - tenants, credentials, system_events'
-\echo '  - professionals, patients, clinical_records'
-\echo '  - appointments, accounting_transactions, daily_cash_flow'
-\echo '  - google_calendar_blocks, calendar_sync_log'
-\echo '  - treatment_types + función get_treatment_duration()'

@@ -97,7 +97,7 @@ class Database:
                 leftover = "\n".join(current_stmt).strip()
                 if leftover: statements.append(leftover)
 
-            statements = [s for s in statements if s.strip()]
+            statements = [s for s in statements if s.strip() and not s.strip().startswith('--')]
             
             logger.info(f"⏳ Ejecutando {len(statements)} sentencias SQL...")
             async with self.pool.acquire() as conn:
