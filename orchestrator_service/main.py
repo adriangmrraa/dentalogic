@@ -12,6 +12,7 @@ import re
 from gcal_service import gcal_service
 
 from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.engine import make_url
@@ -549,12 +550,27 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=f"{CLINIC_NAME} Orchestrator", lifespan=lifespan)
 
+# Configurar CORS
+origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://dentalogic-frontend.ugwrjq.easypanel.host",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Include admin routes
 app.include_router(admin_router)
 
 # --- SOCKET.IO CONFIGURATION ---
 # Create Socket.IO instance with async mode
-sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
+sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins=origins)
 socket_app = socketio.ASGIApp(sio, app)
 
 # Socket.IO event handlers
