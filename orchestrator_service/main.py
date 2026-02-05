@@ -444,7 +444,7 @@ async def list_services(category: str = None):
         logger.error(f"Error en list_services: {e}")
         return "⚠️ Error al consultar servicios."
 
-DENTAL_TOOLS = [check_availability, book_appointment, triage_urgency, derivhumano, cancel_appointment, reschedule_appointment, list_services]
+DENTAL_TOOLS = [check_availability, book_appointment, triage_urgency, cancel_appointment, reschedule_appointment, list_services]
 
 # --- SYSTEM PROMPT (DENTALOGIC V3 - GALA INSPIRED) ---
 sys_template = f"""Eres Mercedes, la asistente virtual experta de {CLINIC_NAME} ({CLINIC_LOCATION}). 
