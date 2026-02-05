@@ -1,0 +1,1 @@
+-- DENTALOGIC SCHEMA UNIFICADO (Copiado para el Orquestador)

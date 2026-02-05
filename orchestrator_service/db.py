@@ -42,14 +42,25 @@ class Database:
             
             logger.warning("⚠️ Tablas faltantes detectadas, ejecutando auto-migración...")
             
-            # Leer dentalogic_schema.sql
-            schema_path = os.path.join(os.path.dirname(__file__), "..", "db", "init", "dentalogic_schema.sql")
+            # Intentar múltiples rutas para el schema (Dev vs Docker)
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), "..", "db", "init", "dentalogic_schema.sql"), # Estructura raíz
+                os.path.join(os.path.dirname(__file__), "db", "init", "dentalogic_schema.sql"),      # Estructura interna (Docker)
+                "/app/db/init/dentalogic_schema.sql"                                               # Ruta absoluta Docker
+            ]
             
-            if not os.path.exists(schema_path):
-                logger.error(f"❌ Schema file not found: {schema_path}")
+            schema_path = None
+            for p in possible_paths:
+                if os.path.exists(p):
+                    schema_path = p
+                    break
+
+            if not schema_path:
+                logger.error(f"❌ Schema file not found. Tried: {possible_paths}")
                 return
-            
-            with open(schema_path, 'r', encoding='utf-8') as f:
+
+            # Cargar y ejecutar el schema
+            with open(schema_path, "r", encoding="utf-8") as f:
                 schema_sql = f.read()
             
             # Ejecutar schema completo (IF NOT EXISTS hace que sea idempotente)
