@@ -71,7 +71,7 @@ AgendaView / Odontograma
 - **Sincronización:** Emite eventos `NEW_APPOINTMENT` vía Socket.IO para actualizar la AgendaView instantáneamente.
 - **Multi-Tenancy:** Soporte para múltiples consultorios/clínicas bajo la misma infraestructura.
 
-### C. Frontend React (Puerto 5173) - **Centro de Operaciones**
+### C. Frontend React (Puerto 80) - **Centro de Operaciones**
 
 **Tecnología:** React + Vite + FullCalendar + Socket.IO
 
@@ -93,13 +93,23 @@ AgendaView / Odontograma
 | **clinical_records** | Evoluciones clínicas, diagnósticos y odontogramas. |
 | **appointments** | Gestión de turnos, estados y sincronización GCalendar. |
 | **accounting_transactions** | Liquidaciones y cobros de prestaciones. |
+| **users** | Credenciales, roles y estado de aprobación. |
+
 ### 3.2 Maintenance Robot (Self-Healing)
 El sistema utiliza un **Robot de Mantenimiento** integrado en `orchestrator_service/db.py` que garantiza la integridad del esquema en cada arranque:
 - **Foundation**: Si no existe la tabla `tenants`, aplica el esquema base completo.
 - **Evolution Pipeline**: Una lista de parches (`patches`) en Python que ejecutan bloques `DO $$` para agregar columnas o tablas nuevas de forma idempotente y segura.
 - **Resiliencia**: El motor SQL ignora comentarios y respeta bloques de código complejos, evitando errores de sintaxis comunes en despliegues automatizados.
 
-## 4. Flujo de una Urgencia
+## 4. Seguridad e Identidad (Auth Layer)
+
+Dentalogic implementa una arquitectura de **Seguridad de Triple Capa**:
+
+1.  **Capa de Identidad (JWT)**: Gestión de sesiones de usuario con tokens firmados (HS256). Define el rol (`ceo`, `professional`, `secretary`) y el `tenant_id`.
+2.  **Capa de Infraestructura (X-Admin-Token)**: Las rutas administrativas críticas requieren un token estático (`INTERNAL_SECRET_KEY`) para prevenir accesos no autorizados incluso si la sesión del usuario es válida.
+3.  **Capa de Gatekeeper (Aprobación)**: Todo registro nuevo entra en estado `pending`. Solo un usuario con rol `ceo` puede activar cuentas desde el panel de control.
+
+## 5. Flujo de una Urgencia
 
 1. **Paciente** envía audio: "Me duele mucho la muela, está hinchado".
 2. **WhatsApp Service** transcribe vía Whisper.
@@ -111,3 +121,4 @@ El sistema utiliza un **Robot de Mantenimiento** integrado en `orchestrator_serv
 ---
 
 *Documentación Dentalogic © 2026*
+泛
