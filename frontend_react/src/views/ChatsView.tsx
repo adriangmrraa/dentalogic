@@ -89,7 +89,7 @@ export default function ChatsView() {
     socketRef.current = io(BACKEND_URL);
 
     // Evento: Nueva derivación humana (derivhumano)
-    socketRef.current.on('DERIVHUMANO_TRIGGERED', (data: { phone_number: string; reason: string }) => {
+    socketRef.current.on('HUMAN_HANDOFF', (data: { phone_number: string; reason: string }) => {
       setSessions(prev => prev.map(s =>
         s.phone_number === data.phone_number
           ? {

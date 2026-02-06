@@ -491,8 +491,9 @@ async def derivhumano(reason: str):
         
         # 3. Notificar vía Socket (para que aparezca en el dashboard en tiempo real)
         # Import local to avoid circular import
+        # Import local to avoid circular import
         from main import sio
-        await sio.emit("HUMAN_HANDOFF", {"phone": phone, "reason": reason})
+        await sio.emit("HUMAN_HANDOFF", {"phone_number": phone, "reason": reason})
 
         # 4. Enviar Email (Protocolo SMTP Global)
         # Recuperar datos del paciente
