@@ -230,7 +230,7 @@ async def get_chat_sessions():
     
     sessions = []
     for row in rows:
-        # Calcular mensajes no leídos (simplificado: últimos mensajes del usuario sin respuesta)
+        # Calcular mensajes no leídos
         unread = await db.pool.fetchval("""
             SELECT COUNT(*) 
             FROM chat_messages 
@@ -243,6 +243,17 @@ async def get_chat_sessions():
                 '1970-01-01'::timestamptz
             )
         """, row['phone_number'])
+
+        # Calcular si la ventana de 24hs está abierta (último mensaje del USUARIO)
+        last_user_msg = await db.pool.fetchval("""
+            SELECT created_at FROM chat_messages 
+            WHERE from_number = $1 AND role = 'user' 
+            ORDER BY created_at DESC LIMIT 1
+        """, row['phone_number'])
+        
+        is_window_open = False
+        if last_user_msg:
+            is_window_open = (datetime.now(last_user_msg.tzinfo) - last_user_msg) < timedelta(hours=24)
         
         sessions.append({
             "phone_number": row['phone_number'],
@@ -254,7 +265,9 @@ async def get_chat_sessions():
             "status": row['status'],
             "human_override_until": row['human_override_until'].isoformat() if row['human_override_until'] else None,
             "urgency_level": row['urgency_level'],
-            "last_derivhumano_at": row['last_derivhumano_at'].isoformat() if row['last_derivhumano_at'] else None
+            "last_derivhumano_at": row['last_derivhumano_at'].isoformat() if row['last_derivhumano_at'] else None,
+            "is_window_open": is_window_open,
+            "last_user_message_time": last_user_msg.isoformat() if last_user_msg else None
         })
     
     return sessions
@@ -288,52 +301,10 @@ async def get_chat_messages(phone: str, limit: int = 100):
     return messages
 
 
-@router.post("/chat/send", dependencies=[Depends(verify_admin_token)])
-async def send_manual_message(payload: ChatSendMessage):
-    """
-    Envía un mensaje manual desde el admin al paciente vía WhatsApp.
-    Registra el mensaje en la BD y lo envía a través del WhatsApp Service.
-    """
-    import httpx
-    import os
-    
-    # 1. Guardar mensaje en BD
-    correlation_id = str(uuid.uuid4())
-    await db.append_chat_message(
-        from_number=payload.phone,
-        role='assistant',
-        content=payload.message,
-        correlation_id=correlation_id
-    )
-    
-    # 2. Enviar vía WhatsApp Service
-    try:
-        whatsapp_url = os.getenv("WHATSAPP_SERVICE_URL", "http://whatsapp_service:8002")
-        internal_token = os.getenv("INTERNAL_API_TOKEN", "")
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{whatsapp_url}/send",
-                json={
-                    "to": payload.phone,
-                    "message": payload.message
-                },
-                headers={"X-Internal-Token": internal_token},
-                timeout=10.0
-            )
-            
-            if response.status_code != 200:
-                raise HTTPException(status_code=500, detail=f"Error enviando mensaje: {response.text}")
-        
-        return {"status": "sent", "correlation_id": correlation_id}
-        
-    except Exception as e:
-        logger.error(f"Error enviando mensaje manual: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/chat/human-intervention", dependencies=[Depends(verify_admin_token)])
-async def toggle_human_intervention(payload: HumanInterventionToggle):
+async def toggle_human_intervention(payload: HumanInterventionToggle, request: Request):
     """
     Activa o desactiva la intervención humana para un chat específico.
     Cuando está activo, la IA permanece silenciada por la duración especificada.
@@ -353,6 +324,13 @@ async def toggle_human_intervention(payload: HumanInterventionToggle):
         
         logger.info(f"👤 Intervención humana activada para {payload.phone} hasta {override_until}")
         
+        # Notificar vía Socket
+        await emit_appointment_event('HUMAN_OVERRIDE_CHANGED', {
+            'phone_number': payload.phone,
+            'enabled': True,
+            'until': override_until.isoformat()
+        }, request)
+        
         return {
             "status": "activated",
             "phone": payload.phone,
@@ -370,6 +348,12 @@ async def toggle_human_intervention(payload: HumanInterventionToggle):
         
         logger.info(f"🤖 IA reactivada para {payload.phone}")
         
+        # Notificar vía Socket
+        await emit_appointment_event('HUMAN_OVERRIDE_CHANGED', {
+            'phone_number': payload.phone,
+            'enabled': False
+        }, request)
+        
         return {
             "status": "deactivated",
             "phone": payload.phone
@@ -377,7 +361,7 @@ async def toggle_human_intervention(payload: HumanInterventionToggle):
 
 
 @router.post("/chat/remove-silence", dependencies=[Depends(verify_admin_token)])
-async def remove_silence(payload: dict):
+async def remove_silence(payload: dict, request: Request):
     """Remueve el silencio de la IA para un número específico."""
     phone = payload.get("phone")
     if not phone:
@@ -390,6 +374,12 @@ async def remove_silence(payload: dict):
             updated_at = NOW()
         WHERE phone_number = $1
     """, phone)
+    
+    # Notificar vía Socket
+    await emit_appointment_event('HUMAN_OVERRIDE_CHANGED', {
+        'phone_number': phone,
+        'enabled': False
+    }, request)
     
     return {"status": "removed", "phone": phone}
 
@@ -419,6 +409,20 @@ async def get_internal_credential(name: str, x_internal_token: str = Header(None
 async def send_chat_message(payload: ChatSendMessage, request: Request, background_tasks: BackgroundTasks):
     """Envía un mensaje manual por WhatsApp y lo guarda en BD."""
     try:
+        # 0. Verificar ventana de 24hs (WhatsApp Policy)
+        last_user_msg = await db.pool.fetchval("""
+            SELECT created_at FROM chat_messages 
+            WHERE from_number = $1 AND role = 'user' 
+            ORDER BY created_at DESC LIMIT 1
+        """, payload.phone)
+        
+        if not last_user_msg:
+             raise HTTPException(status_code=403, detail="No se puede enviar un mensaje si el usuario nunca ha escrito.")
+             
+        diff = datetime.now(last_user_msg.tzinfo) - last_user_msg
+        if diff > timedelta(hours=24):
+             raise HTTPException(status_code=403, detail="La ventana de 24hs de WhatsApp ha expirado. El paciente debe escribir primero.")
+
         # 1. Guardar en Base de Datos
         correlation_id = str(uuid.uuid4())
         await db.append_chat_message(

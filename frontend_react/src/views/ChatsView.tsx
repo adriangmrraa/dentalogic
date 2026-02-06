@@ -22,6 +22,8 @@ interface ChatSession {
   human_override_until?: string;
   urgency_level?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   last_derivhumano_at?: string;
+  is_window_open?: boolean;
+  last_user_message_time?: string;
 }
 
 interface ChatMessage {
@@ -121,16 +123,29 @@ export default function ChatsView() {
 
     // Evento: Nuevo mensaje en chat
     socketRef.current.on('NEW_MESSAGE', (data: { phone_number: string; message: string; role: string }) => {
-      setSessions(prev => prev.map(s =>
-        s.phone_number === data.phone_number
-          ? {
-            ...s,
-            last_message: data.message,
-            last_message_time: new Date().toISOString(),
-            unread_count: s.phone_number === selectedSession?.phone_number ? 0 : s.unread_count + 1
+      setSessions(prev => {
+        const updatedSessions = prev.map(s =>
+          s.phone_number === data.phone_number
+            ? {
+              ...s,
+              last_message: data.message,
+              last_message_time: new Date().toISOString(),
+              unread_count: s.phone_number === selectedSession?.phone_number ? 0 : s.unread_count + 1,
+              is_window_open: data.role === 'user' ? true : s.is_window_open
+            }
+            : s
+        );
+
+        // Si la sesión seleccionada recibió un mensaje, actualizarla para refrescar la UI (banner/input)
+        if (data.phone_number === selectedSession?.phone_number) {
+          const current = updatedSessions.find(s => s.phone_number === data.phone_number);
+          if (current) {
+            setSelectedSession(current);
           }
-          : s
-      ));
+        }
+
+        return updatedSessions;
+      });
 
       // Si es del chat seleccionado, agregar mensaje si no existe
       if (data.phone_number === selectedSession?.phone_number) {
@@ -157,22 +172,42 @@ export default function ChatsView() {
 
     // Evento: Estado de override cambiado
     socketRef.current.on('HUMAN_OVERRIDE_CHANGED', (data: { phone_number: string; enabled: boolean; until?: string }) => {
-      setSessions(prev => prev.map(s =>
-        s.phone_number === data.phone_number
-          ? {
-            ...s,
-            status: data.enabled ? 'silenced' as const : 'active' as const,
-            human_override_until: data.until
-          }
-          : s
-      ));
+      setSessions(prev => {
+        const updated = prev.map(s =>
+          s.phone_number === data.phone_number
+            ? {
+              ...s,
+              status: data.enabled ? 'silenced' as const : 'active' as const,
+              human_override_until: data.until
+            }
+            : s
+        );
+
+        // Sincronizar selectedSession si es el actual
+        if (selectedSession?.phone_number === data.phone_number) {
+          const current = updated.find(s => s.phone_number === data.phone_number);
+          if (current) setSelectedSession(current);
+        }
+
+        return updated;
+      });
     });
 
     // Evento: Chat seleccionado actualizado (para sincronización)
     socketRef.current.on('CHAT_UPDATED', (data: Partial<ChatSession> & { phone_number: string }) => {
-      setSessions(prev => prev.map(s =>
-        s.phone_number === data.phone_number ? { ...s, ...data } : s
-      ));
+      setSessions(prev => {
+        const updated = prev.map(s =>
+          s.phone_number === data.phone_number ? { ...s, ...data } : s
+        );
+
+        // Sincronizar selectedSession si es el actual
+        if (selectedSession?.phone_number === data.phone_number) {
+          const current = updated.find(s => s.phone_number === data.phone_number);
+          if (current) setSelectedSession(current);
+        }
+
+        return updated;
+      });
     });
 
     // Cleanup
@@ -312,13 +347,19 @@ export default function ChatsView() {
         activate,
         duration: 24 * 60 * 60 * 1000, // 24 horas
       });
-      fetchSessions();
 
-      // Emitir evento
-      socketRef.current?.emit('HUMAN_OVERRIDE_TOGGLE', {
-        phone: selectedSession.phone_number,
-        activate,
-      });
+      // Actualización local inmediata para respuesta instantánea
+      const until = activate ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : undefined;
+      const updatedStatus = activate ? 'silenced' as const : 'active' as const;
+
+      const updateFn = (s: ChatSession) => s.phone_number === selectedSession.phone_number
+        ? { ...s, status: updatedStatus, human_override_until: until }
+        : s;
+
+      setSessions(prev => prev.map(updateFn));
+      setSelectedSession(prev => prev ? updateFn(prev) : null);
+
+      // El evento socket redundante HUMAN_OVERRIDE_TOGGLE ya es manejado por el backend emitiendo HUMAN_OVERRIDE_CHANGED
     } catch (error) {
       console.error('Error toggling human mode:', error);
     }
@@ -331,12 +372,14 @@ export default function ChatsView() {
       await api.post('/admin/chat/remove-silence', {
         phone: selectedSession.phone_number,
       });
-      fetchSessions();
 
-      socketRef.current?.emit('HUMAN_OVERRIDE_TOGGLE', {
-        phone: selectedSession.phone_number,
-        activate: false,
-      });
+      // Actualización local inmediata
+      const updateFn = (s: ChatSession) => s.phone_number === selectedSession.phone_number
+        ? { ...s, status: 'active' as const, human_override_until: undefined, last_derivhumano_at: undefined }
+        : s;
+
+      setSessions(prev => prev.map(updateFn));
+      setSelectedSession(prev => prev ? updateFn(prev) : null);
     } catch (error) {
       console.error('Error removing silence:', error);
     }
@@ -611,6 +654,16 @@ export default function ChatsView() {
               </div>
             )}
 
+            {/* Banner de Ventana de 24hs Cerrada */}
+            {selectedSession.is_window_open === false && (
+              <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 flex items-center gap-2">
+                <Clock size={16} className="text-yellow-600" />
+                <span className="text-sm text-yellow-700">
+                  ⏳ <strong>Ventana de 24hs cerrada:</strong> No puedes enviar mensajes manuales hasta que el paciente te escriba de nuevo.
+                </span>
+              </div>
+            )}
+
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
               {messages.map((message) => (
@@ -650,20 +703,21 @@ export default function ChatsView() {
                   type="text"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Escribe un mensaje..."
+                  placeholder={selectedSession.is_window_open === false ? "Ventana cerrada - Esperando paciente..." : "Escribe un mensaje..."}
+                  disabled={selectedSession.is_window_open === false}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       handleSendMessage(e as any);
                     }
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-medical-500 bg-white text-gray-900"
+                  className={`flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-medical-500 bg-white text-gray-900 ${selectedSession.is_window_open === false ? 'bg-gray-100 cursor-not-allowed opacity-75' : ''}`}
                 />
                 <button
                   type="submit"
-                  disabled={sending || !newMessage.trim()}
+                  disabled={sending || !newMessage.trim() || selectedSession.is_window_open === false}
                   className="p-2 bg-medical-600 text-white rounded-lg hover:bg-medical-700 disabled:opacity-50 flex items-center justify-center transition-colors min-w-[44px]"
-                  title="Enviar mensaje"
+                  title={selectedSession.is_window_open === false ? "Ventana de 24hs cerrada" : "Enviar mensaje"}
                 >
                   <Send size={20} />
                 </button>
