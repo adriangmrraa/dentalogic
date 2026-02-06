@@ -97,7 +97,71 @@ async def verify_admin_token(
     request.state.user = user_data
     return user_data
 
-# --- Modelos Pydantic ---
+@router.get("/patients/phone/{phone}/context")
+async def get_patient_clinical_context(
+    phone: str,
+    user_data=Depends(verify_admin_token)
+):
+    """
+    Retorna el contexto clínico completo de un paciente por su teléfono:
+    Basic info, última cita, próxima cita y plan de tratamiento.
+    """
+    normalized_phone = normalize_phone(phone)
+    
+    # 1. Buscar paciente
+    patient = await db.pool.fetchrow("""
+        SELECT id, first_name, last_name, phone_number, status, urgency_level, urgency_reason, preferred_schedule
+        FROM patients 
+        WHERE phone_number = $1 OR phone_number = $2
+    """, normalized_phone, phone)
+    
+    if not patient:
+        # Si no existe, es un lead puro sin registro previo
+        return {
+            "patient": None,
+            "last_appointment": None,
+            "upcoming_appointment": None,
+            "treatment_plan": None,
+            "is_guest": True
+        }
+
+    # 2. Última cita (pasada)
+    last_apt = await db.pool.fetchrow("""
+        SELECT a.id, a.appointment_datetime, a.appointment_type, a.status, 
+               p.first_name as professional_name
+        FROM appointments a
+        LEFT JOIN professionals p ON a.professional_id = p.id
+        WHERE a.patient_id = $1 AND a.appointment_datetime < NOW()
+        ORDER BY a.appointment_datetime DESC LIMIT 1
+    """, patient['id'])
+
+    # 3. Próxima cita (futura)
+    upcoming_apt = await db.pool.fetchrow("""
+        SELECT a.id, a.appointment_datetime, a.appointment_type, a.status,
+               p.first_name as professional_name
+        FROM appointments a
+        LEFT JOIN professionals p ON a.professional_id = p.id
+        WHERE a.patient_id = $1 AND a.appointment_datetime >= NOW()
+        AND a.status IN ('scheduled', 'confirmed')
+        ORDER BY a.appointment_datetime ASC LIMIT 1
+    """, patient['id'])
+
+    # 4. Plan de tratamiento (del último registro clínico)
+    clinical_record = await db.pool.fetchrow("""
+        SELECT treatment_plan, diagnosis, record_date
+        FROM clinical_records
+        WHERE patient_id = $1
+        ORDER BY created_at DESC LIMIT 1
+    """, patient['id'])
+
+    return {
+        "patient": dict(patient),
+        "last_appointment": dict(last_apt) if last_apt else None,
+        "upcoming_appointment": dict(upcoming_apt) if upcoming_apt else None,
+        "treatment_plan": clinical_record['treatment_plan'] if clinical_record else None,
+        "diagnosis": clinical_record['diagnosis'] if clinical_record else None,
+        "is_guest": patient['status'] == 'guest'
+    }
 
 class StatusUpdate(BaseModel):
     status: str # active, suspended, pending

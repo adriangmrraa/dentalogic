@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, Phone, Mail, Calendar, AlertTriangle,
-  FileText, Plus, Activity, Heart, Pill, Stethoscope, Clock
+  FileText, Plus, Activity, Heart, Pill, Stethoscope
 } from 'lucide-react';
 import api from '../api/axios';
 
@@ -30,7 +30,7 @@ interface ClinicalRecord {
   record_type: string;
   chief_complaint?: string;
   diagnosis?: string;
-  treatment_plan?: string;
+  treatment_plan?: any;
   notes?: string;
   vital_signs?: Record<string, string>;
   created_at: string;
@@ -77,7 +77,7 @@ export default function PatientDetail() {
       ]);
       setPatient(patientRes.data);
       setRecords(recordsRes.data);
-      
+
       // Check for critical medical conditions
       if (patientRes.data.medical_notes) {
         const notes = patientRes.data.medical_notes.toLowerCase();
@@ -293,7 +293,7 @@ export default function PatientDetail() {
                       {index < records.length - 1 && (
                         <div className="absolute left-[11px] top-6 bottom-0 w-0.5 bg-gray-200"></div>
                       )}
-                      
+
                       {/* Timeline dot */}
                       <div className="absolute left-0 top-1 w-6 h-6 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center">
                         {getRecordIcon(record.record_type)}
@@ -332,7 +332,11 @@ export default function PatientDetail() {
                         {record.treatment_plan && (
                           <div className="mb-2">
                             <p className="text-xs font-medium text-gray-500">Plan de tratamiento</p>
-                            <p className="text-sm">{record.treatment_plan}</p>
+                            <div className="text-sm">
+                              {typeof record.treatment_plan === 'string'
+                                ? record.treatment_plan
+                                : JSON.stringify(record.treatment_plan, null, 2)}
+                            </div>
                           </div>
                         )}
 

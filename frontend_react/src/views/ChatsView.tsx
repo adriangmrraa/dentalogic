@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  MessageCircle, Send, Phone, Calendar, User, Activity,
-  Pause, Play, AlertCircle, Clock, ChevronLeft, MoreVertical,
-  Search, CheckCircle, XCircle, Bell, Volume2, VolumeX
+  MessageCircle, Send, Calendar, User, Activity,
+  Pause, Play, AlertCircle, Clock, ChevronLeft,
+  Search, XCircle, Bell, Volume2, VolumeX
 } from 'lucide-react';
 import api, { BACKEND_URL } from '../api/axios';
 import { io, Socket } from 'socket.io-client';
@@ -38,18 +38,20 @@ interface ChatMessage {
 interface PatientContext {
   patient_id?: number;
   patient_name?: string;
+  urgency_level?: 'normal' | 'high' | 'emergency' | 'low';
+  urgency_reason?: string;
   last_appointment?: {
     date: string;
     type: string;
-    professional: string;
+    professional_name: string;
   };
   upcoming_appointment?: {
     date: string;
     type: string;
-    professional: string;
+    professional_name: string;
   };
-  treatment_plan?: string;
-  last_appointment_type?: string;
+  treatment_plan?: any;
+  diagnosis?: string;
 }
 
 interface Toast {
@@ -217,6 +219,34 @@ export default function ChatsView() {
       });
     });
 
+    // Evento: Paciente actualizado (urgencia, etc)
+    socketRef.current.on('PATIENT_UPDATED', (data: { phone_number: string; urgency_level: string }) => {
+      if (selectedSession?.phone_number === data.phone_number) {
+        fetchPatientContext(data.phone_number);
+      }
+
+      setSessions(prev => prev.map(s =>
+        s.phone_number === data.phone_number
+          ? { ...s, urgency_level: data.urgency_level as any }
+          : s
+      ));
+    });
+
+    // Evento: Nuevo turno agendado (refrescar contexto)
+    socketRef.current.on('NEW_APPOINTMENT', (data: { phone_number: string }) => {
+      if (selectedSession?.phone_number === data.phone_number) {
+        fetchPatientContext(data.phone_number);
+      }
+
+      // Mostrar toast si el turno es nuevo
+      setShowToast({
+        id: Date.now().toString(),
+        type: 'success',
+        title: '📅 Nuevo Turno',
+        message: `Se agendó un turno para ${data.phone_number}`,
+      });
+    });
+
     // Cleanup
     return () => {
       if (socketRef.current) {
@@ -257,9 +287,9 @@ export default function ChatsView() {
       setSessions(response.data);
 
       // Deep Link Logic: Si venimos de notificación
-      const state = location.state as { selectPhone?: string } | null;
-      if (state?.selectPhone) {
-        const targetPhone = state.selectPhone;
+      const navState = (window as any).history.state as { selectPhone?: string } | null;
+      if (navState?.selectPhone) {
+        const targetPhone = navState.selectPhone;
         const targetSession = response.data.find((s: ChatSession) => s.phone_number === targetPhone);
         if (targetSession) {
           setSelectedSession(targetSession);
@@ -455,15 +485,18 @@ export default function ChatsView() {
   const getUrgencyBadge = (level?: string) => {
     if (!level) return null;
 
-    const colors = {
+    const normalizedLevel = level.toUpperCase();
+    const colors: Record<string, string> = {
       LOW: 'bg-green-100 text-green-800',
+      NORMAL: 'bg-blue-100 text-blue-800',
       MEDIUM: 'bg-yellow-100 text-yellow-800',
       HIGH: 'bg-orange-100 text-orange-800',
       CRITICAL: 'bg-red-100 text-red-800',
+      EMERGENCY: 'bg-red-100 text-red-800 animate-pulse',
     };
 
     return (
-      <span className={`text-xs px-2 py-0.5 rounded-full ${colors[level as keyof typeof colors]}`}>
+      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${colors[normalizedLevel] || 'bg-gray-100'}`}>
         {level}
       </span>
     );
@@ -790,7 +823,7 @@ export default function ChatsView() {
                       {new Date(patientContext.last_appointment.date).toLocaleDateString()}
                     </p>
                     <p className="text-xs text-gray-400">
-                      Dr. {patientContext.last_appointment.professional}
+                      Dr. {patientContext.last_appointment.professional_name}
                     </p>
                   </div>
                 ) : (
@@ -810,7 +843,7 @@ export default function ChatsView() {
                       {new Date(patientContext.upcoming_appointment.date).toLocaleDateString()}
                     </p>
                     <p className="text-xs text-gray-400">
-                      Dr. {patientContext.upcoming_appointment.professional}
+                      Dr. {patientContext.upcoming_appointment.professional_name}
                     </p>
                   </div>
                 ) : (
@@ -822,7 +855,11 @@ export default function ChatsView() {
               <div className="p-3 bg-gray-50 rounded-lg">
                 <h4 className="text-xs font-medium text-gray-500 mb-2">TRATAMIENTO ACTUAL</h4>
                 {patientContext?.treatment_plan ? (
-                  <p className="text-sm">{patientContext.treatment_plan}</p>
+                  <div className="text-sm">
+                    {typeof patientContext.treatment_plan === 'string'
+                      ? patientContext.treatment_plan
+                      : JSON.stringify(patientContext.treatment_plan, null, 2)}
+                  </div>
                 ) : (
                   <p className="text-sm text-gray-400">Sin plan de tratamiento</p>
                 )}

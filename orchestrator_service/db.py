@@ -149,6 +149,48 @@ class Database:
                 WHEN others THEN null; -- Ignorar si ya se aplicó o falla
             END $$;
             """,
+            # Parche 4: Asegurar constraint unique (tenant_id, phone_number) en patients
+            """
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'patients_tenant_id_phone_number_key'
+                ) THEN
+                    ALTER TABLE patients ADD CONSTRAINT patients_tenant_id_phone_number_key UNIQUE (tenant_id, phone_number);
+                END IF;
+            END $$;
+            """,
+            # Parche 5: Agregar urgencia a la tabla patients para tracking de leads
+            """
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='patients' AND column_name='urgency_level') THEN
+                    ALTER TABLE patients ADD COLUMN urgency_level VARCHAR(20) DEFAULT 'normal';
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='patients' AND column_name='urgency_reason') THEN
+                    ALTER TABLE patients ADD COLUMN urgency_reason TEXT;
+                END IF;
+            END $$;
+            """,
+            # Parche 6: Evolucionar treatment_plan a JSONB en clinical_records
+            """
+            DO $$ 
+            BEGIN 
+                -- Si la columna existe y es de tipo text/varchar, la convertimos a JSONB
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='clinical_records' AND column_name='treatment_plan' 
+                    AND data_type IN ('text', 'character varying')
+                ) THEN
+                    ALTER TABLE clinical_records ALTER COLUMN treatment_plan TYPE JSONB USING treatment_plan::jsonb;
+                END IF;
+                
+                -- Si no existe, la creamos
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clinical_records' AND column_name='treatment_plan') THEN
+                    ALTER TABLE clinical_records ADD COLUMN treatment_plan JSONB DEFAULT '{}';
+                END IF;
+            END $$;
+            """,
         ]
 
         async with self.pool.acquire() as conn:
@@ -197,18 +239,23 @@ class Database:
         async with self.pool.acquire() as conn:
             await conn.execute(query, from_number, role, content, correlation_id)
 
-    async def ensure_patient_exists(self, phone_number: str, first_name: str = 'Visitante'):
-        """Ensures a patient record exists for the given phone number."""
+    async def ensure_patient_exists(self, phone_number: str, first_name: str = 'Visitante', status: str = 'guest'):
+        """
+        Ensures a patient record exists for the given phone number.
+        If it exists as a 'guest', it can be updated to 'active' or update its name.
+        """
         query = """
         INSERT INTO patients (tenant_id, phone_number, first_name, status, created_at)
-        VALUES (1, $1, $2, 'guest', NOW())
+        VALUES (1, $1, $2, $3, NOW())
         ON CONFLICT (tenant_id, phone_number) 
-        DO UPDATE SET first_name = EXCLUDED.first_name, updated_at = NOW() 
-        WHERE patients.status = 'guest'
-        RETURNING id
+        DO UPDATE SET 
+            first_name = CASE WHEN patients.status = 'guest' THEN EXCLUDED.first_name ELSE patients.first_name END,
+            status = CASE WHEN patients.status = 'guest' AND EXCLUDED.status = 'active' THEN 'active' ELSE patients.status END,
+            updated_at = NOW() 
+        RETURNING id, status
         """
         async with self.pool.acquire() as conn:
-            await conn.execute(query, phone_number, first_name)
+            return await conn.fetchrow(query, phone_number, first_name, status)
 
     async def get_chat_history(self, from_number: str, limit: int = 15) -> List[dict]:
         """Returns list of {'role': ..., 'content': ...} in chronological order."""

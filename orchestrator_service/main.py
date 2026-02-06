@@ -212,20 +212,9 @@ async def book_appointment(date_time: str, treatment_reason: str):
         # 1. Parsear datetime
         apt_datetime = parse_datetime(date_time)
         
-        # 2. Buscar paciente por teléfono, o crear uno
-        patient = await db.pool.fetchrow(
-            "SELECT id FROM patients WHERE phone_number = $1",
-            phone
-        )
-        
-        if not patient:
-            # Crear paciente nuevo
-            patient = await db.pool.fetchrow("""
-                INSERT INTO patients (phone_number, first_name, status, created_at)
-                VALUES ($1, 'Chat User', 'active', NOW())
-                RETURNING id
-            """, phone)
-            logger.info(f"Paciente nuevo creado: {phone}")
+        # 2. Asegurar paciente (Automáticamente lo crea o promueve a 'active')
+        patient_row = await db.ensure_patient_exists(phone, status='active')
+        patient_id = patient_row['id']
         
         # 3. Obtener profesional activo (ej: ID 1)
         professional = await db.pool.fetchrow(
@@ -250,12 +239,12 @@ async def book_appointment(date_time: str, treatment_reason: str):
         apt_id = str(uuid.uuid4())
         await db.pool.execute("""
             INSERT INTO appointments 
-            (id, patient_id, professional_id, appointment_datetime, appointment_type, status, urgency_level, created_at)
-            VALUES ($1, $2, $3, $4, $5, 'scheduled', 'normal', NOW())
-        """, apt_id, patient['id'], professional['id'], apt_datetime, treatment_reason)
+            (id, patient_id, professional_id, appointment_datetime, appointment_type, status, urgency_level, source, created_at)
+            VALUES ($1, $2, $3, $4, $5, 'scheduled', 'normal', 'ai', NOW())
+        """, apt_id, patient_id, professional['id'], apt_datetime, treatment_reason)
         
         logger.info(f"✅ Turno registrado: {apt_id} para {phone}")
-        current_patient_id.set(patient['id'])
+        current_patient_id.set(patient_id)
         
         # 6. Obtener datos completos del turno para emitir evento y sincronizar GCal
         appointment_data = await db.pool.fetchrow("""
@@ -291,11 +280,8 @@ async def book_appointment(date_time: str, treatment_reason: str):
             logger.error(f"Error sincronizando con GCal (AI Tool): {ge}")
 
         if appointment_data:
-            # Re-definir localmente para evitar problemas de request o importar
-            from main import sio
             await sio.emit("NEW_APPOINTMENT", dict(appointment_data))
         
-        from main import CLINIC_NAME
         return f"✅ ¡Turno confirmado para {apt_datetime.strftime('%d/%m/%Y a las %H:%M')}! Te esperamos en {CLINIC_NAME}. Confirmación: #{apt_id[:8]}"
         
     except Exception as e:
@@ -308,6 +294,7 @@ async def triage_urgency(symptoms: str):
     Analiza síntomas para clasificar urgencia.
     Devuelve: Nivel de urgencia (emergency, high, normal, low) + recomendación
     """
+    phone = current_customer_phone.get()
     urgency_keywords = {
         'emergency': ['dolor fuerte', 'sangrado', 'traumatismo', 'accidente', 'golpe', 'roto', 'fractura'],
         'high': ['dolor', 'hinchazón', 'inflamación', 'infección'],
@@ -323,6 +310,25 @@ async def triage_urgency(symptoms: str):
             urgency_level = level
             break
     
+    # Persistir urgencia en el paciente si lo identificamos
+    if phone:
+        try:
+            patient_row = await db.ensure_patient_exists(phone)
+            await db.pool.execute("""
+                UPDATE patients 
+                SET urgency_level = $1, urgency_reason = $2, updated_at = NOW()
+                WHERE id = $3
+            """, urgency_level, symptoms, patient_row['id'])
+            
+            # Notificar al dashboard el cambio de prioridad
+            await sio.emit("PATIENT_UPDATED", {
+                "phone_number": phone,
+                "urgency_level": urgency_level,
+                "urgency_reason": symptoms
+            })
+        except Exception as e:
+            logger.error(f"Error persisting triage: {e}")
+
     responses = {
         'emergency': "🚨 URGENCIA DETECTADA. Deberías venir HOY mismo. Si es muy grave, llama directamente: Llamá al consultorio.",
         'high': "⚠️ Deberías agendar un turno lo antes posible, preferentemente esta semana.",
