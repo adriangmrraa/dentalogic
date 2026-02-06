@@ -723,6 +723,35 @@ export default function AgendaView() {
 
       {/* Calendar */}
       <div className="bg-white rounded-lg shadow p-4">
+        {/* Custom FullCalendar Styles for Spacious TimeGrid */}
+        <style>{`
+          /* Aumentar altura de slots de tiempo en vista semanal/diaria */
+          .fc-timegrid-slot {
+            height: 70px !important;
+            min-height: 70px !important;
+          }
+          
+          /* Hacer eventos más visibles y tipo tarjeta */
+          .fc-timegrid-event {
+            border-radius: 8px !important;
+            padding: 6px !important;
+            min-height: 60px !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+          }
+          
+          /* Aumentar espacio entre eventos */
+          .fc-timegrid-event-harness {
+            margin: 2px 4px !important;
+          }
+          
+          /* Mejorar la visualización del label de hora */
+          .fc-timegrid-slot-label {
+            font-size: 14px !important;
+            font-weight: 600 !important;
+            padding: 8px !important;
+          }
+        `}</style>
+
         {loading && appointments.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             <div className="animate-spin inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full mb-4 mx-auto"></div>
@@ -745,6 +774,10 @@ export default function AgendaView() {
             slotMaxTime="20:00:00"
             allDaySlot={false}
             height="auto"
+            slotDuration="00:30:00"
+            slotLabelInterval="01:00"
+            expandRows={true}
+            slotEventOverlap={false}
             eventTimeFormat={{
               hour: '2-digit',
               minute: '2-digit',
