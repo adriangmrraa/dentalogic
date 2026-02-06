@@ -459,8 +459,8 @@ export default function ChatsView() {
                   key={session.phone_number}
                   onClick={() => setSelectedSession(session)}
                   className={`p-4 border-b cursor-pointer transition-all ${selectedSession?.phone_number === session.phone_number
-                      ? 'bg-primary-light'
-                      : 'hover:bg-gray-50'
+                    ? 'bg-primary-light'
+                    : 'hover:bg-gray-50'
                     } ${isHighlighted ? 'bg-orange-50 animate-pulse' : ''} ${cardBorder}`}
                 >
                   <div className="flex items-start gap-3">
@@ -513,8 +513,8 @@ export default function ChatsView() {
                   <ChevronLeft size={20} />
                 </button>
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
-                    ? 'bg-orange-500'
-                    : 'bg-primary'
+                  ? 'bg-orange-500'
+                  : 'bg-primary'
                   }`}>
                   {(selectedSession.patient_name || selectedSession.phone_number).charAt(0)}
                 </div>
@@ -539,8 +539,8 @@ export default function ChatsView() {
                 <button
                   onClick={handleToggleHumanMode}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
-                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                      : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                    : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
                     }`}
                 >
                   {selectedSession.status === 'human_handling' || selectedSession.status === 'silenced' ? (
@@ -577,10 +577,10 @@ export default function ChatsView() {
                 >
                   <div
                     className={`max-w-[70%] rounded-lg px-4 py-3 ${message.role === 'user'
-                        ? 'bg-white shadow-sm'
-                        : message.is_derivhumano
-                          ? 'bg-orange-100 border border-orange-300 shadow-sm'
-                          : 'bg-primary text-white shadow-sm'
+                      ? 'bg-white shadow-sm'
+                      : message.is_derivhumano
+                        ? 'bg-orange-100 border border-orange-300 shadow-sm text-gray-800'
+                        : 'bg-blue-600 text-white shadow-sm'
                       }`}
                   >
                     {message.is_derivhumano && (
@@ -633,8 +633,8 @@ export default function ChatsView() {
             <div className="p-4 space-y-4">
               {/* AI Status */}
               <div className={`p-3 rounded-lg ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
-                  ? 'bg-orange-50 border border-orange-200'
-                  : 'bg-green-50 border border-green-200'
+                ? 'bg-orange-50 border border-orange-200'
+                : 'bg-green-50 border border-green-200'
                 }`}>
                 <div className="flex items-center gap-2 mb-1">
                   {selectedSession.status === 'human_handling' || selectedSession.status === 'silenced' ? (

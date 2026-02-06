@@ -197,16 +197,18 @@ class Database:
         async with self.pool.acquire() as conn:
             await conn.execute(query, from_number, role, content, correlation_id)
 
-    async def ensure_patient_exists(self, phone_number: str):
+    async def ensure_patient_exists(self, phone_number: str, first_name: str = 'Visitante'):
         """Ensures a patient record exists for the given phone number."""
         query = """
         INSERT INTO patients (tenant_id, phone_number, first_name, status, created_at)
-        VALUES (1, $1, 'Visitante', 'guest', NOW())
-        ON CONFLICT (tenant_id, phone_number) DO NOTHING
+        VALUES (1, $1, $2, 'guest', NOW())
+        ON CONFLICT (tenant_id, phone_number) 
+        DO UPDATE SET first_name = EXCLUDED.first_name, updated_at = NOW() 
+        WHERE patients.status = 'guest'
         RETURNING id
         """
         async with self.pool.acquire() as conn:
-            await conn.execute(query, phone_number)
+            await conn.execute(query, phone_number, first_name)
 
     async def get_chat_history(self, from_number: str, limit: int = 15) -> List[dict]:
         """Returns list of {'role': ..., 'content': ...} in chronological order."""
