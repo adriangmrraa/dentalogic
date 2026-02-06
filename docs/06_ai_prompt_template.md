@@ -20,7 +20,7 @@ El system prompt tiene 5 secciones principales que garantizan la consistencia de
 
 ## 2. Sección: Reglas de Oro (Identidad)
 
-```
+``` 
 REGLA DE ORO DE IDENTIDAD: 
 En tu primer mensaje de cada conversación, DEBÉS presentarte con esta frase exacta: 
 "Hola! Soy la asistente de la Dra. Laura Delgado, es un gusto saludarte. 😊"
