@@ -571,14 +571,26 @@ async def list_patients(search: str = None, limit: int = 50):
 async def create_patient(p: PatientCreate):
     """Crear un nuevo paciente manualmente."""
     try:
-        # Verificar que el teléfono es único
-        existing = await db.pool.fetchval(
-            "SELECT id FROM patients WHERE phone_number = $1",
+        # Verificar si existe el paciente
+        existing_row = await db.pool.fetchrow(
+            "SELECT id, status FROM patients WHERE phone_number = $1",
             p.phone_number
         )
-        if existing:
-            raise HTTPException(status_code=409, detail="Ya existe un paciente con ese número de teléfono")
         
+        if existing_row:
+            # Si existe como 'guest' (creado por chat), lo actualizamos a 'active'
+            if existing_row['status'] == 'guest':
+                await db.pool.execute("""
+                    UPDATE patients 
+                    SET first_name = $1, last_name = $2, email = $3, insurance_provider = $4, status = 'active', updated_at = NOW()
+                    WHERE id = $5
+                """, p.first_name, p.last_name, p.email, p.insurance, existing_row['id'])
+                return {"id": existing_row['id'], "status": "upgraded", "phone": p.phone_number}
+            else:
+                # Si ya es 'active', es un duplicado real
+                raise HTTPException(status_code=409, detail="Ya existe un paciente activo con ese número de teléfono")
+        
+        # Crear nuevo si no existe
         row = await db.pool.fetchrow("""
             INSERT INTO patients (
                 phone_number, first_name, last_name, email, insurance_provider, status, created_at
@@ -587,12 +599,12 @@ async def create_patient(p: PatientCreate):
         """, p.phone_number, p.first_name, p.last_name, p.email, p.insurance)
         
         return {"id": row['id'], "status": "created", "phone": p.phone_number}
-        
-    except asyncpg.UniqueViolationError:
-        raise HTTPException(status_code=409, detail="Paciente con este teléfono ya existe")
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error creando paciente: {str(e)}")
-
+泛
 @router.get("/patients/{id}/records", dependencies=[Depends(verify_admin_token)])
 async def get_clinical_records(id: int):
     """Obtener historia clínica de un paciente."""

@@ -184,9 +184,10 @@ class Database:
 
     async def ensure_patient_exists(self, phone_number: str):
         """Ensures a patient record exists for the given phone number."""
+        # Fix: Usamos status 'guest' para diferenciar leads de pacientes confirmados
         query = """
         INSERT INTO patients (phone_number, first_name, status, created_at)
-        VALUES ($1, 'Paciente', 'active', NOW())
+        VALUES ($1, 'Visitante', 'guest', NOW())
         ON CONFLICT (phone_number) DO NOTHING
         RETURNING id
         """
