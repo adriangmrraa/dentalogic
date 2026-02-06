@@ -71,30 +71,43 @@ const UserApprovalView: React.FC = () => {
             </div>
 
             {/* TABS */}
-            <div className="flex gap-4 mb-6 border-b border-white/10 pb-px">
+            <div className="flex gap-4 mb-6 border-b border-gray-200 pb-px">
                 <button
                     onClick={() => setActiveTab('requests')}
-                    className={`pb-3 px-2 font-medium transition-all relative ${activeTab === 'requests'
-                            ? 'text-white'
-                            : 'text-secondary hover:text-white'
+                    className={`pb-3 px-6 font-semibold transition-all relative rounded-t-xl ${activeTab === 'requests'
+                            ? 'text-medical-600'
+                            : 'text-gray-500 hover:text-medical-700'
                         }`}
                 >
-                    Solicitudes {requests.length > 0 && (
-                        <span className="ml-2 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">
-                            {requests.length}
-                        </span>
+                    <div className="flex items-center gap-2">
+                        Solicitudes
+                        {requests.length > 0 && (
+                            <span className="bg-danger text-white text-[10px] px-1.5 py-0.5 rounded-full shadow-sm">
+                                {requests.length}
+                            </span>
+                        )}
+                    </div>
+                    {activeTab === 'requests' && (
+                        <>
+                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-medical-600" />
+                            <div className="absolute inset-0 bg-medical-400/10 blur-xl rounded-full -z-10 shadow-[0_0_20px_rgba(0,102,204,0.15)]" />
+                        </>
                     )}
-                    {activeTab === 'requests' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
                 </button>
                 <button
                     onClick={() => setActiveTab('staff')}
-                    className={`pb-3 px-2 font-medium transition-all relative ${activeTab === 'staff'
-                            ? 'text-white'
-                            : 'text-secondary hover:text-white'
+                    className={`pb-3 px-6 font-semibold transition-all relative rounded-t-xl ${activeTab === 'staff'
+                            ? 'text-medical-600'
+                            : 'text-gray-500 hover:text-medical-700'
                         }`}
                 >
                     Personal Activo
-                    {activeTab === 'staff' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
+                    {activeTab === 'staff' && (
+                        <>
+                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-medical-600" />
+                            <div className="absolute inset-0 bg-medical-400/10 blur-xl rounded-full -z-10 shadow-[0_0_20px_rgba(0,102,204,0.15)]" />
+                        </>
+                    )}
                 </button>
             </div>
 
@@ -134,17 +147,30 @@ const UserApprovalView: React.FC = () => {
             )}
 
             <style>{`
+        .glass {
+          background: white;
+          border: 1px solid var(--white-300);
+          border-radius: 16px;
+          box-shadow: var(--shadow-card);
+          transition: all 0.3s ease;
+        }
+        .glass:hover {
+          box-shadow: var(--shadow-soft);
+          border-color: var(--medical-300);
+        }
+        
         .role-badge {
           padding: 4px 10px;
           border-radius: 8px;
           font-size: 0.7rem;
           font-weight: 700;
-          background: rgba(255,255,255,0.05);
+          background: #f8f9fa;
           letter-spacing: 0.5px;
+          border: 1px solid rgba(0,0,0,0.05);
         }
-        .role-badge[data-role='ceo'] { color: #ffc107; background: rgba(255,193,7,0.1); }
-        .role-badge[data-role='professional'] { color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
-        .role-badge[data-role='secretary'] { color: #4dff8c; background: rgba(77,255,140,0.1); }
+        .role-badge[data-role='ceo'] { color: #856404; background: #fff3cd; border-color: #ffeeba; }
+        .role-badge[data-role='professional'] { color: #004085; background: #cce5ff; border-color: #b8daff; }
+        .role-badge[data-role='secretary'] { color: #155724; background: #d4edda; border-color: #c3e6cb; }
 
         .btn-icon-labeled {
           display: flex;
@@ -154,41 +180,42 @@ const UserApprovalView: React.FC = () => {
           border-radius: 10px;
           font-size: 0.9rem;
           font-weight: 500;
-          border: 1px solid rgba(255,255,255,0.1);
-          background: rgba(255,255,255,0.05);
+          border: 1px solid #dee2e6;
+          background: #fff;
           transition: all 0.3s;
-          color: white;
+          color: #495057;
         }
         .btn-icon-labeled:hover {
-          background: rgba(255,255,255,0.1);
+          background: #f8f9fa;
+          border-color: #adb5bd;
           transform: translateY(-1px);
         }
         .btn-icon-labeled.success {
-          border-color: rgba(77, 255, 140, 0.3);
-          background: rgba(77, 255, 140, 0.1);
-          color: #4dff8c;
+          border-color: #c3e6cb;
+          background: #d4edda;
+          color: #155724;
         }
         .btn-icon-labeled.success:hover {
-          background: rgba(77, 255, 140, 0.2);
-          border-color: #4dff8c;
+          background: #c3e6cb;
+          border-color: #155724;
         }
         .btn-icon-labeled.danger {
-          border-color: rgba(255, 77, 77, 0.3);
-          background: rgba(255, 77, 77, 0.1);
-          color: #ff4d4d;
+          border-color: #f5c6cb;
+          background: #f8d7da;
+          color: #721c24;
         }
         .btn-icon-labeled.danger:hover {
-          background: rgba(255, 77, 77, 0.2);
-          border-color: #ff4d4d;
+          background: #f5c6cb;
+          border-color: #721c24;
         }
         .btn-icon-labeled.warning {
-          border-color: rgba(255, 193, 7, 0.3);
-          background: rgba(255, 193, 7, 0.1);
-          color: #ffc107;
+          border-color: #ffeeba;
+          background: #fff3cd;
+          color: #856404;
         }
         .btn-icon-labeled.warning:hover {
-          background: rgba(255, 193, 7, 0.2);
-          border-color: #ffc107;
+          background: #ffeeba;
+          border-color: #856404;
         }
         .animate-fadeIn {
           animation: fadeIn 0.4s ease-out;

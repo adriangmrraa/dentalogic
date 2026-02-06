@@ -12,6 +12,7 @@ const LoginView: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
+  const [googleCalendarId, setGoogleCalendarId] = useState('');
   const [role, setRole] = useState('professional');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -45,7 +46,8 @@ const LoginView: React.FC = () => {
         password,
         role,
         first_name: firstName,
-        last_name: ""
+        last_name: "",
+        google_calendar_id: role === 'professional' ? googleCalendarId : null
       });
       setMessage("Registro solicitado con éxito. Un CEO debe aprobar tu cuenta antes de que puedas ingresar.");
       setIsRegistering(false);
@@ -133,6 +135,23 @@ const LoginView: React.FC = () => {
                 <option value="secretary">Secretaría / Administración</option>
                 <option value="ceo">Director / CEO</option>
               </select>
+            </div>
+          )}
+
+          {isRegistering && role === 'professional' && (
+            <div className="input-group">
+              <label>Google Calendar ID</label>
+              <div className="input-wrapper">
+                <input
+                  type="text"
+                  value={googleCalendarId}
+                  onChange={(e) => setGoogleCalendarId(e.target.value)}
+                  placeholder="ej: usuario@gmail.com o ID de calendario"
+                />
+              </div>
+              <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                Opcional. Puedes configurarlo después en tu perfil.
+              </p>
             </div>
           )}
 

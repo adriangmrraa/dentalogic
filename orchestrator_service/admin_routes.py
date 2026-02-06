@@ -798,9 +798,9 @@ async def add_clinical_note(id: int, note: ClinicalNote):
 # ==================== ENDPOINTS TURNOS (AGENDA) ====================
 
 @router.get("/appointments", dependencies=[Depends(verify_admin_token)])
-async def list_appointments(start_date: str, end_date: str):
-    """Obtener turnos para el calendario con source (AI vs Manual)."""
-    rows = await db.pool.fetch("""
+async def list_appointments(start_date: str, end_date: str, professional_id: Optional[int] = None):
+    """Obtener turnos para el calendario con filtro opcional por profesional."""
+    query = """
         SELECT a.id, a.appointment_datetime, a.duration_minutes, a.status, a.urgency_level,
                a.source, a.appointment_type, a.notes,
                p.first_name, p.last_name, p.phone_number,
@@ -809,9 +809,16 @@ async def list_appointments(start_date: str, end_date: str):
         JOIN patients p ON a.patient_id = p.id
         LEFT JOIN professionals prof ON a.professional_id = prof.id
         WHERE a.appointment_datetime BETWEEN $1 AND $2
-        ORDER BY a.appointment_datetime ASC
-    """, datetime.fromisoformat(start_date), datetime.fromisoformat(end_date))
+    """
+    params = [datetime.fromisoformat(start_date), datetime.fromisoformat(end_date)]
     
+    if professional_id:
+        query += f" AND a.professional_id = ${len(params) + 1}"
+        params.append(professional_id)
+        
+    query += " ORDER BY a.appointment_datetime ASC"
+    
+    rows = await db.pool.fetch(query, *params)
     return [dict(row) for row in rows]
 
 

@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
@@ -8,6 +7,7 @@ import { Calendar, X, User, Stethoscope, Clock, Phone, MessageCircle, AlertTrian
 import api from '../api/axios';
 import { io, Socket } from 'socket.io-client';
 import { BACKEND_URL } from '../api/axios';
+import { useAuth } from '../context/AuthContext';
 
 // ==================== TYPE DEFINITIONS ====================
 interface Appointment {
@@ -44,6 +44,7 @@ interface Professional {
   first_name: string;
   last_name?: string;
   name?: string;
+  email?: string;
   is_active: boolean;
 }
 
@@ -57,20 +58,20 @@ interface Patient {
 // ==================== SOURCE COLORS ====================
 // Colors for appointment sources: AI (blue), Manual (green), GCalendar (gray)
 const SOURCE_COLORS: Record<string, { hex: string; label: string; bgClass: string; textClass: string }> = {
-  ai: { 
-    hex: '#3b82f6', 
+  ai: {
+    hex: '#3b82f6',
     label: 'AI',
     bgClass: 'bg-blue-100',
     textClass: 'text-blue-800'
   },
-  manual: { 
-    hex: '#22c55e', 
+  manual: {
+    hex: '#22c55e',
     label: 'Manual',
     bgClass: 'bg-green-100',
     textClass: 'text-green-800'
   },
-  gcalendar: { 
-    hex: '#6b7280', 
+  gcalendar: {
+    hex: '#6b7280',
     label: 'GCalendar',
     bgClass: 'bg-gray-100',
     textClass: 'text-gray-800'
@@ -111,14 +112,6 @@ const STATUS_STRING_TO_ID: Record<string, number> = {
 // Get status ID from status string
 const getStatusId = (status: string): number => STATUS_STRING_TO_ID[status] || 1;
 
-// Get color hex from status (string or ID)
-const getStatusColorHex = (status: string | number): string => {
-  if (typeof status === 'number') {
-    return STATUS_COLORS[status]?.hex || STATUS_COLORS[1].hex;
-  }
-  const statusId = getStatusId(status);
-  return STATUS_COLORS[statusId]?.hex || STATUS_COLORS[1].hex;
-};
 
 // Get color based on appointment source (AI vs Manual)
 const getSourceColor = (source: string | undefined): string => {
@@ -133,6 +126,7 @@ const getSourceLabel = (source: string | undefined): string => {
 };
 
 export default function AgendaView() {
+  const { user } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [googleBlocks, setGoogleBlocks] = useState<GoogleCalendarBlock[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
@@ -143,6 +137,7 @@ export default function AgendaView() {
   const [selectedEvent, setSelectedEvent] = useState<Appointment | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [selectedProfessionalId, setSelectedProfessionalId] = useState<string>('all');
   const [syncStatus, setSyncStatus] = useState<{ syncing: boolean; lastSync: Date | null; error: string | null }>({
     syncing: false,
     lastSync: null,
@@ -159,7 +154,7 @@ export default function AgendaView() {
   const calendarRef = useRef<FullCalendar>(null);
   const socketRef = useRef<Socket | null>(null);
   const eventsRef = useRef<Appointment[]>([]);
-  
+
   const [formData, setFormData] = useState({
     patient_id: '',
     professional_id: '',
@@ -191,7 +186,7 @@ export default function AgendaView() {
         lastSync: new Date(),
         error: null,
       });
-      
+
       // Refresh calendar data after sync
       fetchData();
       alert(`Sincronización completada: ${response.data.events_processed} eventos procesados`);
@@ -209,7 +204,7 @@ export default function AgendaView() {
   // Check for collisions before creating appointment
   const checkCollisions = useCallback(async (professionalId: string, datetimeStr: string): Promise<boolean> => {
     if (!professionalId || !datetimeStr) return false;
-    
+
     try {
       const response = await api.get('/admin/appointments/check-collisions', {
         params: {
@@ -218,17 +213,17 @@ export default function AgendaView() {
           duration_minutes: 60,
         },
       });
-      
+
       if (response.data.has_collisions) {
         const conflicts: string[] = [];
-        
+
         if (response.data.conflicting_appointments?.length > 0) {
           conflicts.push('Turno existente en ese horario');
         }
         if (response.data.conflicting_blocks?.length > 0) {
           conflicts.push(`Bloqueo GCalendar: ${response.data.conflicting_blocks.map((b: any) => b.title).join(', ')}`);
         }
-        
+
         setCollisionWarning({
           hasCollision: true,
           message: `⚠️ Hay conflictos: ${conflicts.join('; ')}`,
@@ -264,7 +259,7 @@ export default function AgendaView() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       // Get current calendar date range
       let startDate = new Date();
       let endDate = new Date();
@@ -273,17 +268,27 @@ export default function AgendaView() {
         startDate = calendarApi.view.activeStart;
         endDate = calendarApi.view.activeEnd;
       }
-      
+
       const startDateStr = startDate.toISOString();
       const endDateStr = endDate.toISOString();
-      
+
+      // If professional, force filter to their own ID
+      const profFilter = user?.role === 'professional'
+        ? professionals.find(p => p.email === user.email)?.id?.toString() || selectedProfessionalId
+        : selectedProfessionalId;
+
+      const params: any = { start_date: startDateStr, end_date: endDateStr };
+      if (profFilter !== 'all') {
+        params.professional_id = profFilter;
+      }
+
       const [appointmentsRes, professionalsRes, patientsRes, blocksRes] = await Promise.all([
-        api.get('/admin/appointments', { params: { start_date: startDateStr, end_date: endDateStr } }),
+        api.get('/admin/appointments', { params }),
         api.get('/admin/professionals'),
         api.get('/admin/patients'),
         fetchGoogleBlocks(startDateStr, endDateStr),
       ]);
-      
+
       const newAppointments = appointmentsRes.data;
       setAppointments(newAppointments);
       eventsRef.current = newAppointments;
@@ -291,12 +296,12 @@ export default function AgendaView() {
       setProfessionals(professionalsRes.data.filter((p: Professional) => p.is_active));
       setPatients(patientsRes.data);
       setLastUpdate(new Date());
-      
+
       // Force calendar refetch if calendar instance exists
       if (calendarRef.current) {
         const calendarApi = calendarRef.current.getApi();
         calendarApi.removeAllEvents();
-        
+
         // Add appointment events
         const appointmentEvents = newAppointments.map((apt: Appointment) => ({
           id: apt.id,
@@ -307,7 +312,7 @@ export default function AgendaView() {
           borderColor: getSourceColor(apt.source),
           extendedProps: { ...apt, eventType: 'appointment' },
         }));
-        
+
         // Add Google Calendar block events
         const blockEvents = (blocksRes || []).map((block: GoogleCalendarBlock) => ({
           id: block.id,
@@ -319,7 +324,7 @@ export default function AgendaView() {
           borderColor: SOURCE_COLORS.gcalendar.hex,
           extendedProps: { ...block, eventType: 'gcalendar_block' },
         }));
-        
+
         calendarApi.addEventSource([...appointmentEvents, ...blockEvents]);
       }
     } catch (error) {
@@ -333,7 +338,7 @@ export default function AgendaView() {
   useEffect(() => {
     // Fetch initial data
     fetchData();
-    
+
     // Setup WebSocket connection
     socketRef.current = io(BACKEND_URL, {
       transports: ['websocket', 'polling'],
@@ -361,15 +366,15 @@ export default function AgendaView() {
     // Listen for NEW_APPOINTMENT events - Real-time sync from AI bot
     socketRef.current.on('NEW_APPOINTMENT', (newAppointment: Appointment) => {
       console.log('📅 Nuevo turno recibido via WebSocket:', newAppointment);
-      
+
       setAppointments(prevAppointments => {
         const updated = [...prevAppointments, newAppointment];
         eventsRef.current = updated;
         return updated;
       });
-      
+
       setLastUpdate(new Date());
-      
+
       // Add event directly to calendar without refetching
       if (calendarRef.current) {
         const calendarApi = calendarRef.current.getApi();
@@ -388,17 +393,17 @@ export default function AgendaView() {
     // Listen for APPOINTMENT_UPDATED events
     socketRef.current.on('APPOINTMENT_UPDATED', (updatedAppointment: Appointment) => {
       console.log('🔄 Turno actualizado via WebSocket:', updatedAppointment);
-      
+
       setAppointments(prevAppointments => {
-        const updated = prevAppointments.map(apt => 
+        const updated = prevAppointments.map(apt =>
           apt.id === updatedAppointment.id ? updatedAppointment : apt
         );
         eventsRef.current = updated;
         return updated;
       });
-      
+
       setLastUpdate(new Date());
-      
+
       // Update event in calendar
       if (calendarRef.current) {
         const calendarApi = calendarRef.current.getApi();
@@ -419,15 +424,15 @@ export default function AgendaView() {
     // Listen for APPOINTMENT_DELETED events
     socketRef.current.on('APPOINTMENT_DELETED', (deletedAppointmentId: string) => {
       console.log('❌ Turno eliminado via WebSocket:', deletedAppointmentId);
-      
+
       setAppointments(prevAppointments => {
         const updated = prevAppointments.filter(apt => apt.id !== deletedAppointmentId);
         eventsRef.current = updated;
         return updated;
       });
-      
+
       setLastUpdate(new Date());
-      
+
       // Remove event from calendar
       if (calendarRef.current) {
         const calendarApi = calendarRef.current.getApi();
@@ -445,6 +450,11 @@ export default function AgendaView() {
       }
     };
   }, [fetchData]);
+
+  // Refetch when professional filter changes
+  useEffect(() => {
+    fetchData();
+  }, [selectedProfessionalId]);
 
   // Calendar events transformer
   const calendarEvents = [
@@ -490,7 +500,7 @@ export default function AgendaView() {
       alert(`Bloqueo de Google Calendar:\n\n${info.event.title}\n${new Date(info.event.start).toLocaleString()} - ${new Date(info.event.end).toLocaleString()}`);
       return;
     }
-    
+
     setSelectedEvent(info.event.extendedProps);
     setSelectedDate(info.event.start);
     setShowModal(true);
@@ -498,7 +508,7 @@ export default function AgendaView() {
 
   const handleProfessionalChange = async (profId: string) => {
     setFormData({ ...formData, professional_id: profId });
-    
+
     // Check for collisions when professional or datetime changes
     if (formData.appointment_datetime && profId) {
       await checkCollisions(profId, formData.appointment_datetime);
@@ -507,7 +517,7 @@ export default function AgendaView() {
 
   const handleDateTimeChange = async (datetimeStr: string) => {
     setFormData({ ...formData, appointment_datetime: datetimeStr });
-    
+
     // Check for collisions
     if (formData.professional_id && datetimeStr) {
       await checkCollisions(formData.professional_id, datetimeStr);
@@ -516,14 +526,14 @@ export default function AgendaView() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Final collision check before submission
     if (collisionWarning?.hasCollision) {
       if (!confirm('Hay conflictos de horario. ¿Deseas agendar de todas formas?')) {
         return;
       }
     }
-    
+
     try {
       if (selectedEvent) {
         // Update existing appointment
@@ -594,7 +604,26 @@ export default function AgendaView() {
           <h1 className="text-2xl font-bold text-gray-800">Agenda</h1>
           <p className="text-gray-500">Gestión de turnos y citas</p>
         </div>
-        
+
+        {/* Professional Filter (CEO/Secretary only) */}
+        {(user?.role === 'ceo' || user?.role === 'secretary') && (
+          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100">
+            <Stethoscope size={18} className="text-medical-600" />
+            <select
+              value={selectedProfessionalId}
+              onChange={(e) => setSelectedProfessionalId(e.target.value)}
+              className="bg-transparent border-none text-sm font-medium focus:ring-0 outline-none text-medical-900 cursor-pointer"
+            >
+              <option value="all">Todos los Profesionales</option>
+              {professionals.map(p => (
+                <option key={p.id} value={p.id.toString()}>
+                  Dr. {p.first_name} {p.last_name || ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Connection Status & Controls */}
         <div className="flex items-center gap-4">
           {/* Source Legend */}
@@ -612,7 +641,7 @@ export default function AgendaView() {
               <span className="text-xs text-gray-600 hidden sm:inline">GCal</span>
             </div>
           </div>
-          
+
           {/* WebSocket Status */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-full">
             {socketConnected ? (
@@ -627,7 +656,7 @@ export default function AgendaView() {
               </>
             )}
           </div>
-          
+
           {/* Sync Status */}
           <div className="flex items-center gap-2">
             {syncStatus.syncing ? (
@@ -642,22 +671,21 @@ export default function AgendaView() {
               </div>
             ) : null}
           </div>
-          
+
           {/* Sync Now Button */}
           <button
             onClick={handleSyncNow}
             disabled={syncStatus.syncing}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-              syncStatus.syncing 
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${syncStatus.syncing
+              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}
             title="Sincronizar con Google Calendar"
           >
             <Cloud size={18} />
             <span className="hidden sm:inline">Sync Now</span>
           </button>
-          
+
           {/* Last Update */}
           {lastUpdate && (
             <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -665,7 +693,7 @@ export default function AgendaView() {
               <span>Actualizado: {lastUpdate.toLocaleTimeString()}</span>
             </div>
           )}
-          
+
           {/* Manual Refresh */}
           <button
             onClick={fetchData}
@@ -727,9 +755,8 @@ export default function AgendaView() {
                       </div>
                     )}
                     {/* Source badge */}
-                    <div className={`inline-flex px-1 py-0.5 rounded text-[10px] mt-0.5 ${
-                      SOURCE_COLORS[eventInfo.event.extendedProps.source || 'ai']?.bgClass || 'bg-blue-100'
-                    } ${SOURCE_COLORS[eventInfo.event.extendedProps.source || 'ai']?.textClass || 'text-blue-800'}`}>
+                    <div className={`inline-flex px-1 py-0.5 rounded text-[10px] mt-0.5 ${SOURCE_COLORS[eventInfo.event.extendedProps.source || 'ai']?.bgClass || 'bg-blue-100'
+                      } ${SOURCE_COLORS[eventInfo.event.extendedProps.source || 'ai']?.textClass || 'text-blue-800'}`}>
                       {getSourceLabel(eventInfo.event.extendedProps.source)}
                     </div>
                   </>
@@ -738,8 +765,8 @@ export default function AgendaView() {
             )}
             eventDidMount={(info) => {
               // Add tooltip with full details
-              const { appointment_type, patient_phone, notes, source, professional_name, eventType } = info.event.extendedProps;
-              
+              const { patient_phone, notes, source, professional_name, eventType } = info.event.extendedProps;
+
               if (eventType === 'gcalendar_block') {
                 const startDate = info.event.start;
                 if (startDate) {
@@ -790,9 +817,9 @@ export default function AgendaView() {
                 <div className="flex items-center gap-2 mb-1">
                   <AlertTriangle className="text-yellow-600" size={18} />
                   <span className="text-sm font-medium text-yellow-800">
-                    {insuranceStatus.status === 'expired' ? 'Credencial Vencida' : 
-                     insuranceStatus.status === 'warning' ? 'Credencial Próxima a Vencer' : 
-                     'Validación Requerida'}
+                    {insuranceStatus.status === 'expired' ? 'Credencial Vencida' :
+                      insuranceStatus.status === 'warning' ? 'Credencial Próxima a Vencer' :
+                        'Validación Requerida'}
                   </span>
                 </div>
                 <p className="text-sm text-yellow-700">{insuranceStatus.message}</p>
@@ -807,9 +834,8 @@ export default function AgendaView() {
               <div className="p-4">
                 {/* Source Badge */}
                 <div className="mb-4">
-                  <span className={`inline-flex px-3 py-1 rounded-full text-sm ${
-                    SOURCE_COLORS[selectedEvent.source || 'ai']?.bgClass || 'bg-blue-100'
-                  } ${SOURCE_COLORS[selectedEvent.source || 'ai']?.textClass || 'text-blue-800'}`}>
+                  <span className={`inline-flex px-3 py-1 rounded-full text-sm ${SOURCE_COLORS[selectedEvent.source || 'ai']?.bgClass || 'bg-blue-100'
+                    } ${SOURCE_COLORS[selectedEvent.source || 'ai']?.textClass || 'text-blue-800'}`}>
                     Origen: {getSourceLabel(selectedEvent.source)}
                   </span>
                 </div>
@@ -868,9 +894,8 @@ export default function AgendaView() {
                 {/* Status Badge */}
                 <div className="mb-4">
                   <p className="text-sm font-medium text-gray-700 mb-2">Estado Actual</p>
-                  <div className={`inline-flex px-3 py-1 rounded-full text-sm capitalize ${
-                    STATUS_UI_COLORS[selectedEvent.status]?.bg || STATUS_UI_COLORS.scheduled.bg
-                  }`}>
+                  <div className={`inline-flex px-3 py-1 rounded-full text-sm capitalize ${STATUS_UI_COLORS[selectedEvent.status]?.bg || STATUS_UI_COLORS.scheduled.bg
+                    }`}>
                     {selectedEvent.status?.replace('_', ' ')}
                   </div>
                 </div>
@@ -882,11 +907,10 @@ export default function AgendaView() {
                       <button
                         key={status}
                         onClick={() => handleStatusChange(status)}
-                        className={`px-3 py-1 rounded-full text-sm capitalize border transition-all ${
-                          selectedEvent.status === status 
-                            ? `${colors.bg} ${colors.border} ring-2 ring-offset-2 ring-primary` 
-                            : `${colors.bg} ${colors.border} hover:opacity-80`
-                        }`}
+                        className={`px-3 py-1 rounded-full text-sm capitalize border transition-all ${selectedEvent.status === status
+                          ? `${colors.bg} ${colors.border} ring-2 ring-offset-2 ring-primary`
+                          : `${colors.bg} ${colors.border} hover:opacity-80`
+                          }`}
                       >
                         {status.replace('_', ' ')}
                       </button>
@@ -1012,11 +1036,10 @@ export default function AgendaView() {
                   </button>
                   <button
                     type="submit"
-                    className={`px-4 py-2 text-white rounded-lg hover:flex items-center gap-2 ${
-                      collisionWarning?.hasCollision 
-                        ? 'bg-yellow-600 hover:bg-yellow-700'
-                        : 'bg-primary hover:bg-primary-dark'
-                    }`}
+                    className={`px-4 py-2 text-white rounded-lg hover:flex items-center gap-2 ${collisionWarning?.hasCollision
+                      ? 'bg-yellow-600 hover:bg-yellow-700'
+                      : 'bg-primary hover:bg-primary-dark'
+                      }`}
                   >
                     <Calendar size={18} />
                     {collisionWarning?.hasCollision ? 'Agendar Igualmente' : 'Agendar Turno'}

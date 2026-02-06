@@ -9,6 +9,7 @@ import ChatsView from './views/ChatsView';
 import TreatmentsView from './views/TreatmentsView';
 import LoginView from './views/LoginView';
 import UserApprovalView from './views/UserApprovalView';
+import ProfileView from './views/ProfileView';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -30,6 +31,7 @@ function App() {
                   <Route path="chats" element={<ChatsView />} />
                   <Route path="profesionales" element={<ProfessionalsView />} />
                   <Route path="tratamientos" element={<TreatmentsView />} />
+                  <Route path="perfil" element={<ProfileView />} />
                   <Route path="aprobaciones" element={
                     <ProtectedRoute allowedRoles={['ceo']}>
                       <UserApprovalView />

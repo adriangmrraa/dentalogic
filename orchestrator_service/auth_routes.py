@@ -21,6 +21,7 @@ class UserRegister(BaseModel):
     role: str = "professional" # Default for self-reg if enabled
     first_name: str
     last_name: Optional[str] = ""
+    google_calendar_id: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -54,9 +55,9 @@ async def register(payload: UserRegister):
         # 4. If professional, create profile record
         if payload.role == "professional":
             await db.execute("""
-                INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email, is_active)
-                VALUES (1, $1, $2, $3, $4, FALSE)
-            """, user_id, payload.first_name, payload.last_name, payload.email)
+                INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email, is_active, google_calendar_id)
+                VALUES (1, $1, $2, $3, $4, FALSE, $5)
+            """, user_id, payload.first_name, payload.last_name, payload.email, payload.google_calendar_id)
 
         # 5. Protocol Omega: Log activation token (simulated for now)
         activation_token = str(uuid.uuid4())
@@ -123,3 +124,60 @@ async def get_me(request: Request):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
         
     return token_data
+
+class ProfileUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    google_calendar_id: Optional[str] = None
+
+@router.get("/profile")
+async def get_profile(request: Request):
+    """ Returns the detailed clinical profile of the current professional/user. """
+    user_data = await get_me(request)
+    user_id = user_data['user_id']
+    
+    # Base user data
+    user = await db.fetchrow("SELECT id, email, role, first_name, last_name FROM users WHERE id = $1", user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+    
+    profile = dict(user)
+    
+    # Professional specific data
+    if user['role'] == 'professional':
+        prof = await db.fetchrow("SELECT google_calendar_id, is_active FROM professionals WHERE user_id = $1", uuid.UUID(user_id))
+        if prof:
+            profile.update(dict(prof))
+            
+    return profile
+
+@router.patch("/profile")
+async def update_profile(payload: ProfileUpdate, request: Request):
+    """ Updates the clinical profile of the current professional/user. """
+    user_data = await get_me(request)
+    user_id = user_data['user_id']
+    
+    # Update users table
+    update_users_fields = []
+    params = []
+    if payload.first_name is not None:
+        update_users_fields.append(f"first_name = ${len(params)+1}")
+        params.append(payload.first_name)
+    if payload.last_name is not None:
+        update_users_fields.append(f"last_name = ${len(params)+1}")
+        params.append(payload.last_name)
+        
+    if update_users_fields:
+        params.append(user_id)
+        query = f"UPDATE users SET {', '.join(update_users_fields)} WHERE id = ${len(params)}"
+        await db.execute(query, *params)
+        
+    # Update professionals table if applicable
+    if user_data['role'] == 'professional' and payload.google_calendar_id is not None:
+        await db.execute("""
+            UPDATE professionals 
+            SET google_calendar_id = $1 
+            WHERE user_id = $2
+        """, payload.google_calendar_id, uuid.UUID(user_id))
+        
+    return {"message": "Perfil actualizado correctamente."}

@@ -161,39 +161,73 @@ def generate_free_slots(target_date: date, busy_times: List[tuple],
 # --- TOOLS DENTALES ---
 
 @tool
-async def check_availability(date_query: str):
+async def check_availability(date_query: str, professional_name: Optional[str] = None):
     """
     Consulta la disponibilidad REAL de turnos en la BD para una fecha.
     date_query: Descripción de la fecha (ej: 'mañana', 'lunes', '2025-05-10')
-    Devuelve: Horarios disponibles con profesionales
+    professional_name: (Opcional) Nombre del profesional específico.
+    Devuelve: Horarios disponibles
     """
     try:
-        # 0. Verificar si hay profesionales activos
-        prof_count = await db.pool.fetchval("SELECT COUNT(*) FROM professionals WHERE is_active = true")
-        if prof_count == 0:
-            return "❌ Actualmente no hay profesionales registrados o activos en la clínica para realizar reservas. Por favor, intenta más tarde o contacta directamente."
+        # 0. Obtener profesionales activos
+        query = "SELECT id, first_name, google_calendar_id FROM professionals WHERE is_active = true"
+        params = []
+        if professional_name:
+            query += " AND (first_name ILIKE $1 OR last_name ILIKE $1)"
+            params.append(f"%{professional_name}%")
+        
+        active_professionals = await db.pool.fetch(query, *params)
+        
+        if not active_professionals:
+            if professional_name:
+                return f"❌ No encontré al profesional '{professional_name}' o no está activo en este momento."
+            return "❌ Actualmente no hay profesionales registrados o activos en la clínica para realizar reservas."
 
         target_date = parse_date(date_query)
         
-        # Query BD: obtener turnos confirmados para esa fecha
+        # Query BD: obtener turnos confirmados para esa fecha para los profesionales seleccionados
+        prof_ids = [p['id'] for p in active_professionals]
         busy_appointments = await db.pool.fetch("""
-            SELECT appointment_datetime, duration_minutes, professional_id
+            SELECT appointment_datetime as start, duration_minutes, professional_id
             FROM appointments
             WHERE DATE(appointment_datetime) = $1
+            AND professional_id = ANY($2)
             AND status IN ('scheduled', 'confirmed')
             ORDER BY appointment_datetime ASC
-        """, target_date)
+        """, target_date, prof_ids)
         
-        # Extraer times ocupados
-        busy_times = [(row['appointment_datetime'], row['duration_minutes']) 
-                      for row in busy_appointments]
+        # Query BD: obtener bloques de GCalendar para los profesionales seleccionados
+        gcal_blocks = await db.pool.fetch("""
+            SELECT start_datetime as start, end_datetime as end, professional_id
+            FROM google_calendar_blocks
+            WHERE DATE(start_datetime) = $1
+            AND professional_id = ANY($2)
+            ORDER BY start_datetime ASC
+        """, target_date, prof_ids)
+
+        # Extraer times ocupados (normalizando duraciones)
+        busy_times = []
+        for row in busy_appointments:
+            busy_times.append((row['start'], row['duration_minutes']))
+        
+        for row in gcal_blocks:
+            # Calcular duración en minutos para bloques
+            duration = int((row['end'] - row['start']).total_seconds() / 60)
+            busy_times.append((row['start'], duration))
+
+        # Re-ordenar por inicio
+        busy_times.sort(key=lambda x: x[0])
         
         # Generar slots libres
         available_slots = generate_free_slots(target_date, busy_times)
         
         if available_slots:
             slots_str = ", ".join(available_slots)
-            return f"Tenemos disponibilidad para {date_query}: {slots_str} (30 min cada turno)."
+            resp = f"Tenemos disponibilidad para {date_query}"
+            if professional_name:
+                resp += f" con el/la Dr/a. {active_professionals[0]['first_name']}"
+            resp += f": {slots_str} (30 min cada turno)."
+            return resp
         else:
             return f"No hay disponibilidad para {date_query}. ¿Te interesa otro día?"
             
@@ -221,9 +255,11 @@ async def book_appointment(date_time: str, treatment_reason: str):
         patient_row = await db.ensure_patient_exists(phone, status='active')
         patient_id = patient_row['id']
         
-        # 3. Obtener profesional activo (ej: ID 1)
+        # 3. Obtener profesional activo (priorizando el que el usuario pida o el primero libre)
+        # Por ahora tomamos el primero activo. 
+        # En el futuro, el agente podría pasar un professional_id si el flujo lo permite.
         professional = await db.pool.fetchrow(
-            "SELECT id FROM professionals WHERE is_active = true LIMIT 1"
+            "SELECT id, google_calendar_id FROM professionals WHERE is_active = true LIMIT 1"
         )
         
         if not professional:
@@ -273,7 +309,8 @@ async def book_appointment(date_time: str, treatment_reason: str):
                 summary=summary,
                 start_time=start_time,
                 end_time=end_time,
-                description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['phone_number']}\nMotivo: {treatment_reason}\nCreado por Asistente IA"
+                description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['phone_number']}\nMotivo: {treatment_reason}\nCreado por Asistente IA",
+                calendar_id=professional['google_calendar_id']
             )
             
             if gcal_event:

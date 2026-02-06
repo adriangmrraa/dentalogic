@@ -15,7 +15,8 @@ import {
   Home,
   Clock,
   ShieldCheck,
-  LogOut
+  LogOut,
+  User
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -37,6 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
     { id: 'approvals', label: 'Personal', icon: <ShieldCheck size={20} />, path: '/aprobaciones', roles: ['ceo'] },
     { id: 'professionals', label: 'Profesionales', icon: <Stethoscope size={20} />, path: '/profesionales', roles: ['ceo', 'secretary'] },
     { id: 'treatments', label: 'Tratamientos', icon: <Clock size={20} />, path: '/tratamientos', roles: ['ceo', 'secretary'] },
+    { id: 'profile', label: 'Mi Perfil', icon: <User size={20} />, path: '/perfil', roles: ['ceo', 'professional', 'secretary'] },
     { id: 'settings', label: 'Configuración', icon: <Settings size={20} />, path: '/configuracion', roles: ['ceo'] },
   ];
 

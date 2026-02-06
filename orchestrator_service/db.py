@@ -209,6 +209,15 @@ class Database:
             FROM professionals p
             WHERE u.id = p.user_id AND u.first_name IS NULL;
             """,
+            # Parche 8: Agregar google_calendar_id a la tabla de profesionales
+            """
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='professionals' AND column_name='google_calendar_id') THEN
+                    ALTER TABLE professionals ADD COLUMN google_calendar_id VARCHAR(255);
+                END IF;
+            END $$;
+            """,
         ]
 
         async with self.pool.acquire() as conn:
