@@ -314,6 +314,7 @@ async def toggle_human_intervention(payload: HumanInterventionToggle):
             UPDATE patients 
             SET human_handoff_requested = TRUE,
                 human_override_until = $1,
+                last_derivhumano_at = NULL,
                 updated_at = NOW()
             WHERE phone_number = $2
         """, override_until, payload.phone)

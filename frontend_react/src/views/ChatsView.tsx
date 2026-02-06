@@ -132,9 +132,26 @@ export default function ChatsView() {
           : s
       ));
 
-      // Si es del chat seleccionado, actualizar mensajes
-      if (data.phone_number === selectedSession?.phone_number && data.role === 'user') {
-        fetchMessages(data.phone_number);
+      // Si es del chat seleccionado, agregar mensaje si no existe
+      if (data.phone_number === selectedSession?.phone_number) {
+        setMessages(prev => {
+          // Evitar duplicados (chequeo simple por contenido y timestamp reciente o id si viniera)
+          const isDuplicate = prev.some(m =>
+            m.role === data.role &&
+            m.content === data.message &&
+            new Date(m.created_at).getTime() > Date.now() - 5000
+          );
+
+          if (isDuplicate) return prev;
+
+          return [...prev, {
+            id: Date.now(), // ID temporal
+            role: data.role as 'user' | 'assistant' | 'system',
+            content: data.message,
+            created_at: new Date().toISOString(),
+            from_number: data.phone_number
+          }];
+        });
       }
     });
 
@@ -553,17 +570,30 @@ export default function ChatsView() {
             </div>
 
             {/* Alert Banner para derivhumano */}
-            {selectedSession.last_derivhumano_at && (
+            {selectedSession.last_derivhumano_at ? (
               <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center gap-2">
                 <AlertCircle size={16} className="text-orange-500" />
                 <span className="text-sm text-orange-700">
-                  El bot derivó este chat a las {new Date(selectedSession.last_derivhumano_at).toLocaleTimeString()}
+                  ⚠️ Derivación Automática: El bot derivó este chat a las {new Date(selectedSession.last_derivhumano_at).toLocaleTimeString()}
                 </span>
                 <button
                   onClick={handleRemoveSilence}
                   className="ml-auto text-xs text-orange-600 hover:underline"
                 >
                   Quitar silencio
+                </button>
+              </div>
+            ) : (selectedSession.status === 'silenced' || selectedSession.status === 'human_handling') && (
+              <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex items-center gap-2">
+                <Pause size={16} className="text-blue-500" />
+                <span className="text-sm text-blue-700">
+                  ✋ Modo Manual Activo. El asistente no responderá.
+                </span>
+                <button
+                  onClick={handleToggleHumanMode}
+                  className="ml-auto text-xs text-blue-600 hover:underline"
+                >
+                  Activar IA
                 </button>
               </div>
             )}

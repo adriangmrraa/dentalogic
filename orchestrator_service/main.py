@@ -692,6 +692,14 @@ async def chat_endpoint(req: ChatRequest):
             content=req.final_message,
             correlation_id=correlation_id
         )
+        
+        # --- Notificar al Frontend (Real-time) ---
+        await sio.emit('NEW_MESSAGE', {
+            'phone_number': req.final_phone,
+            'message': req.final_message,
+            'role': 'user'
+        })
+        # -----------------------------------------
 
         # 0. B) Verificar si hay intervención humana activa
         handoff_check = await db.pool.fetchrow("""
@@ -775,6 +783,14 @@ async def chat_endpoint(req: ChatRequest):
             content=assistant_response,
             correlation_id=correlation_id
         )
+        
+        # --- Notificar al Frontend (Real-time AI) ---
+        await sio.emit('NEW_MESSAGE', {
+            'phone_number': req.final_phone,
+            'message': assistant_response,
+            'role': 'assistant'
+        })
+        # --------------------------------------------
         
         logger.info(f"✅ Chat procesado para {req.final_phone} (correlation_id={correlation_id})")
         
