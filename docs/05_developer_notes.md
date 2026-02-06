@@ -32,7 +32,7 @@ El sistema carga los últimos **20 mensajes** de cada conversación por defecto.
 
 Redis almacena los `message_id` por 2 minutos para evitar procesar dobles webhooks de WhatsApp.
 
-## 4. Debugging
+## 4. Debugging 
 
 - **Logs Locales**: `docker-compose logs -f`
 - **Logs Producción**: Panel de EasyPanel → Logs.
