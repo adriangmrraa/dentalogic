@@ -134,6 +134,21 @@ class Database:
             END $$;
             """,
             # Agrega más parches aquí en el futuro...
+            # Parche 3: Permitir DNI y Apellido nulos para 'guests' (Chat Users)
+            """
+            DO $$ 
+            BEGIN 
+                -- Hacer dni nullable
+                ALTER TABLE patients ALTER COLUMN dni DROP NOT NULL;
+                
+                -- Hacer last_name nullable
+                ALTER TABLE patients ALTER COLUMN last_name DROP NOT NULL;
+                
+                -- El constraint de unique dni debe ignorar nulos (Postgres lo hace por defecto, pero revisamos index)
+            EXCEPTION
+                WHEN others THEN null; -- Ignorar si ya se aplicó o falla
+            END $$;
+            """,
         ]
 
         async with self.pool.acquire() as conn:
