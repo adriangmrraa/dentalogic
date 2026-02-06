@@ -4,9 +4,10 @@ import json
 import asyncpg
 import httpx
 import logging
+import re
 from datetime import datetime, timedelta, date
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Header, Depends, Request, status
+from fastapi import APIRouter, HTTPException, Header, Depends, Request, status, BackgroundTasks
 from pydantic import BaseModel
 from db import db
 from gcal_service import gcal_service
@@ -16,12 +17,16 @@ logger = logging.getLogger(__name__)
 # Configuración
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-token")
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "internal-secret-token")
-WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://whatsapp_service:8002")
-
-# Configuración
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-token")
+WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://whatsapp:8002")
 
 router = APIRouter(prefix="/admin", tags=["Dental Admin"])
+
+def normalize_phone(phone: str) -> str:
+    """Asegura que el número tenga el formato +123456789 (E.164)"""
+    clean = re.sub(r'\D', '', phone)
+    if not phone.startswith('+'):
+        return '+' + clean
+    return '+' + clean
 
 # --- Helper para emitir eventos de Socket.IO ---
 async def emit_appointment_event(event_type: str, data: Dict[str, Any], request: Request):
@@ -29,10 +34,31 @@ async def emit_appointment_event(event_type: str, data: Dict[str, Any], request:
     if hasattr(request.app.state, 'emit_appointment_event'):
         await request.app.state.emit_appointment_event(event_type, data)
 
-# Configuración
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-token")
-
-router = APIRouter(prefix="/admin", tags=["Dental Admin"])
+# --- Background Task para envío a WhatsApp ---
+async def send_to_whatsapp_task(phone: str, message: str, business_number: str):
+    """Tarea en segundo plano para no bloquear la UI mientras se envía el mensaje."""
+    normalized = normalize_phone(phone)
+    logger.info(f"📤 Intentando envío manual a WhatsApp: {normalized} via {WHATSAPP_SERVICE_URL}")
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            ws_resp = await client.post(
+                f"{WHATSAPP_SERVICE_URL}/send",
+                json={
+                    "to": normalized,
+                    "message": message
+                },
+                headers={
+                    "X-Internal-Token": INTERNAL_API_TOKEN,
+                    "X-Correlation-Id": str(uuid.uuid4())
+                },
+                params={"from_number": business_number}
+            )
+            if ws_resp.status_code != 200:
+                logger.error(f"❌ Error en WhatsApp Service ({ws_resp.status_code}): {ws_resp.text}")
+            else:
+                logger.info(f"✅ WhatsApp background send success for {normalized}")
+    except Exception as e:
+        logger.error(f"❌ WhatsApp background send CRITICAL failed for {normalized}: {str(e)}")
 
 # --- Dependencia de Seguridad (Triple Capa Nexus v7.6) ---
 async def verify_admin_token(
@@ -390,7 +416,7 @@ async def get_internal_credential(name: str, x_internal_token: str = Header(None
 
 
 @router.post("/chat/send", dependencies=[Depends(verify_admin_token)])
-async def send_chat_message(payload: ChatSendMessage, request: Request):
+async def send_chat_message(payload: ChatSendMessage, request: Request, background_tasks: BackgroundTasks):
     """Envía un mensaje manual por WhatsApp y lo guarda en BD."""
     try:
         # 1. Guardar en Base de Datos
@@ -410,21 +436,9 @@ async def send_chat_message(payload: ChatSendMessage, request: Request):
                 'role': 'assistant'
             })
 
-        # 3. Enviar a WhatsApp Service
-        # Obtenemos el ID del número de negocio (si está configurado)
+        # 3. Enviar a WhatsApp Service (Segundo plano para evitar latencia)
         business_number = os.getenv("YCLOUD_Phone_Number_ID", "default")
-        
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            ws_resp = await client.post(
-                f"{WHATSAPP_SERVICE_URL}/send",
-                json={
-                    "to": payload.phone,
-                    "message": payload.message
-                },
-                headers={"X-Internal-Token": INTERNAL_API_TOKEN},
-                params={"from_number": business_number}
-            )
-            ws_resp.raise_for_status()
+        background_tasks.add_task(send_to_whatsapp_task, payload.phone, payload.message, business_number)
             
         return {"status": "sent", "correlation_id": correlation_id}
         
