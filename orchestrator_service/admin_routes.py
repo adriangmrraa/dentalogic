@@ -604,7 +604,7 @@ async def create_patient(p: PatientCreate):
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error creando paciente: {str(e)}")
-泛
+
 @router.get("/patients/{id}/records", dependencies=[Depends(verify_admin_token)])
 async def get_clinical_records(id: int):
     """Obtener historia clínica de un paciente."""
