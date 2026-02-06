@@ -71,9 +71,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const handleNotificationClick = () => {
     if (notification) {
-      navigate('/chats');
-      // Podríamos pasar el teléfono por estado para que ChatsView lo seleccione automático
-      // navigate('/chats', { state: { selectPhone: notification.phone } });
+      // Navegar al chat seleccionando el teléfono
+      navigate('/chats', { state: { selectPhone: notification.phone } });
       setNotification(null);
     }
   };

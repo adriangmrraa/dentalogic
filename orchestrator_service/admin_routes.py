@@ -2,6 +2,7 @@ import os
 import uuid
 import json
 import asyncpg
+import httpx
 import logging
 from datetime import datetime, timedelta, date
 from typing import List, Optional, Dict, Any
@@ -11,6 +12,11 @@ from db import db
 from gcal_service import gcal_service
 
 logger = logging.getLogger(__name__)
+
+# Configuración
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-token")
+INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "internal-secret-token")
+WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://whatsapp_service:8002")
 
 # Configuración
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-token")
@@ -360,6 +366,71 @@ async def remove_silence(payload: dict):
     """, phone)
     
     return {"status": "removed", "phone": phone}
+
+
+@router.get("/internal/credentials/{name}")
+async def get_internal_credential(name: str, x_internal_token: str = Header(None)):
+    """Permite a servicios internos obtener credenciales de forma segura."""
+    if not INTERNAL_API_TOKEN or x_internal_token != INTERNAL_API_TOKEN:
+        raise HTTPException(status_code=401, detail="Internal token invalid")
+    
+    # Mapeo de nombres a variables de entorno o valores de BD
+    creds = {
+        "YCLOUD_API_KEY": os.getenv("YCLOUD_API_KEY"),
+        "YCLOUD_WEBHOOK_SECRET": os.getenv("YCLOUD_WEBHOOK_SECRET"),
+        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+        "YCLOUD_Phone_Number_ID": os.getenv("YCLOUD_Phone_Number_ID")
+    }
+    
+    val = creds.get(name)
+    if not val:
+        raise HTTPException(status_code=404, detail="Credential not found")
+        
+    return {"name": name, "value": val}
+
+
+@router.post("/chat/send", dependencies=[Depends(verify_admin_token)])
+async def send_chat_message(payload: ChatSendMessage, request: Request):
+    """Envía un mensaje manual por WhatsApp y lo guarda en BD."""
+    try:
+        # 1. Guardar en Base de Datos
+        correlation_id = str(uuid.uuid4())
+        await db.append_chat_message(
+            from_number=payload.phone,
+            role='assistant',
+            content=payload.message,
+            correlation_id=correlation_id
+        )
+        
+        # 2. Notificar al Frontend vía Socket
+        if hasattr(request.app.state, 'emit_appointment_event'):
+            await request.app.state.emit_appointment_event('NEW_MESSAGE', {
+                'phone_number': payload.phone,
+                'message': payload.message,
+                'role': 'assistant'
+            })
+
+        # 3. Enviar a WhatsApp Service
+        # Obtenemos el ID del número de negocio (si está configurado)
+        business_number = os.getenv("YCLOUD_Phone_Number_ID", "default")
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            ws_resp = await client.post(
+                f"{WHATSAPP_SERVICE_URL}/send",
+                json={
+                    "to": payload.phone,
+                    "message": payload.message
+                },
+                headers={"X-Internal-Token": INTERNAL_API_TOKEN},
+                params={"from_number": business_number}
+            )
+            ws_resp.raise_for_status()
+            
+        return {"status": "sent", "correlation_id": correlation_id}
+        
+    except Exception as e:
+        logger.error(f"Error sending manual message: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==================== ENDPOINTS DASHBOARD ====================

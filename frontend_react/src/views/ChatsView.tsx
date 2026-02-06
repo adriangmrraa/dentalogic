@@ -213,6 +213,19 @@ export default function ChatsView() {
       setLoading(true);
       const response = await api.get('/admin/chat/sessions');
       setSessions(response.data);
+
+      // Deep Link Logic: Si venimos de notificación
+      const state = location.state as { selectPhone?: string } | null;
+      if (state?.selectPhone) {
+        const targetPhone = state.selectPhone;
+        const targetSession = response.data.find((s: ChatSession) => s.phone_number === targetPhone);
+        if (targetSession) {
+          setSelectedSession(targetSession);
+          // Limpiar state para evitar re-selección futura
+          window.history.replaceState({}, document.title);
+        }
+      }
+
     } catch (error) {
       console.error('Error fetching sessions:', error);
       setSessions([]);
@@ -638,12 +651,19 @@ export default function ChatsView() {
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Escribe un mensaje..."
-                  className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage(e as any);
+                    }
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-medical-500 bg-white text-gray-900"
                 />
                 <button
                   type="submit"
                   disabled={sending || !newMessage.trim()}
-                  className="p-2 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50"
+                  className="p-2 bg-medical-600 text-white rounded-lg hover:bg-medical-700 disabled:opacity-50 flex items-center justify-center transition-colors min-w-[44px]"
+                  title="Enviar mensaje"
                 >
                   <Send size={20} />
                 </button>
