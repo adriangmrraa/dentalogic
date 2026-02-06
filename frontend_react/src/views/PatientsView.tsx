@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Edit, Trash2, X, FileText, Brain } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, X, FileText, Brain, Calendar, User, Clock, Stethoscope } from 'lucide-react';
 import api from '../api/axios';
 
 interface Patient {
@@ -16,6 +16,19 @@ interface Patient {
   health_conditions?: string[];
 }
 
+interface TreatmentType {
+  code: string;
+  name: string;
+  description: string;
+  category: string;
+}
+
+interface Professional {
+  id: number;
+  name: string;
+  is_active: boolean;
+}
+
 export default function PatientsView() {
   const navigate = useNavigate();
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -27,6 +40,11 @@ export default function PatientsView() {
   const [semanticLoading, setSemanticLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
+
+  // Resources for dropdowns
+  const [treatments, setTreatments] = useState<TreatmentType[]>([]);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -36,21 +54,36 @@ export default function PatientsView() {
     dni: '',
   });
 
+  const [appointmentData, setAppointmentData] = useState({
+    treatment_code: '',
+    professional_id: '',
+    date: '',
+    time: ''
+  });
+
   // Fetch patients on mount
   useEffect(() => {
     fetchPatients();
+    fetchResources();
   }, []);
 
   // Filter patients when search term changes
   useEffect(() => {
     const filtered = patients.filter((patient) => {
       const searchLower = searchTerm.toLowerCase();
+      // Safe check for nulls
+      const fname = patient.first_name || '';
+      const lname = patient.last_name || '';
+      const phone = patient.phone_number || '';
+      const dni = patient.dni || '';
+      const email = patient.email || '';
+
       return (
-        patient.first_name?.toLowerCase().includes(searchLower) ||
-        patient.last_name?.toLowerCase().includes(searchLower) ||
-        patient.phone_number?.includes(searchTerm) ||
-        patient.dni?.includes(searchTerm) ||
-        patient.email?.toLowerCase().includes(searchLower)
+        fname.toLowerCase().includes(searchLower) ||
+        lname.toLowerCase().includes(searchLower) ||
+        phone.includes(searchTerm) ||
+        dni.includes(searchTerm) ||
+        email.toLowerCase().includes(searchLower)
       );
     });
     setFilteredPatients(filtered);
@@ -66,6 +99,19 @@ export default function PatientsView() {
       console.error('Error fetching patients:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchResources = async () => {
+    try {
+      const [treatResponse, profResponse] = await Promise.all([
+        api.get('/admin/treatment-types'),
+        api.get('/admin/professionals')
+      ]);
+      setTreatments(treatResponse.data);
+      setProfessionals(profResponse.data.filter((p: Professional) => p.is_active));
+    } catch (error) {
+      console.error('Error fetching resources:', error);
     }
   };
 
@@ -108,11 +154,37 @@ export default function PatientsView() {
         insurance: formData.obra_social
       };
 
+      let patientId;
+
       if (editingPatient) {
         await api.put(`/admin/patients/${editingPatient.id}`, payload);
+        patientId = editingPatient.id;
       } else {
-        await api.post('/admin/patients', payload);
+        const res = await api.post('/admin/patients', payload);
+        patientId = res.data.id;
       }
+
+      // If creating new patient AND appointment data is filled
+      if (!editingPatient && appointmentData.treatment_code && appointmentData.professional_id && appointmentData.date && appointmentData.time) {
+        try {
+          const aptDate = new Date(`${appointmentData.date}T${appointmentData.time}`);
+          await api.post('/admin/appointments', {
+            patient_id: patientId,
+            professional_id: parseInt(appointmentData.professional_id),
+            datetime: aptDate.toISOString(),
+            type: appointmentData.treatment_code,
+            notes: "Turno inicial (Alta manual)",
+            check_collisions: true
+          });
+          alert('Paciente y Turno Inicial registrados correctamente.');
+        } catch (aptError) {
+          console.error("Error creating appointment:", aptError);
+          alert('Paciente creado, pero hubo un error al agendar el turno. Por favor agendalo manualmente.');
+        }
+      } else if (!editingPatient) {
+        // Just verify creation
+      }
+
       fetchPatients();
       closeModal();
     } catch (error) {
@@ -142,6 +214,8 @@ export default function PatientsView() {
       obra_social: patient.obra_social || '',
       dni: patient.dni || '',
     });
+    // Clear appointment data on edit
+    setAppointmentData({ treatment_code: '', professional_id: '', date: '', time: '' });
     setShowModal(true);
   };
 
@@ -155,6 +229,8 @@ export default function PatientsView() {
       obra_social: '',
       dni: '',
     });
+    // Reset appointment data
+    setAppointmentData({ treatment_code: '', professional_id: '', date: '', time: '' });
     setShowModal(true);
   };
 
@@ -281,6 +357,10 @@ export default function PatientsView() {
                       <div className="text-sm text-gray-500">{patient.obra_social || '-'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {/* Health conditions placeholder */}
+                      -
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(patient.created_at).toLocaleDateString('es-AR')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -318,9 +398,9 @@ export default function PatientsView() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-md mx-4">
-            <div className="flex justify-between items-center p-4 border-b">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg w-full max-w-2xl mx-4 my-8">
+            <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
               <h2 className="text-xl font-bold">
                 {editingPatient ? 'Editar Paciente' : 'Nuevo Paciente'}
               </h2>
@@ -328,77 +408,165 @@ export default function PatientsView() {
                 <X size={24} />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-4">
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleSubmit} className="p-6">
+
+              {/* Sections Container */}
+              <div className="space-y-6">
+
+                {/* 1. Datos Personales */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.first_name}
-                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
+                  <h3 className="text-lg font-medium text-gray-800 mb-4 flex items-center gap-2">
+                    <User size={18} />
+                    Datos Personales
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Nombre *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.first_name}
+                        onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Apellido *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.last_name}
+                        onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Teléfono *
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        value={formData.phone_number}
+                        onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        DNI
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.dni}
+                        onChange={(e) => setFormData({ ...formData, dni: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Obra Social
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.obra_social}
+                        onChange={(e) => setFormData({ ...formData, obra_social: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="Ej: OSDE, Swiss Medical, Particular"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Apellido
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.last_name}
-                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Teléfono *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={formData.phone_number}
-                    onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    DNI
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.dni}
-                    onChange={(e) => setFormData({ ...formData, dni: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Obra Social
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.obra_social}
-                    onChange={(e) => setFormData({ ...formData, obra_social: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                </div>
+
+                {/* 2. Turno Inicial (Solo para Nuevos) */}
+                {!editingPatient && (
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h3 className="text-lg font-medium text-gray-800 mb-4 flex items-center gap-2">
+                      <Calendar size={18} />
+                      Agendar Primer Turno (Opcional)
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Tratamiento / Servicio
+                        </label>
+                        <div className="relative">
+                          <Stethoscope className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                          <select
+                            value={appointmentData.treatment_code}
+                            onChange={(e) => setAppointmentData({ ...appointmentData, treatment_code: e.target.value })}
+                            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                          >
+                            <option value="">Seleccionar tratamiento...</option>
+                            {treatments.map(t => (
+                              <option key={t.code} value={t.code}>{t.name} ({t.category})</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Profesional
+                        </label>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                          <select
+                            value={appointmentData.professional_id}
+                            onChange={(e) => setAppointmentData({ ...appointmentData, professional_id: e.target.value })}
+                            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                          >
+                            <option value="">Seleccionar profesional...</option>
+                            {professionals.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Fecha
+                        </label>
+                        <input
+                          type="date"
+                          value={appointmentData.date}
+                          onChange={(e) => setAppointmentData({ ...appointmentData, date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Hora
+                        </label>
+                        <div className="relative">
+                          <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                          <input
+                            type="time"
+                            value={appointmentData.time}
+                            onChange={(e) => setAppointmentData({ ...appointmentData, time: e.target.value })}
+                            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
+
               <div className="flex justify-end gap-3 mt-6">
                 <button
                   type="button"

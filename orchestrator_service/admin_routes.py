@@ -719,7 +719,7 @@ async def list_patients(search: str = None, limit: int = 50):
     query = """
         SELECT id, first_name, last_name, phone_number, email, insurance_provider as obra_social, dni, created_at, status 
         FROM patients 
-        WHERE status != 'deleted'
+        WHERE status = 'active'
     """
     params = []
     
@@ -1443,3 +1443,11 @@ async def get_treatment_duration(code: str, urgency_level: str = "normal"):
             "max": max_duration
         }
     }
+
+
+@router.get('/treatment-types')
+async def list_treatment_types():
+    "Retorna la lista de tipos de tratamientos disponibles."
+    query = "SELECT code, name, description, category FROM treatment_types WHERE is_active = true ORDER BY name"
+    rows = await db.pool.fetch(query)
+    return [dict(row) for row in rows]

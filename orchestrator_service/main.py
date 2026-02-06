@@ -236,11 +236,20 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         return f"No pude consultar disponibilidad. Prueba diciendo 'Quiero agendar mañana'."
 
 @tool
-async def book_appointment(date_time: str, treatment_reason: str):
+async def book_appointment(date_time: str, treatment_reason: str, 
+                         first_name: Optional[str] = None, last_name: Optional[str] = None, 
+                         dni: Optional[str] = None, insurance_provider: Optional[str] = None):
     """
-    Registra un turno en la BD. Úsalo cuando el paciente confirma fecha, hora y motivo.
-    date_time: Fecha y hora del turno (ej: 'mañana 14:00')
-    treatment_reason: Tipo de tratamiento (checkup, cleaning, etc.)
+    Registra un turno en la BD. 
+    Para pacientes NUEVOS (status='guest'), OBLIGATORIAMENTE debes proveer first_name, last_name, dni e insurance_provider.
+    Si faltan esos datos en un usuario nuevo, el turno será rechazado.
+    
+    date_time: Fecha y hora (ej: 'mañana 14:00')
+    treatment_reason: Motivo (checkup, cleaning, etc.)
+    first_name: Nombre del paciente (Obligatorio si es nuevo)
+    last_name: Apellido del paciente (Obligatorio si es nuevo)
+    dni: Documento de identidad (Obligatorio si es nuevo)
+    insurance_provider: Obra social o 'PARTICULAR' (Obligatorio si es nuevo)
     """
     phone = current_customer_phone.get()
     
@@ -251,9 +260,48 @@ async def book_appointment(date_time: str, treatment_reason: str):
         # 1. Parsear datetime
         apt_datetime = parse_datetime(date_time)
         
-        # 2. Asegurar paciente (Automáticamente lo crea o promueve a 'active')
-        patient_row = await db.ensure_patient_exists(phone, status='active')
-        patient_id = patient_row['id']
+        # 2. Verificar estado del paciente
+        # Primero buscamos si existe
+        existing_patient = await db.pool.fetchrow("SELECT id, status, first_name, last_name FROM patients WHERE phone_number = $1", phone)
+        
+        if existing_patient:
+            if existing_patient['status'] == 'guest':
+                # ES UN LEAD -> REQUIERE VALIDACIÓN ESTRICTA
+                missing_fields = []
+                if not first_name: missing_fields.append("Nombre")
+                if not last_name: missing_fields.append("Apellido")
+                if not dni: missing_fields.append("DNI")
+                if not insurance_provider: missing_fields.append("Obra Social")
+                
+                if missing_fields:
+                    return f"❌ Faltan datos para confirmar la reserva. Por favor pedile al paciente: {', '.join(missing_fields)}."
+                
+                # Actualizar a ACTIVE con los datos reales
+                await db.pool.execute("""
+                    UPDATE patients 
+                    SET first_name = $1, last_name = $2, dni = $3, insurance_provider = $4, status = 'active', updated_at = NOW()
+                    WHERE id = $5
+                """, first_name, last_name, dni, insurance_provider, existing_patient['id'])
+                
+                patient_id = existing_patient['id']
+                logger.info(f"✅ Lead {phone} convertido a PACIENTE (ID: {patient_id}) durante reserva.")
+                
+            else:
+                # YA ES PACIENTE ACTIVO -> Usar ID existente
+                patient_id = existing_patient['id']
+        else:
+            # Caso raro: No existe ni como lead (debería existir al entrar el chat).
+            # Lo creamos como ACTIVE directamente si tenemos los datos, o rechazamos.
+            if not (first_name and last_name and dni and insurance_provider):
+                 return "❌ No tengo tus datos registrados. Necesito Nombre, Apellido, DNI y Obra Social para agendar."
+            
+            row = await db.pool.fetchrow("""
+                INSERT INTO patients (tenant_id, phone_number, first_name, last_name, dni, insurance_provider, status, created_at)
+                VALUES (1, $1, $2, $3, $4, $5, 'active', NOW())
+                RETURNING id
+            """, phone, first_name, last_name, dni, insurance_provider)
+            patient_id = row['id']
+
         
         # 3. Obtener profesional activo (priorizando el que el usuario pida o el primero libre)
         # Por ahora tomamos el primero activo. 
@@ -614,8 +662,18 @@ PRESENTACIÓN DE SERVICIOS (ENFOQUE EN VALOR):
 
 FLUJO DE AGENDAMIENTO:
 1. Disponibilidad: Siempre usá 'check_availability'. Ofrecé 3 opciones claras.
-2. Información: Necesitás Nombre completo y Motivo. Pedilo con naturalidad.
-3. Confirmación: Usá 'book_appointment' solo ante confirmación explícita.
+2. CUALIFICACIÓN Y DATOS (CRÍTICO):
+   - Si el paciente es nuevo (o el sistema te indica que faltan datos), ANTES de reservar, debés pedir:
+     • Nombre
+     • Apellido
+     • DNI
+     • Obra Social (o confirmar si es Particular)
+   - Si el usuario dice "no tengo obra social", registralo como "PARTICULAR".
+   
+3. CONFIRMACIÓN Y RESERVA:
+   - Solo cuando tengas fecha, hora, motivo Y LOS DATOS PERSONALES COMPLETOS, ejecutá 'book_appointment'.
+   - Pasale a la tool los argumentos: first_name, last_name, dni, insurance_provider.
+   - Si la tool te devuelve error por falta de datos, pedíselos amablemente al usuario.
 
 TRIAJE Y URGENCIAS:
 • Ante dolor o accidentes, 'triage_urgency' es siempre lo primero.
