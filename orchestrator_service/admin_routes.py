@@ -191,41 +191,44 @@ async def get_chat_sessions():
     Devuelve información de paciente, último mensaje, y estado de intervención humana.
     """
     rows = await db.pool.fetch("""
-        SELECT DISTINCT ON (p.phone_number)
-            p.phone_number,
-            p.id as patient_id,
-            p.first_name || ' ' || COALESCE(p.last_name, '') as patient_name,
-            cm.content as last_message,
-            cm.created_at as last_message_time,
-            p.human_handoff_requested,
-            p.human_override_until,
-            p.last_derivhumano_at,
-            CASE 
-                WHEN p.human_handoff_requested AND p.human_override_until > NOW() THEN 'human_handling'
-                WHEN p.human_override_until > NOW() THEN 'silenced'
-                ELSE 'active'
-            END as status,
-            urgency.urgency_level
-        FROM patients p
-        LEFT JOIN LATERAL (
-            SELECT content, created_at, role
-            FROM chat_messages
-            WHERE from_number = p.phone_number
-            ORDER BY created_at DESC
-            LIMIT 1
-        ) cm ON true
-        LEFT JOIN LATERAL (
-            SELECT urgency_level
-            FROM appointments
-            WHERE patient_id = p.id
-            ORDER BY created_at DESC
-            LIMIT 1
-        ) urgency ON true
-        WHERE EXISTS (
-            SELECT 1 FROM chat_messages 
-            WHERE from_number = p.phone_number
-        )
-        ORDER BY cm.created_at DESC NULLS LAST
+        SELECT * FROM (
+            SELECT DISTINCT ON (p.phone_number)
+                p.phone_number,
+                p.id as patient_id,
+                p.first_name || ' ' || COALESCE(p.last_name, '') as patient_name,
+                cm.content as last_message,
+                cm.created_at as last_message_time,
+                p.human_handoff_requested,
+                p.human_override_until,
+                p.last_derivhumano_at,
+                CASE 
+                    WHEN p.human_handoff_requested AND p.human_override_until > NOW() THEN 'human_handling'
+                    WHEN p.human_override_until > NOW() THEN 'silenced'
+                    ELSE 'active'
+                END as status,
+                urgency.urgency_level
+            FROM patients p
+            LEFT JOIN LATERAL (
+                SELECT content, created_at, role
+                FROM chat_messages
+                WHERE from_number = p.phone_number
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) cm ON true
+            LEFT JOIN LATERAL (
+                SELECT urgency_level
+                FROM appointments
+                WHERE patient_id = p.id
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) urgency ON true
+            WHERE EXISTS (
+                SELECT 1 FROM chat_messages 
+                WHERE from_number = p.phone_number
+            )
+            ORDER BY p.phone_number, cm.created_at DESC
+        ) sub
+        ORDER BY last_message_time DESC NULLS LAST
     """)
     
     sessions = []
