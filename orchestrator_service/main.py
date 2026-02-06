@@ -313,6 +313,14 @@ async def book_appointment(date_time: str, treatment_reason: str,
         if existing_patient:
             if existing_patient['status'] == 'guest':
                 # ES UN LEAD -> REQUIERE VALIDACIÓN ESTRICTA
+                
+                # Auto-parse full name if provided as single string
+                if first_name and not last_name and ' ' in first_name:
+                    parts = first_name.strip().split(maxsplit=1)
+                    first_name = parts[0]
+                    last_name = parts[1] if len(parts) > 1 else None
+                    logger.info(f"📝 Auto-parsed full name: first='{first_name}', last='{last_name}'")
+                
                 missing_fields = []
                 if not first_name: missing_fields.append("Nombre")
                 if not last_name: missing_fields.append("Apellido")
@@ -338,6 +346,14 @@ async def book_appointment(date_time: str, treatment_reason: str,
         else:
             # Caso raro: No existe ni como lead (debería existir al entrar el chat).
             # Lo creamos como ACTIVE directamente si tenemos los datos, o rechazamos.
+            
+            # Auto-parse full name if provided as single string
+            if first_name and not last_name and ' ' in first_name:
+                parts = first_name.strip().split(maxsplit=1)
+                first_name = parts[0]
+                last_name = parts[1] if len(parts) > 1 else None
+                logger.info(f"📝 Auto-parsed full name for new patient: first='{first_name}', last='{last_name}'")
+            
             if not (first_name and last_name and dni and insurance_provider):
                  return "❌ No tengo tus datos registrados. Necesito Nombre, Apellido, DNI y Obra Social para agendar."
             
