@@ -3,7 +3,7 @@ import json
 import logging
 import asyncio
 import uuid
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from typing import List, Optional, Dict, Any
 from contextvars import ContextVar
 from contextlib import asynccontextmanager
@@ -638,9 +638,17 @@ async def chat_endpoint(req: ChatRequest):
     current_customer_phone.set(req.final_phone)
     correlation_id = str(uuid.uuid4())
     
+    # 0. A) Ensure patient reference exists (Fix for visibility + Name)
     try:
-        # 0. A) Ensure patient reference exists (Fix for visibility + Name)
         await db.ensure_patient_exists(req.final_phone, req.final_name)
+        
+        # 1. Guardar mensaje del usuario PRIMERO (para no perderlo si hay error)
+        await db.append_chat_message(
+            from_number=req.final_phone,
+            role='user',
+            content=req.final_message,
+            correlation_id=correlation_id
+        )
 
         # 0. B) Verificar si hay intervención humana activa
         handoff_check = await db.pool.fetchrow("""
@@ -655,15 +663,19 @@ async def chat_endpoint(req: ChatRequest):
             
             # Si hay override activo y no ha expirado, la IA permanece silenciosa
             if is_handoff_active and override_until:
-                if override_until > datetime.now():
-                    logger.info(f"🔇 IA silenciada para {req.phone} hasta {override_until}")
-                    # Guardar el mensaje del usuario pero NO responder
-                    await db.append_chat_message(
-                        from_number=req.final_phone,
-                        role='user',
-                        content=req.final_message,
-                        correlation_id=correlation_id
-                    )
+                # Fix: Robust comparison (Normalize to UTC)
+                now_utc = datetime.now(timezone.utc)
+                
+                # Ensure override_until is aware
+                if override_until.tzinfo is None:
+                    # Assume stored as naive UTC (or local, but safe fallback to UTC)
+                    override_until = override_until.replace(tzinfo=timezone.utc)
+                else:
+                    override_until = override_until.astimezone(timezone.utc)
+                
+                if override_until > now_utc:
+                    logger.info(f"🔇 IA silenciada para {req.final_phone} hasta {override_until}")
+                    # Ya guardamos el mensaje arriba, solo retornamos silencio
                     return {
                         "output": "",  # Sin respuesta
                         "correlation_id": correlation_id,
@@ -679,24 +691,31 @@ async def chat_endpoint(req: ChatRequest):
                         WHERE phone_number = $1
                     """, req.final_phone)
         
-        # 1. Cargar historial de BD (últimos 20 mensajes)
+        # 2. Cargar historial de BD (últimos 20 mensajes)
         chat_history = await db.get_chat_history(req.final_phone, limit=20)
         
         # Convertir a formato LangChain
         messages = []
+        # El último mensaje ya fue guardado en el paso 1, pero get_chat_history lo traerá si fue commit inmediato.
+        # LangChain necesita historial + input actual. 
+        # Si get_chat_history trae el último, lo duplicaríamos al pasarlo como input separado?
+        # get_chat_history trae "últimos N", ordenados cronológicamente.
+        # Si acabamos de insertar, debería estar ahí.
+        
+        # Solución de limpieza: Filtramos el mensaje actual del historial si aparece duplicado o
+        # simplemente confiamos en que LangChain maneja el contexto.
+        # Pero standard: input es "current query", chat_history es "past context".
+        
+        # Vamos a remover el último mensaje del historial si es idéntico al actual, 
+        # para no pasarlo como contexto Y como input.
+        if chat_history and chat_history[-1]['content'] == req.final_message and chat_history[-1]['role'] == 'user':
+            chat_history.pop() 
+
         for msg in chat_history:
             if msg['role'] == 'user':
                 messages.append(HumanMessage(content=msg['content']))
             else:
                 messages.append(AIMessage(content=msg['content']))
-        
-        # 2. Guardar mensaje del usuario
-        await db.append_chat_message(
-            from_number=req.final_phone,
-            role='user',
-            content=req.final_message,
-            correlation_id=correlation_id
-        )
         
         # 3. Invocar agente
         response = await agent_executor.ainvoke({
