@@ -15,7 +15,7 @@ El system prompt tiene 5 secciones principales que garantizan la consistencia de
       ↓
 [PRESENTACIÓN DE SERVICIOS] -> Enfoque en beneficios/valor
       ↓
-[FLUJO DE AGENDAMIENTO] -> check_availability -> book_appointment
+[FLUJO DE AGENDAMIENTO] -> check_availability -> CUALIFICACIÓN (DNI/OS) -> book_appointment
 ```
 
 ## 2. Sección: Reglas de Oro (Identidad)

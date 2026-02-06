@@ -18,7 +18,7 @@ You are an expert developer tasked with refactoring an existing multi-tenant AI 
 * **From Store to Clinic:** Replace Tienda Nube tools (search\_products, orders) with Dental Tools.  
 * **Required New Tools:**  
   * check\_availability(): Integration with Google Calendar API (Mirror mode).  
-  * book\_appointment(): Create events in Calendar and entries in PGSQL.  
+  * book_appointment(): Create events in Calendar and entries in PGSQL. Support for new patient registration (first_name, last_name, dni, insurance).
   * triage\_urgency(): NLP classification for "Pain/Emergency" to flag in Dashboard.  
 * **Memory:** Maintain the 20-message sliding window but adapt the sys\_template to the "Dental Professional" persona (Argentine, warm, but clinical).  
 * **Human Silence:** Keep the 24h lockout mechanism (human\_override\_until) for manual intervention.

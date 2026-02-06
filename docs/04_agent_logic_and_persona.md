@@ -35,6 +35,13 @@ El bot actúa como la primera línea de atención de la clínica de la Dra. Laur
 - El agente DEBE ejecutar `check_availability()` antes de proponer un horario.
 - Si el paciente confirma, se usa `book_appointment()`.
 
+### 2.3 Diferenciación Lead vs Paciente
+**Regla:** Un usuario nuevo ("Lead") NO es un paciente hasta que agenda su primer turno.
+
+**Implementación:**
+- Si el usuario es nuevo (`status='guest'`), la IA **DEBE** pedir Nombre, Apellido, DNI y Obra Social antes de confirmar.
+- El tool `book_appointment` rechazará la reserva si faltan estos datos en un usuario guest.
+
 ---
 
 ## 3. Herramientas (Tools) Disponibles
@@ -42,7 +49,7 @@ El bot actúa como la primera línea de atención de la clínica de la Dra. Laur
 | Tool | Parámetros | Función |
 | :--- | :--- | :--- |
 | `check_availability` | `date` | Consulta huecos libres en la BD de la clínica. |
-| `book_appointment` | `datetime, reason` | Registra el turno y dispara la notificación al dashboard. |
+| `book_appointment` | `datetime, reason, [first_name, last_name, dni, insurance]` | Registra el turno. **Requiere datos personales extra si es paciente nuevo.** |
 | `triage_urgency` | `symptoms` | Analiza el texto/audio para determinar la gravedad. |
 | `derivhumano` | `reason` | Pasa la conversación a un operador y activa el silencio de 24h. |
 
