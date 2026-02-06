@@ -492,6 +492,13 @@ export default function AgendaView() {
   ];
 
   const handleDateClick = (info: { date: Date }) => {
+    // Prevenir agendamiento en fechas/horas pasadas
+    const now = new Date();
+    if (info.date < now) {
+      alert('⚠️ No se pueden agendar citas en fechas u horarios pasados. Por favor, seleccioná una fecha futura.');
+      return;
+    }
+
     // Para datetime-local input, necesitamos YYYY-MM-DDTHH:mm en hora LOCAL
     const localDate = new Date(info.date.getTime() - info.date.getTimezoneOffset() * 60000);
     const localIso = localDate.toISOString().slice(0, 16);
@@ -766,6 +773,14 @@ export default function AgendaView() {
               left: 'prev,next today',
               center: 'title',
               right: 'timeGridWeek,timeGridDay,dayGridMonth',
+            }}
+            validRange={{
+              start: new Date().toISOString().split('T')[0], // Solo desde hoy en adelante
+            }}
+            selectAllow={(selectInfo) => {
+              // Bloquear selección de fechas/horas pasadas
+              const now = new Date();
+              return selectInfo.start >= now;
             }}
             events={calendarEvents}
             dateClick={handleDateClick}
