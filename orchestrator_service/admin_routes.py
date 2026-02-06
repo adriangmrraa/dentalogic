@@ -225,7 +225,7 @@ async def get_chat_sessions():
             SELECT 1 FROM chat_messages 
             WHERE from_number = p.phone_number
         )
-        ORDER BY p.phone_number, cm.created_at DESC
+        ORDER BY cm.created_at DESC NULLS LAST
     """)
     
     sessions = []

@@ -136,15 +136,22 @@ export default function ChatsView() {
             : s
         );
 
+        // Re-ordenar: último mensaje arriba
+        const sortedSessions = [...updatedSessions].sort((a, b) => {
+          const timeA = new Date(a.last_message_time || 0).getTime();
+          const timeB = new Date(b.last_message_time || 0).getTime();
+          return timeB - timeA;
+        });
+
         // Si la sesión seleccionada recibió un mensaje, actualizarla para refrescar la UI (banner/input)
         if (data.phone_number === selectedSession?.phone_number) {
-          const current = updatedSessions.find(s => s.phone_number === data.phone_number);
+          const current = sortedSessions.find(s => s.phone_number === data.phone_number);
           if (current) {
             setSelectedSession(current);
           }
         }
 
-        return updatedSessions;
+        return sortedSessions;
       });
 
       // Si es del chat seleccionado, agregar mensaje si no existe
