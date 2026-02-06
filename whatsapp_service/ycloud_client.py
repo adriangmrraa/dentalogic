@@ -35,7 +35,7 @@ class YCloudClient:
             "type": "text",
             "text": {"body": text, "preview_url": True}
         }
-        logger.info("ycloud_send_text", to=to, text_preview=text[:30], correlation_id=correlation_id)
+        logger.info("ycloud_send_text", to=to, from_number=self.business_number, text_preview=text[:30], correlation_id=correlation_id)
         return await self._post("/whatsapp/messages/sendDirectly", payload, correlation_id)
 
     async def send_image(self, to: str, image_url: str, correlation_id: str):

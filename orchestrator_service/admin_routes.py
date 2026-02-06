@@ -405,12 +405,12 @@ async def get_internal_credential(name: str, x_internal_token: str = Header(None
         "YCLOUD_API_KEY": os.getenv("YCLOUD_API_KEY"),
         "YCLOUD_WEBHOOK_SECRET": os.getenv("YCLOUD_WEBHOOK_SECRET"),
         "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
-        "YCLOUD_Phone_Number_ID": os.getenv("YCLOUD_Phone_Number_ID")
+        "YCLOUD_Phone_Number_ID": os.getenv("YCLOUD_Phone_Number_ID") or os.getenv("BOT_PHONE_NUMBER")
     }
     
     val = creds.get(name)
-    if not val:
-        raise HTTPException(status_code=404, detail="Credential not found")
+    if val is None: # Solo 404 si la clave no existe en nuestro mapeo
+        raise HTTPException(status_code=404, detail=f"Credential '{name}' not supported by this endpoint")
         
     return {"name": name, "value": val}
 
@@ -437,7 +437,7 @@ async def send_chat_message(payload: ChatSendMessage, request: Request, backgrou
             })
 
         # 3. Enviar a WhatsApp Service (Segundo plano para evitar latencia)
-        business_number = os.getenv("YCLOUD_Phone_Number_ID", "default")
+        business_number = os.getenv("YCLOUD_Phone_Number_ID") or os.getenv("BOT_PHONE_NUMBER") or "default"
         background_tasks.add_task(send_to_whatsapp_task, payload.phone, payload.message, business_number)
             
         return {"status": "sent", "correlation_id": correlation_id}

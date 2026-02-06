@@ -504,6 +504,8 @@ async def ycloud_webhook(request: Request):
 @app.post("/send")
 async def send_message(message: SendMessage, request: Request):
     """Internal endpoint for sending manual messages from orchestrator."""
+    correlation_id = request.headers.get("X-Correlation-Id") or str(uuid.uuid4())
+    logger.info("manual_send_request", to=message.to, correlation_id=correlation_id)
     token = request.headers.get("X-Internal-Token")
     if token != INTERNAL_API_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -543,6 +545,11 @@ async def send_message(message: SendMessage, request: Request):
         if not business_number:
              # Basic fallback
              business_number = "default"
+        
+        logger.info("manual_send_config", 
+                    has_api_key=bool(v_ycloud), 
+                    business_number=business_number, 
+                    correlation_id=correlation_id)
 
         # Initialize Client
         client = YCloudClient(v_ycloud, business_number)
