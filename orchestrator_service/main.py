@@ -724,9 +724,9 @@ async def chat_endpoint(req: ChatRequest):
         }
         
     except Exception as e:
-        logger.error(f"❌ Error en chat para {req.phone}: {str(e)}")
+        logger.error(f"❌ Error en chat para {req.final_phone}: {str(e)}")
         await db.append_chat_message(
-            from_number=req.phone,
+            from_number=req.final_phone,
             role='system',
             content=f"Error interno: {str(e)}",
             correlation_id=correlation_id
