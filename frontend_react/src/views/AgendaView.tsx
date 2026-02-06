@@ -492,6 +492,10 @@ export default function AgendaView() {
   ];
 
   const handleDateClick = (info: { date: Date }) => {
+    // Para datetime-local input, necesitamos YYYY-MM-DDTHH:mm en hora LOCAL
+    const localDate = new Date(info.date.getTime() - info.date.getTimezoneOffset() * 60000);
+    const localIso = localDate.toISOString().slice(0, 16);
+
     setSelectedDate(info.date);
     setSelectedEvent(null);
     setCollisionWarning(null);
@@ -499,7 +503,7 @@ export default function AgendaView() {
     setFormData({
       patient_id: '',
       professional_id: professionals[0]?.id?.toString() || '',
-      appointment_datetime: info.date.toISOString().slice(0, 16),
+      appointment_datetime: localIso,
       appointment_type: 'checkup',
       notes: '',
     });
@@ -728,11 +732,11 @@ export default function AgendaView() {
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-            initialView="dayGridMonth"
+            initialView="timeGridWeek"
             headerToolbar={{
               left: 'prev,next today',
               center: 'title',
-              right: 'dayGridMonth,timeGridWeek,timeGridDay',
+              right: 'timeGridWeek,timeGridDay,dayGridMonth',
             }}
             events={calendarEvents}
             dateClick={handleDateClick}
@@ -751,30 +755,57 @@ export default function AgendaView() {
               minute: '2-digit',
               hour12: false,
             }}
-            eventContent={(eventInfo) => (
-              <div className="p-1 text-xs overflow-hidden">
-                {eventInfo.event.extendedProps.eventType === 'gcalendar_block' ? (
-                  <div className="font-medium truncate text-gray-700">
-                    <CloudOff size={12} className="inline mr-1" />
-                    {eventInfo.event.title.replace('🔒 ', '')}
+            eventContent={(eventInfo) => {
+              const { eventType, source, professional_name, appointment_type } = eventInfo.event.extendedProps;
+              const isGCal = eventType === 'gcalendar_block';
+
+              if (isGCal) {
+                return (
+                  <div className="flex flex-col h-full p-1.5 rounded-md border border-gray-200 bg-gray-50/80 backdrop-blur-sm overflow-hidden"
+                    style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.03) 10px, rgba(0,0,0,0.03) 20px)' }}>
+                    <div className="flex items-center gap-1.5 text-gray-500 font-semibold text-[10px] uppercase tracking-wider mb-1">
+                      <CloudOff size={10} />
+                      <span>GCalendar</span>
+                    </div>
+                    <div className="font-medium text-xs text-gray-700 truncate leading-tight">
+                      {eventInfo.event.title.replace('🔒 ', '')}
+                    </div>
                   </div>
-                ) : (
-                  <>
-                    <div className="font-medium truncate">{eventInfo.event.title}</div>
-                    {eventInfo.event.extendedProps.professional_name && (
-                      <div className="text-xs opacity-75 truncate">
-                        Dr. {eventInfo.event.extendedProps.professional_name}
+                );
+              }
+
+              const sourceInfo = SOURCE_COLORS[source || 'ai'] || SOURCE_COLORS.ai;
+
+              return (
+                <div className={`flex flex-col h-full p-1.5 rounded-md border shadow-sm overflow-hidden transition-all hover:shadow-md ${sourceInfo.bgClass} ${source === 'manual' ? 'border-green-200' : 'border-blue-200'}`}>
+                  {/* Header: Time and Source */}
+                  <div className="flex justify-between items-start mb-1">
+                    <span className={`text-[9px] font-bold uppercase tracking-tighter px-1 rounded-sm ${sourceInfo.bgClass} border border-current opacity-70`}>
+                      {sourceInfo.label}
+                    </span>
+                    <Clock size={10} className="text-gray-400" />
+                  </div>
+
+                  {/* Main Info */}
+                  <div className={`font-bold text-xs truncate leading-snug ${sourceInfo.textClass}`}>
+                    {eventInfo.event.title.split(' - ')[0]}
+                  </div>
+
+                  {/* Subtitle: Type or Prof */}
+                  <div className="flex flex-col mt-0.5">
+                    <span className="text-[10px] text-gray-600 font-medium truncate italic">
+                      {appointment_type || 'Consulta'}
+                    </span>
+                    {professional_name && (
+                      <div className="flex items-center gap-1 text-[9px] text-gray-500 truncate mt-0.5">
+                        <User size={8} />
+                        <span>Dr. {professional_name}</span>
                       </div>
                     )}
-                    {/* Source badge */}
-                    <div className={`inline-flex px-1 py-0.5 rounded text-[10px] mt-0.5 ${SOURCE_COLORS[eventInfo.event.extendedProps.source || 'ai']?.bgClass || 'bg-blue-100'
-                      } ${SOURCE_COLORS[eventInfo.event.extendedProps.source || 'ai']?.textClass || 'text-blue-800'}`}>
-                      {getSourceLabel(eventInfo.event.extendedProps.source)}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+                  </div>
+                </div>
+              );
+            }}
             eventDidMount={(info) => {
               // Add tooltip with full details
               const { patient_phone, notes, source, professional_name, eventType } = info.event.extendedProps;

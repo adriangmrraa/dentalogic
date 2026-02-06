@@ -107,5 +107,29 @@ class GCalService:
             logger.error(f"An error occurred while deleting event: {error}")
             return False
 
+    def get_events_for_day(self, date_obj, calendar_id=None):
+        """
+        Fetches events for a specific day from Google Calendar API.
+        This provides REAL-TIME data, bypassing local cache.
+        date_obj: datetime.date or datetime object
+        """
+        if not self.service:
+            return []
+            
+        try:
+            # Create range for the full day (00:00 to 23:59:59)
+            start_dt = datetime.combine(date_obj, datetime.min.time()).replace(tzinfo=None)
+            end_dt = datetime.combine(date_obj, datetime.max.time()).replace(tzinfo=None)
+            
+            # Format to RFC3339 timestamp with Z suffix (UTC) or offset
+            # Using simple ISO format and appending 'Z' for UTC/Zulu time which GCal expects
+            time_min = start_dt.isoformat() + 'Z'
+            time_max = end_dt.isoformat() + 'Z'
+            
+            return self.list_events(time_min=time_min, time_max=time_max, calendar_id=calendar_id)
+        except Exception as e:
+            logger.error(f"Error fetching daily events: {e}")
+            return []
+
 # Singleton instance
 gcal_service = GCalService()

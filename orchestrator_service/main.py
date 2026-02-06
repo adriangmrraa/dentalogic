@@ -185,6 +185,52 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
 
         target_date = parse_date(date_query)
         
+        # --- JIT VALIDATION: Fetch Real-Time Events from Google ---
+        # Fetch fresh events for the requested day and update local DB to ensure mirror accuracy.
+        for prof in active_professionals:
+            prof_id = prof['id']
+            cal_id = prof['google_calendar_id']
+            if not cal_id: continue
+                
+            try:
+                # 1. Fetch from Google
+                g_events = gcal_service.get_events_for_day(target_date, calendar_id=cal_id)
+                
+                # 2. Side-Effect Update: Refresh blocks for this day/prof in local DB
+                # First delete existing blocks for this specific day/prof to avoid stale data
+                await db.pool.execute("""
+                    DELETE FROM google_calendar_blocks 
+                    WHERE professional_id = $1 AND DATE(start_datetime) = $2
+                """, prof_id, target_date)
+                
+                # Insert fresh blocks
+                for event in g_events:
+                    g_id = event['id']
+                    # Skip if it's one of our own appointments (avoid double counting)
+                    # Ideally we check if g_id is in appointments table, but for blocks we can also just insert everything 
+                    # generic and filter downstream, OR we rely on generic "busy" blocks.
+                    # For simplicty in JIT, we blindly insert as blocks. The availability logic merges both.
+                    
+                    summary = event.get('summary', 'Ocupado (GCal)')
+                    description = event.get('description', '')
+                    start = event['start'].get('dateTime') or event['start'].get('date')
+                    end = event['end'].get('dateTime') or event['end'].get('date')
+                    all_day = 'date' in event['start']
+                    
+                    dt_start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                    dt_end = datetime.fromisoformat(end.replace('Z', '+00:00'))
+                    
+                    await db.pool.execute("""
+                        INSERT INTO google_calendar_blocks (
+                            tenant_id, google_event_id, title, description,
+                            start_datetime, end_datetime, all_day, professional_id, sync_status
+                        ) VALUES (1, $1, $2, $3, $4, $5, $6, $7, 'synced')
+                    """, g_id, summary, description, dt_start, dt_end, all_day, prof_id)
+                    
+            except Exception as e:
+                logger.error(f"JIT Fetch failed for prof {prof_id}: {e}")
+                # Continue with whatever is in DB if JIT fails (Fallback)
+
         # Query BD: obtener turnos confirmados para esa fecha para los profesionales seleccionados
         prof_ids = [p['id'] for p in active_professionals]
         busy_appointments = await db.pool.fetch("""
@@ -196,7 +242,7 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
             ORDER BY appointment_datetime ASC
         """, target_date, prof_ids)
         
-        # Query BD: obtener bloques de GCalendar para los profesionales seleccionados
+        # Query BD: obtener bloques de GCalendar (AHORA FRESCOS)
         gcal_blocks = await db.pool.fetch("""
             SELECT start_datetime as start, end_datetime as end, professional_id
             FROM google_calendar_blocks
