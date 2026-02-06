@@ -47,6 +47,13 @@ const api = axios.create({
 - Muestra métricas de hoy: Turnos, Pendientes, Urgencias.
 - Controla el estado global del Bot IA.
 
+### ChatsView.tsx (Centro de Mensajería)
+- **Re-ordenamiento en Tiempo Real**: Al recibir `NEW_MESSAGE`, la sesión correspondiente debe moverse al principio del array `sessions` tras actualizar su `last_message_time`.
+- **Ventana de 24hs**: 
+  - Mostrar banner de advertencia si `is_window_open` es false.
+  - Deshabilitar input y botón de envío si la ventana está cerrada.
+- **Sincronización de Estado**: Escuchar `HUMAN_OVERRIDE_CHANGED` para actualizar la cabecera del chat sin refrescar.
+
 ### Credentials.tsx (The Vault UI)
 - Gestión de `GOOGLE_CREDENTIALS` y `YCLOUD_API_KEY`.
 - Muestra la URL dinámica para el Webhook de YCloud con opción de copiado.

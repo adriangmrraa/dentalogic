@@ -1,6 +1,6 @@
 # 📊 Análisis de Gaps: Nexus v3 → Dentalogic
 
-Este documento detalla el estado actual de la plataforma frente a los requerimientos de la **Plataforma Dental para Mercedes**.
+Este documento detalla el estado actual de la plataforma frente a los requerimientos de la **Plataforma Dentalogic**.
 
 ## 1. Backend (Lógica y Orquestación)
 

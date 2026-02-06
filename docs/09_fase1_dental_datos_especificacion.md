@@ -7,7 +7,7 @@
 | **Esquema DB (004)** | ✅ 100% | Tablas creadas e indexadas. |
 | **Modelos SQLALchemy** | ✅ 100% | `models_dental.py` implementado. |
 | **Integración Tools** | ⚠️ 80% | Lógica backend lista; Sincronización GCal simulada. |
-| **System Prompt** | ✅ 100% | Persona "Mercedes" activa en el Orchestrator. |
+| **System Prompt** | ✅ 100% | Persona "Asistente Dental" activa en el Orchestrator. |
 
 ---
 
@@ -29,7 +29,7 @@ Se han creado **6 nuevas tablas PostgreSQL** que transforman el backend de Tiend
 ## 🗂️ Estructura Jerárquica
 
 ```
-Tenant (Mercedes)
+Tenant (Dentalogic)
 ├── Professional (Dr. García)
 │   ├── Appointment (2025-02-15 09:00)
 │   │   └── Patient (Juan Pérez)
@@ -278,7 +278,7 @@ def triage_urgency(user_message: str) -> dict:
 
 ### Paso 3: Actualizar `sys_template` de Persona
 
-Cambiar de `"Pointe Coach"` a `"Asistente Dental Profesional"`:
+Cambiar de `"Antigua Persona"` a `"Asistente de la Dra. Laura Delgado"`:
 
 ```python
 SYSTEM_PROMPT_DENTAL = """

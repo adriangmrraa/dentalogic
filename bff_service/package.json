@@ -1,7 +1,7 @@
 {
     "name": "bff-service",
     "version": "1.0.0",
-    "description": "Backend for Frontend (BFF) Interface Service for Pointe Coach",
+    "description": "Backend for Frontend (BFF) Interface Service for Dentalogic",
     "main": "dist/index.js",
     "scripts": {
         "start": "node dist/index.js",

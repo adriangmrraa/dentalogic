@@ -60,11 +60,12 @@ Maneja la integración con YCloud y la IA de audio (Whisper).
 
 | Skill Name | Trigger | Descripción |
 | :--- | :--- | :--- |
-| **Sovereign Backend Engineer** | *FastAPI, Backend* | Experto en lógica de negocio, seguridad y API multi-tenant. |
-| **Nexus UI Developer** | *React, Frontend* | Especialista en interfaces dinámicas y sincronización Socket.IO. |
-| **DB Schema Surgeon** | *Postgres, SQL* | Gestión avanzada de modelos, índices y parches. |
+| **Sovereign Backend Engineer** | *FastAPI, Backend* | Experto en lógica de negocio, seguridad, 24h window y API multi-tenant. |
+| **Nexus UI Developer** | *React, Frontend* | Especialista en interfaces dinámicas, reordering en tiempo real y Socket.IO. |
+| **Prompt Architect** | *Identity, Persona* | Mantenimiento de la identidad (Dra. Laura Delgado) y tono rioplatense. |
+| **DB Schema Surgeon** | *Postgres, SQL* | Gestión avanzada de modelos, índices y parches SQL. |
 | **Maintenance Robot Architect**| *db.py, miguel* | Arquitecto de evolución de base de datos segura y self-healing. |
 
 ---
-*Actualizado: 2026-02-05 - Protocolo Platinum Resilience v7.6*
+*Actualizado: 2026-02-06 - Protocolo Platinum Resilience v7.6*
 泛

@@ -1,6 +1,6 @@
 # Arquitectura del Sistema - Dentalogic
 
-Este documento describe la estructura técnica, el flujo de datos y la interacción entre los componentes de la plataforma de gestión clínica Mercedes.
+Este documento describe la estructura técnica, el flujo de datos y la interacción entre los componentes de la plataforma de gestión clínica Dentalogic.
 
 ## 1. Diagrama de Bloques (Conceptual)
 
@@ -17,7 +17,7 @@ WhatsApp Service (8002)
         | POST /chat
         v
 Orchestrator Service (8000)
-  - LangChain Agent (Mercedes)
+  - LangChain Agent (Asistente Dental)
   - Tools Clínicas (Agenda, Triaje)
   - Memoria Histórica (Postgres)
   - Lockout (24h)

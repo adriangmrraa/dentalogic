@@ -17,11 +17,11 @@ Este proyecto se configura completamente mediante variables de entorno. En despl
 
 | Variable | Descripción | Ejemplo | Requerida |
 | :--- | :--- | :--- | :--- |
-| `STORE_NAME` | Nombre de la tienda | `Pointe Coach` | ✅ |
+| `STORE_NAME` | Nombre de la clínica | `Dentalogic` | ✅ |
 | `BOT_PHONE_NUMBER` | Número de WhatsApp del bot | `+5493756123456` | ✅ |
 | `STORE_LOCATION` | Ciudad/País | `Paraná, Entre Ríos, Argentina` | ❌ |
-| `STORE_WEBSITE` | URL de la tienda online | `https://www.pointecoach.shop` | ❌ |
-| `STORE_DESCRIPTION` | Qué vende la tienda | `Artículos de danza y gimnasia` | ❌ |
+| `STORE_WEBSITE` | URL de la clínica | `https://www.odontolea.com` | ❌ |
+| `STORE_DESCRIPTION` | Especialidad clínica | `Salud Bucal e Implantología` | ❌ |
 | `STORE_CATALOG_KNOWLEDGE` | Categorías/marcas principales (para inyectar en prompt) | `Puntas Grishko, Bloch, Capezio...` | ❌ |
 | `SHIPPING_PARTNERS` | Empresas de envío (comma-separated) | `Andreani, Correo Argentino` | ❌ |
 

@@ -62,6 +62,17 @@ patients = await db.pool.fetch("""
 """)
 ```
 
+### 4.1 Patrón de Subquery para Sorting (Recency)
+Cuando se usa `DISTINCT ON`, el `ORDER BY` inicial debe coincidir. Para ordenar por otros campos (ej: fecha de mensaje), usar subquery:
+```sql
+SELECT * FROM (
+    SELECT DISTINCT ON (phone_number) * 
+    FROM sessions 
+    ORDER BY phone_number, last_message_time DESC
+) sub
+ORDER BY last_message_time DESC;
+```
+
 ## 5. Dental IA Tools (main.py)
 Las herramientas de la IA deben seguir protocolos estrictos de triaje y agenda:
 - `check_availability`: Siempre consulta GCal antes de proponer horarios.
@@ -71,6 +82,9 @@ Las herramientas de la IA deben seguir protocolos estrictos de triaje y agenda:
 ## 7. Normalización de Payloads (Compatibility Layer)
 Para asegurar compatibilidad entre microservicios (especialmente WhatsApp -> Orquestador), los modelos Pydantic deben ser flexibles:
 - **Regla**: Aceptar múltiples nombres para el mismo dato (ej: `phone` y `from_number`).
+- **WhatsApp 24h Window**: Implementar chequeo de ventana en envíos manuales:
+  - Validar que `last_user_msg_time` sea `< 24h`.
+  - Retornar `403 Forbidden` si la ventana está cerrada.
 - **Implementación**: Usar `@property` o `Field(alias=...)` en los modelos de request para normalizar el acceso a los datos.
 
 ```python
