@@ -29,11 +29,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
     // Conectar socket si no existe
     if (!socketRef.current) {
-      socketRef.current = io(BACKEND_URL, {
-        path: '/socket.io',
-        transports: ['websocket', 'polling'],
-        secure: true,
-      });
+      // Connect to root namespace (matching ChatsView.tsx logic)
+      socketRef.current = io(BACKEND_URL);
     }
 
     // Listener
