@@ -134,7 +134,7 @@ class ProfileUpdate(BaseModel):
 async def get_profile(request: Request):
     """ Returns the detailed clinical profile of the current professional/user. """
     user_data = await get_me(request)
-    user_id = user_data['user_id']
+    user_id = user_data.user_id
     
     # Base user data
     user = await db.fetchrow("SELECT id, email, role, first_name, last_name FROM users WHERE id = $1", user_id)
@@ -155,7 +155,7 @@ async def get_profile(request: Request):
 async def update_profile(payload: ProfileUpdate, request: Request):
     """ Updates the clinical profile of the current professional/user. """
     user_data = await get_me(request)
-    user_id = user_data['user_id']
+    user_id = user_data.user_id
     
     # Update users table
     update_users_fields = []
@@ -173,7 +173,7 @@ async def update_profile(payload: ProfileUpdate, request: Request):
         await db.execute(query, *params)
         
     # Update professionals table if applicable
-    if user_data['role'] == 'professional' and payload.google_calendar_id is not None:
+    if user_data.role == 'professional' and payload.google_calendar_id is not None:
         await db.execute("""
             UPDATE professionals 
             SET google_calendar_id = $1 

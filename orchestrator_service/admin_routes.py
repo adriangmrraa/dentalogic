@@ -88,9 +88,8 @@ async def verify_admin_token(
     if not user_data:
         raise HTTPException(status_code=401, detail="Token de sesión expirado o inválido.")
     
-    # 3. Validar Rol (Solo CEOs pueden acceder a /admin global)
-    # Algunas rutas podrían permitir 'secretary', pero por defecto restringimos a 'ceo'
-    if user_data.role not in ['ceo', 'secretary']:
+    # 3. Validar Rol (CEOs, Secretarias y Profesionales tienen acceso básico)
+    if user_data.role not in ['ceo', 'secretary', 'professional']:
         raise HTTPException(status_code=403, detail="No tienes permisos suficientes para realizar esta acción.")
 
     # Inyectar datos del usuario en el request state para uso posterior
@@ -170,9 +169,9 @@ class StatusUpdate(BaseModel):
 
 @router.get("/users/pending")
 async def get_pending_users(user_data = Depends(verify_admin_token)):
-    """ Retorna la lista de usuarios con estado 'pending' (Solo CEO) """
-    if user_data.role != 'ceo':
-        raise HTTPException(status_code=403, detail="Solo los CEOs pueden gestionar aprobaciones.")
+    """ Retorna la lista de usuarios con estado 'pending' (Solo CEO/Secretary) """
+    if user_data.role not in ['ceo', 'secretary']:
+        raise HTTPException(status_code=403, detail="Solo el personal administrador puede ver usuarios pendientes.")
         
     users = await db.fetch("""
         SELECT id, email, role, status, created_at, first_name, last_name
@@ -184,9 +183,9 @@ async def get_pending_users(user_data = Depends(verify_admin_token)):
 
 @router.get("/users")
 async def get_all_users(user_data = Depends(verify_admin_token)):
-    """ Retorna la lista de todos los usuarios de la clínica (Solo CEO) """
-    if user_data.role != 'ceo':
-        raise HTTPException(status_code=403, detail="Solo los CEOs pueden ver la lista completa de personal.")
+    """ Retorna la lista de todos los usuarios de la clínica (Solo CEO/Secretary) """
+    if user_data.role not in ['ceo', 'secretary']:
+        raise HTTPException(status_code=403, detail="Solo el personal administrador puede listar usuarios.")
         
     users = await db.fetch("""
         SELECT id, email, role, status, created_at, updated_at, first_name, last_name
@@ -197,9 +196,9 @@ async def get_all_users(user_data = Depends(verify_admin_token)):
 
 @router.post("/users/{user_id}/status")
 async def update_user_status(user_id: str, payload: StatusUpdate, user_data = Depends(verify_admin_token)):
-    """ Actualiza el estado de un usuario (Aprobación/Suspensión) """
+    """ Actualiza el estado de un usuario (Aprobación/Suspensión) - Solo CEO """
     if user_data.role != 'ceo':
-        raise HTTPException(status_code=403, detail="Solo los CEOs pueden cambiar estados de usuario.")
+        raise HTTPException(status_code=403, detail="Solo el CEO puede cambiar el estado de los usuarios.")
 
     # Validar que el usuario exista
     target_user = await db.fetchrow("SELECT email, role FROM users WHERE id = $1", user_id)
