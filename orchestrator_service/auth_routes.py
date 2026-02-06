@@ -47,9 +47,9 @@ async def register(payload: UserRegister):
     # 3. Save User
     try:
         await db.execute("""
-            INSERT INTO users (id, email, password_hash, role, status)
-            VALUES ($1, $2, $3, $4, 'pending')
-        """, user_id, payload.email, password_hash, payload.role)
+            INSERT INTO users (id, email, password_hash, role, status, first_name, last_name)
+            VALUES ($1, $2, $3, $4, 'pending', $5, $6)
+        """, user_id, payload.email, password_hash, payload.role, payload.first_name, payload.last_name)
         
         # 4. If professional, create profile record
         if payload.role == "professional":

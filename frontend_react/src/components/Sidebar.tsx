@@ -34,7 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
     { id: 'agenda', label: 'Agenda', icon: <Calendar size={20} />, path: '/agenda', roles: ['ceo', 'professional', 'secretary'] },
     { id: 'patients', label: 'Pacientes', icon: <Users size={20} />, path: '/pacientes', roles: ['ceo', 'professional', 'secretary'] },
     { id: 'chats', label: 'Conversaciones', icon: <MessageSquare size={20} />, path: '/chats', roles: ['ceo', 'professional', 'secretary'] },
-    { id: 'approvals', label: 'Aprobaciones', icon: <ShieldCheck size={20} />, path: '/aprobaciones', roles: ['ceo'] },
+    { id: 'approvals', label: 'Personal', icon: <ShieldCheck size={20} />, path: '/aprobaciones', roles: ['ceo'] },
     { id: 'professionals', label: 'Profesionales', icon: <Stethoscope size={20} />, path: '/profesionales', roles: ['ceo', 'secretary'] },
     { id: 'treatments', label: 'Tratamientos', icon: <Clock size={20} />, path: '/tratamientos', roles: ['ceo', 'secretary'] },
     { id: 'settings', label: 'Configuración', icon: <Settings size={20} />, path: '/configuracion', roles: ['ceo'] },
@@ -80,8 +80,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
             key={item.id}
             onClick={() => navigate(item.path)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 mb-1 ${isActive(item.path)
-                ? 'bg-white/10 text-white'
-                : 'text-gray-400 hover:bg-white/5 hover:text-white'
+              ? 'bg-white/10 text-white'
+              : 'text-gray-400 hover:bg-white/5 hover:text-white'
               }`}
             title={collapsed ? item.label : undefined}
           >

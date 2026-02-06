@@ -175,10 +175,23 @@ async def get_pending_users(user_data = Depends(verify_admin_token)):
         raise HTTPException(status_code=403, detail="Solo los CEOs pueden gestionar aprobaciones.")
         
     users = await db.fetch("""
-        SELECT id, email, role, status, created_at 
+        SELECT id, email, role, status, created_at, first_name, last_name
         FROM users 
         WHERE status = 'pending'
         ORDER BY created_at DESC
+    """)
+    return [dict(u) for u in users]
+
+@router.get("/users")
+async def get_all_users(user_data = Depends(verify_admin_token)):
+    """ Retorna la lista de todos los usuarios de la clínica (Solo CEO) """
+    if user_data.role != 'ceo':
+        raise HTTPException(status_code=403, detail="Solo los CEOs pueden ver la lista completa de personal.")
+        
+    users = await db.fetch("""
+        SELECT id, email, role, status, created_at, updated_at, first_name, last_name
+        FROM users 
+        ORDER BY status ASC, created_at DESC
     """)
     return [dict(u) for u in users]
 
@@ -196,9 +209,10 @@ async def update_user_status(user_id: str, payload: StatusUpdate, user_data = De
     # Actualizar estado
     await db.execute("UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2", payload.status, user_id)
 
-    # Si se aprueba un profesional, activar su perfil médico también
-    if payload.status == 'active' and target_user['role'] == 'professional':
-        await db.execute("UPDATE professionals SET is_active = TRUE WHERE user_id = $1", uuid.UUID(user_id))
+    # Si se cambia el estado de un profesional, sincronizar su perfil médico
+    if target_user['role'] == 'professional':
+        is_active = (payload.status == 'active')
+        await db.execute("UPDATE professionals SET is_active = $1 WHERE user_id = $2", is_active, uuid.UUID(user_id))
 
     return {"message": f"Usuario {target_user['email']} actualizado a {payload.status}."}
 

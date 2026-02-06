@@ -168,6 +168,11 @@ async def check_availability(date_query: str):
     Devuelve: Horarios disponibles con profesionales
     """
     try:
+        # 0. Verificar si hay profesionales activos
+        prof_count = await db.pool.fetchval("SELECT COUNT(*) FROM professionals WHERE is_active = true")
+        if prof_count == 0:
+            return "❌ Actualmente no hay profesionales registrados o activos en la clínica para realizar reservas. Por favor, intenta más tarde o contacta directamente."
+
         target_date = parse_date(date_query)
         
         # Query BD: obtener turnos confirmados para esa fecha
@@ -222,7 +227,7 @@ async def book_appointment(date_time: str, treatment_reason: str):
         )
         
         if not professional:
-            return "❌ No hay profesionales disponibles en este momento. Contacta directamente."
+            return "❌ No es posible agendar el turno porque no hay profesionales registrados o activos en el sistema en este momento. Por favor, contacta directamente a la clínica por otros medios."
         
         # 4. Verificar que no hay sobrelapamiento
         overlap = await db.pool.fetchval("""

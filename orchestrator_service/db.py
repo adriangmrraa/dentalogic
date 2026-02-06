@@ -191,6 +191,24 @@ class Database:
                 END IF;
             END $$;
             """,
+            # Parche 7: Asegurar nombres en tabla users para gestión unificada
+            """
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='first_name') THEN
+                    ALTER TABLE users ADD COLUMN first_name VARCHAR(100);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='last_name') THEN
+                    ALTER TABLE users ADD COLUMN last_name VARCHAR(100);
+                END IF;
+            END $$;
+            
+            -- Copiar datos existentes de professionals a users (opcional pero recomendado)
+            UPDATE users u
+            SET first_name = p.first_name, last_name = p.last_name
+            FROM professionals p
+            WHERE u.id = p.user_id AND u.first_name IS NULL;
+            """,
         ]
 
         async with self.pool.acquire() as conn:
