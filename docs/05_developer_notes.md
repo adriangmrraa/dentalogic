@@ -29,7 +29,7 @@ Busca la lista `tools` y agrega la referencia.
 El sistema carga los últimos **20 mensajes** de cada conversación por defecto. Para cambiarlo, ajusta el `LIMIT` en la consulta SQL de `chat_endpoint`.
 
 ## 3. Deduplicación de Mensajes
-
+ 
 Redis almacena los `message_id` por 2 minutos para evitar procesar dobles webhooks de WhatsApp.
 
 ## 4. Debugging 
