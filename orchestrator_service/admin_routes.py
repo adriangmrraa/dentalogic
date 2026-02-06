@@ -717,62 +717,66 @@ async def get_patient_insurance_status(patient_id: int):
 async def list_patients(search: str = None, limit: int = 50):
     """Listar pacientes con búsqueda por nombre o DNI."""
     query = """
-        SELECT id, first_name, last_name, phone_number, email, insurance_provider 
+        SELECT id, first_name, last_name, phone_number, email, insurance_provider as obra_social, dni, created_at, status 
         FROM patients 
-        WHERE status = 'active'
+        WHERE status != 'deleted'
     """
     params = []
     
     if search:
-        query += " AND (first_name ILIKE $1 OR last_name ILIKE $1 OR phone_number ILIKE $1)"
+        query += " AND (first_name ILIKE $1 OR last_name ILIKE $1 OR phone_number ILIKE $1 OR dni ILIKE $1)"
         params.append(f"%{search}%")
-    
-    query += " ORDER BY created_at DESC LIMIT 50"
-    
-    if not search:
-        rows = await db.pool.fetch(query)
+        query += " ORDER BY created_at DESC LIMIT $2"
+        params.append(limit)
+        rows = await db.pool.fetch(query, *params)
     else:
-        rows = await db.pool.fetch(query, params[0])
+        query += " ORDER BY created_at DESC LIMIT $1"
+        params.append(limit)
+        rows = await db.pool.fetch(query, *params)
         
     return [dict(row) for row in rows]
 
-@router.post("/patients", dependencies=[Depends(verify_admin_token)])
-async def create_patient(p: PatientCreate):
-    """Crear un nuevo paciente manualmente."""
-    try:
-        # Verificar si existe el paciente
-        existing_row = await db.pool.fetchrow(
-            "SELECT id, status FROM patients WHERE phone_number = $1",
-            p.phone_number
-        )
+@router.get("/patients/{id}", dependencies=[Depends(verify_admin_token)])
+async def get_patient(id: int):
+    """Obtener un paciente por ID."""
+    row = await db.pool.fetchrow("""
+        SELECT id, first_name, last_name, phone_number, email, insurance_provider as obra_social, dni, birth_date, created_at, status, notes
+        FROM patients 
+        WHERE id = $1
+    """, id)
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
         
-        if existing_row:
-            # Si existe como 'guest' (creado por chat), lo actualizamos a 'active'
-            if existing_row['status'] == 'guest':
-                await db.pool.execute("""
-                    UPDATE patients 
-                    SET first_name = $1, last_name = $2, email = $3, insurance_provider = $4, status = 'active', updated_at = NOW()
-                    WHERE id = $5
-                """, p.first_name, p.last_name, p.email, p.insurance, existing_row['id'])
-                return {"id": existing_row['id'], "status": "upgraded", "phone": p.phone_number}
-            else:
-                # Si ya es 'active', es un duplicado real
-                raise HTTPException(status_code=409, detail="Ya existe un paciente activo con ese número de teléfono")
-        
-        # Crear nuevo si no existe
-        row = await db.pool.fetchrow("""
-            INSERT INTO patients (
-                phone_number, first_name, last_name, email, insurance_provider, status, created_at
-            ) VALUES ($1, $2, $3, $4, $5, 'active', NOW())
-            RETURNING id
-        """, p.phone_number, p.first_name, p.last_name, p.email, p.insurance)
-        
-        return {"id": row['id'], "status": "created", "phone": p.phone_number}
+    return dict(row)
 
-    except HTTPException:
-        raise
+@router.put("/patients/{id}", dependencies=[Depends(verify_admin_token)])
+async def update_patient(id: int, p: PatientCreate):
+    """Actualizar datos de un paciente."""
+    try:
+        await db.pool.execute("""
+            UPDATE patients SET
+                first_name = $1, last_name = $2, phone_number = $3, 
+                email = $4, dni = $5, insurance_provider = $6,
+                updated_at = NOW()
+            WHERE id = $7
+        """, p.first_name, p.last_name, p.phone_number, p.email, p.dni, p.insurance, id)
+        
+        return {"id": id, "status": "updated"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error creando paciente: {str(e)}")
+        logger.error(f"Error updating patient {id}: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.delete("/patients/{id}", dependencies=[Depends(verify_admin_token)])
+async def delete_patient(id: int):
+    """Marcar paciente como eliminado o desactivado."""
+    try:
+        # Por seguridad podemos hacer soft-delete
+        await db.pool.execute("UPDATE patients SET status = 'deleted', updated_at = NOW() WHERE id = $1", id)
+        return {"status": "deleted", "id": id}
+    except Exception as e:
+        logger.error(f"Error deleting patient {id}: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/patients/{id}/records", dependencies=[Depends(verify_admin_token)])
 async def get_clinical_records(id: int):
@@ -926,12 +930,13 @@ async def create_appointment_manual(apt: AppointmentCreate, request: Request):
         
         # 4. Crear turno (source='manual')
         new_id = str(uuid.uuid4())
+        tenant_id = 1 # Por defecto v1.0
         await db.pool.execute("""
             INSERT INTO appointments (
-                id, patient_id, professional_id, appointment_datetime, 
+                id, tenant_id, patient_id, professional_id, appointment_datetime, 
                 duration_minutes, appointment_type, status, urgency_level, source, created_at
-            ) VALUES ($1, $2, $3, $4, 60, $5, 'confirmed', 'normal', 'manual', NOW())
-        """, new_id, pid, apt.professional_id, apt.datetime, apt.type)
+            ) VALUES ($1, $2, $3, $4, $5, 60, $6, 'confirmed', 'normal', 'manual', NOW())
+        """, new_id, tenant_id, pid, apt.professional_id, apt.datetime, apt.type)
         
         # 5. Sincronizar con Google Calendar
         try:
@@ -1143,21 +1148,30 @@ async def list_professionals():
 # ==================== ENDPOINTS GOOGLE CALENDAR ====================
 
 @router.get("/calendar/blocks", dependencies=[Depends(verify_admin_token)])
-async def get_calendar_blocks(start_date: str, end_date: str):
-    """Obtener bloques de Google Calendar para el período."""
+@router.get("/calendar/blocks", dependencies=[Depends(verify_admin_token)])
+async def get_calendar_blocks(start_date: str, end_date: str, professional_id: Optional[int] = None):
+    """Obtener bloques de Google Calendar para el período con filtro por profesional."""
     try:
-        rows = await db.pool.fetch("""
+        query = """
             SELECT id, google_event_id, title, description,
                    start_datetime, end_datetime, all_day,
                    professional_id, sync_status
             FROM google_calendar_blocks
-            WHERE start_datetime BETWEEN $1 AND $2
-            ORDER BY start_datetime ASC
-        """, datetime.fromisoformat(start_date), datetime.fromisoformat(end_date))
+            WHERE start_datetime < $2 AND end_datetime > $1
+        """
+        params = [datetime.fromisoformat(start_date.replace('Z', '+00:00')), 
+                  datetime.fromisoformat(end_date.replace('Z', '+00:00'))]
         
+        if professional_id:
+            query += " AND professional_id = $3"
+            params.append(professional_id)
+            
+        query += " ORDER BY start_datetime ASC"
+        
+        rows = await db.pool.fetch(query, *params)
         return [dict(row) for row in rows]
-    except Exception:
-        # Si la tabla no existe, retornar array vacío (para desarrollo)
+    except Exception as e:
+        logger.error(f"Error fetching calendar blocks: {e}")
         return []
 
 
@@ -1188,80 +1202,106 @@ async def delete_calendar_block(block_id: str):
 
 
 @router.post("/sync/calendar", dependencies=[Depends(verify_admin_token)])
+@router.post("/calendar/sync", dependencies=[Depends(verify_admin_token)])
 async def trigger_sync():
     """
-    Sincronización REAL con Google Calendar.
+    Sincronización REAL con Google Calendar para todos los profesionales activos.
     Trae eventos de GCal que NO son appointments y los guarda como bloqueos.
     """
     try:
-        # 1. Obtener eventos de los próximos 30 días
-        time_min = datetime.now().isoformat() + 'Z'
-        time_max = (datetime.now() + timedelta(days=30)).isoformat() + 'Z'
-        
-        events = gcal_service.list_events(time_min=time_min, time_max=time_max)
-        
-        created = 0
-        updated = 0
-        
-        # Obtener IDs de eventos que ya tenemos para saber si es update o create
-        existing_google_ids = await db.pool.fetch("SELECT google_event_id FROM google_calendar_blocks")
-        existing_ids_set = {row['google_event_id'] for row in existing_google_ids}
-        
-        # Tambien obtener los IDs de eventos que son APPOINTMENTS para no duplicarlos
+        # 0. Obtener tenant_id
+        tenant_id = await db.pool.fetchval("SELECT id FROM tenants LIMIT 1") or 1
+
+        # 1. Obtener todos los profesionales con calendario configurado
+        professionals = await db.pool.fetch("""
+            SELECT id, first_name, google_calendar_id 
+            FROM professionals 
+            WHERE is_active = true AND google_calendar_id IS NOT NULL
+        """)
+
+        if not professionals:
+            return {"status": "warning", "message": "No hay profesionales con calendario configurado."}
+
+        # 2. Obtener IDs de eventos que son APPOINTMENTS para no duplicarlos como "bloqueo"
         appointment_google_ids = await db.pool.fetch("SELECT google_calendar_event_id FROM appointments WHERE google_calendar_event_id IS NOT NULL")
         apt_ids_set = {row['google_calendar_event_id'] for row in appointment_google_ids}
 
-        tenant_id = await db.pool.fetchval("SELECT id FROM tenants LIMIT 1")
-
-        for event in events:
-            g_id = event['id']
-            
-            # Si el evento es un turno nuestro, lo ignoramos para no duplicarlo como "bloqueo"
-            if g_id in apt_ids_set:
-                continue
-                
-            summary = event.get('summary', 'Bloqueo GCal')
-            description = event.get('description', '')
-            start = event['start'].get('dateTime') or event['start'].get('date')
-            end = event['end'].get('dateTime') or event['end'].get('date')
-            all_day = 'date' in event['start']
-            
-            if g_id in existing_ids_set:
-                await db.pool.execute("""
-                    UPDATE google_calendar_blocks SET
-                        title = $1, description = $2, start_datetime = $3, end_datetime = $4,
-                        all_day = $5, updated_at = NOW()
-                    WHERE google_event_id = $6
-                """, summary, description, datetime.fromisoformat(start.replace('Z', '+00:00')), 
-                     datetime.fromisoformat(end.replace('Z', '+00:00')), all_day, g_id)
-                updated += 1
-            else:
-                await db.pool.execute("""
-                    INSERT INTO google_calendar_blocks (
-                        tenant_id, google_event_id, title, description,
-                        start_datetime, end_datetime, all_day
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-                """, tenant_id, g_id, summary, description, 
-                     datetime.fromisoformat(start.replace('Z', '+00:00')), 
-                     datetime.fromisoformat(end.replace('Z', '+00:00')), all_day)
-                created += 1
+        total_created = 0
+        total_updated = 0
+        total_processed = 0
         
-        # Registrar sync en log
+        time_min = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+        time_max = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat().replace('+00:00', 'Z')
+
+        for prof in professionals:
+            prof_id = prof['id']
+            cal_id = prof['google_calendar_id']
+            
+            logger.info(f"🔄 Syncing GCal for {prof['first_name']} (ID: {prof_id}) on {cal_id}")
+            
+            events = gcal_service.list_events(time_min=time_min, time_max=time_max, calendar_id=cal_id)
+            total_processed += len(events)
+            
+            # Obtener IDs ya existentes para este profesional
+            existing_blocks = await db.pool.fetch("SELECT google_event_id FROM google_calendar_blocks WHERE professional_id = $1", prof_id)
+            existing_ids_set = {row['google_event_id'] for row in existing_blocks}
+
+            for event in events:
+                g_id = event['id']
+                
+                # Ignorar si es un turno ya registrado
+                if g_id in apt_ids_set:
+                    continue
+                    
+                summary = event.get('summary', 'Bloqueo GCal')
+                description = event.get('description', '')
+                start = event['start'].get('dateTime') or event['start'].get('date')
+                end = event['end'].get('dateTime') or event['end'].get('date')
+                all_day = 'date' in event['start']
+                
+                # Parsing dates with safety
+                try:
+                    dt_start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                    dt_end = datetime.fromisoformat(end.replace('Z', '+00:00'))
+                except Exception as de:
+                    logger.warning(f"Error parsing date {start}/{end}: {de}")
+                    continue
+
+                if g_id in existing_ids_set:
+                    await db.pool.execute("""
+                        UPDATE google_calendar_blocks SET
+                            title = $1, description = $2, start_datetime = $3, end_datetime = $4,
+                            all_day = $5, updated_at = NOW()
+                        WHERE google_event_id = $6 AND professional_id = $7
+                    """, summary, description, dt_start, dt_end, all_day, g_id, prof_id)
+                    total_updated += 1
+                else:
+                    await db.pool.execute("""
+                        INSERT INTO google_calendar_blocks (
+                            tenant_id, google_event_id, title, description,
+                            start_datetime, end_datetime, all_day, professional_id
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    """, tenant_id, g_id, summary, description, dt_start, dt_end, all_day, prof_id)
+                    total_created += 1
+        
+        # Registrar sync global en log
         await db.pool.execute("""
             INSERT INTO calendar_sync_log (
                 tenant_id, sync_type, direction, events_processed, 
                 events_created, events_updated, completed_at
             ) VALUES ($1, 'manual', 'inbound', $2, $3, $4, NOW())
-        """, tenant_id, len(events), created, updated)
+        """, tenant_id, total_processed, total_created, total_updated)
         
         return {
             "status": "success",
-            "events_processed": len(events),
-            "created": created,
-            "updated": updated,
-            "message": f"Sincronización completada. {created} nuevos, {updated} actualizados."
+            "professionals_synced": len(professionals),
+            "events_processed": total_processed,
+            "created": total_created,
+            "updated": total_updated,
+            "message": f"Sincronización completada para {len(professionals)} profesionales."
         }
     except Exception as e:
+        logger.error(f"Error en trigger_sync: {e}")
         return {
             "status": "error",
             "message": f"Error en sincronización: {str(e)}"

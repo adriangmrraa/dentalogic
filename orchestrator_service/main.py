@@ -278,11 +278,12 @@ async def book_appointment(date_time: str, treatment_reason: str):
         
         # 5. Insertar turno
         apt_id = str(uuid.uuid4())
+        tenant_id = 1 # Por defecto en v1.0
         await db.pool.execute("""
             INSERT INTO appointments 
-            (id, patient_id, professional_id, appointment_datetime, appointment_type, status, urgency_level, source, created_at)
-            VALUES ($1, $2, $3, $4, $5, 'scheduled', 'normal', 'ai', NOW())
-        """, apt_id, patient_id, professional['id'], apt_datetime, treatment_reason)
+            (id, tenant_id, patient_id, professional_id, appointment_datetime, appointment_type, status, urgency_level, source, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', 'normal', 'ai', NOW())
+        """, apt_id, tenant_id, patient_id, professional['id'], apt_datetime, treatment_reason)
         
         logger.info(f"✅ Turno registrado: {apt_id} para {phone}")
         current_patient_id.set(patient_id)

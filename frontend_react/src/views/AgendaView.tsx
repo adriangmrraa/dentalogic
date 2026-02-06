@@ -164,11 +164,13 @@ export default function AgendaView() {
   });
 
   // Fetch Google Calendar blocks
-  const fetchGoogleBlocks = useCallback(async (startDate: string, endDate: string) => {
+  const fetchGoogleBlocks = useCallback(async (startDate: string, endDate: string, professionalId?: string) => {
     try {
-      const response = await api.get('/admin/calendar/blocks', {
-        params: { start_date: startDate, end_date: endDate },
-      });
+      const params: any = { start_date: startDate, end_date: endDate };
+      if (professionalId && professionalId !== 'all') {
+        params.professional_id = professionalId;
+      }
+      const response = await api.get('/admin/calendar/blocks', { params });
       return response.data;
     } catch (error) {
       console.error('Error fetching Google Calendar blocks:', error);
@@ -180,7 +182,8 @@ export default function AgendaView() {
   const handleSyncNow = async () => {
     try {
       setSyncStatus({ ...syncStatus, syncing: true, error: null });
-      const response = await api.post('/admin/sync/calendar');
+      // Both work because of aliases on backend
+      const response = await api.post('/admin/calendar/sync');
       setSyncStatus({
         syncing: false,
         lastSync: new Date(),
@@ -189,7 +192,7 @@ export default function AgendaView() {
 
       // Refresh calendar data after sync
       fetchData();
-      alert(`Sincronización completada: ${response.data.events_processed} eventos procesados`);
+      alert(response.data.message || 'Sincronización completada');
     } catch (error: any) {
       console.error('Error syncing calendar:', error);
       setSyncStatus({
@@ -197,7 +200,7 @@ export default function AgendaView() {
         syncing: false,
         error: error.response?.data?.message || 'Error en sincronización',
       });
-      alert(`Error en sincronización: ${syncStatus.error}`);
+      alert(`Error en sincronización: ${error.response?.data?.message || error.message}`);
     }
   };
 
@@ -282,12 +285,21 @@ export default function AgendaView() {
         params.professional_id = profFilter;
       }
 
-      const [appointmentsRes, professionalsRes, patientsRes, blocksRes] = await Promise.all([
+      const [appointmentsRes, professionalsRes, patientsRes] = await Promise.all([
         api.get('/admin/appointments', { params }),
         api.get('/admin/professionals'),
         api.get('/admin/patients'),
-        fetchGoogleBlocks(startDateStr, endDateStr),
       ]);
+
+      const fetchedProfessionals = professionalsRes.data.filter((p: Professional) => p.is_active);
+      setProfessionals(fetchedProfessionals);
+
+      // Re-calculate professional filter with potentially updated professionals list
+      const finalProfFilter = user?.role === 'professional'
+        ? fetchedProfessionals.find(p => p.email === user.email)?.id?.toString() || selectedProfessionalId
+        : selectedProfessionalId;
+
+      const blocksRes = await fetchGoogleBlocks(startDateStr, endDateStr, finalProfFilter);
 
       const newAppointments = appointmentsRes.data;
       setAppointments(newAppointments);

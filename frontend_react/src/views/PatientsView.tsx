@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Edit, Trash2, Eye, X, FileText, Calendar, MessageSquare, User, Brain } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Plus, Edit, Trash2, X, FileText, Brain } from 'lucide-react';
 import api from '../api/axios';
 
 interface Patient {
@@ -16,6 +17,7 @@ interface Patient {
 }
 
 export default function PatientsView() {
+  const navigate = useNavigate();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -69,7 +71,7 @@ export default function PatientsView() {
 
   const handleSemanticSearch = async (value: string) => {
     setSemanticSearchTerm(value);
-    
+
     if (!value.trim()) {
       setSemanticResults([]);
       setFilteredPatients(patients);
@@ -77,14 +79,14 @@ export default function PatientsView() {
     }
 
     setSemanticLoading(true);
-    
+
     try {
       const response = await api.get('/admin/patients/search-semantic', {
         params: { query: value }
       });
-      
+
       setSemanticResults(response.data);
-      
+
       if (response.data.length > 0) {
         setFilteredPatients(response.data);
       }
@@ -100,10 +102,16 @@ export default function PatientsView() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Map obra_social to insurance for the backend
+      const payload = {
+        ...formData,
+        insurance: formData.obra_social
+      };
+
       if (editingPatient) {
-        await api.put(`/admin/patients/${editingPatient.id}`, formData);
+        await api.put(`/admin/patients/${editingPatient.id}`, payload);
       } else {
-        await api.post('/admin/patients', formData);
+        await api.post('/admin/patients', payload);
       }
       fetchPatients();
       closeModal();
@@ -184,7 +192,7 @@ export default function PatientsView() {
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
           />
         </div>
-        
+
         {/* Semantic Search */}
         <div className="relative max-w-md">
           <Brain className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-500" size={20} />
@@ -255,9 +263,9 @@ export default function PatientsView() {
                               {patient.first_name} {patient.last_name}
                             </div>
                             {semanticResults.some(r => r.id === patient.id) && (
-                              <Brain 
-                                size={16} 
-                                className="text-purple-500" 
+                              <Brain
+                                size={16}
+                                className="text-purple-500"
                               />
                             )}
                           </div>
@@ -278,7 +286,7 @@ export default function PatientsView() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => window.location.href = `/pacientes/${patient.id}`}
+                          onClick={() => navigate(`/pacientes/${patient.id}`)}
                           className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded"
                           title="Ver Ficha"
                         >

@@ -140,9 +140,9 @@ CREATE TABLE IF NOT EXISTS patients (
     
     -- Identidad del Paciente
     phone_number VARCHAR(20) NOT NULL,
-    dni VARCHAR(15) NOT NULL,
+    dni VARCHAR(15),
     first_name VARCHAR(100) NOT NULL,
-    last_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100),
     birth_date DATE,
     gender VARCHAR(10),
     
