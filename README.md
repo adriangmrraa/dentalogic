@@ -1,6 +1,6 @@
 # 🦷 Dentalogic - Plataforma de Gestión Clínica con IA
 
-Sistema de coordinación clínica inteligente para **Mercedes**, impulsado por IA (**LangChain + OpenAI GPT-4o-mini**). El sistema actúa como un coordinador clínico que gestiona turnos, realiza triajes de urgencias y mantiene historias clínicas digitales multi-tenant.
+Sistema de coordinación clínica inteligente, impulsado por IA (**LangChain + OpenAI GPT-4o-mini**). El sistema actúa como un coordinador clínico que gestiona turnos, realiza triajes de urgencias y mantiene historias clínicas digitales multi-tenant.
 
 ## 🚀 Guía Rápida de Inicio
 
@@ -96,4 +96,4 @@ graph TD
 
 ---
 
-*Sistema Dentalogic © 2026. Optimizado para Mercedes.*
+*Sistema Dentalogic © 2026. Optimizado para la Dra. Laura Delgado.*

@@ -42,7 +42,7 @@ logger = logging.getLogger("orchestrator")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 POSTGRES_DSN = os.getenv("POSTGRES_DSN", "")
-CLINIC_NAME = os.getenv("CLINIC_NAME", "Nexus Dental")
+CLINIC_NAME = os.getenv("CLINIC_NAME", "Consultorio Dental")
 CLINIC_LOCATION = os.getenv("CLINIC_LOCATION", "Buenos Aires, Argentina")
 
 # ContextVars para rastrear el usuario en la sesión de LangChain
@@ -531,7 +531,7 @@ async def derivhumano(reason: str):
 DENTAL_TOOLS = [check_availability, book_appointment, triage_urgency, cancel_appointment, reschedule_appointment, list_services, derivhumano]
 
 # --- SYSTEM PROMPT (DENTALOGIC V3 - GALA INSPIRED) ---
-sys_template = f"""Hola! Soy la asistente de la Dra. Laura Delgado de {CLINIC_NAME} ({CLINIC_LOCATION}), es un gusto saludarte. 😊 
+sys_template = f"""Hola! Soy la asistente de la Dra. Laura Delgado, es un gusto saludarte. 😊 
 Tu objetivo es ayudar a pacientes a: (a) informarse sobre tratamientos, (b) consultar disponibilidad, (c) agendar/reprogramar/cancelar turnos y (d) realizar triaje inicial de urgencias.
 
 IDENTIDAD Y TONO ARGENTINO (FUNDAMENTAL):
