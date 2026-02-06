@@ -33,6 +33,7 @@ import socketio
 from db import db
 from admin_routes import router as admin_router
 from auth_routes import router as auth_router
+from email_service import email_service
 
 # --- CONFIGURACIÓN ---
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -472,23 +473,59 @@ async def derivhumano(reason: str):
     """
     phone = current_customer_phone.get()
     try:
-        # 1. Marcar conversación para intervención humana (Lockout)
-        # Esto silencia al bot en el orquestador por 24hs
-        await db.execute("""
-            UPDATE patients SET human_handoff_requested = true, updated_at = NOW()
-            WHERE phone_number = $1
-        """, phone)
+        # 1. Definir bloqueo de 24hs
+        override_until = datetime.now(timezone.utc) + timedelta(hours=24)
+        
+        # 2. Marcar conversación para intervención humana (Lockout)
+        # Seteamos last_derivhumano_at para que aparezca el banner "El bot derivó..."
+        await db.pool.execute("""
+            UPDATE patients SET 
+                human_handoff_requested = true, 
+                human_override_until = $1,
+                last_derivhumano_at = NOW(),
+                updated_at = NOW()
+            WHERE phone_number = $2
+        """, override_until, phone)
         
         logger.info(f"👤 Derivación humana solicitada para {phone}: {reason}")
         
-        # 2. Notificar vía Socket (para que aparezca en el dashboard)
+        # 3. Notificar vía Socket (para que aparezca en el dashboard en tiempo real)
+        # Import local to avoid circular import
         from main import sio
         await sio.emit("HUMAN_HANDOFF", {"phone": phone, "reason": reason})
+
+        # 4. Enviar Email (Protocolo SMTP Global)
+        # Recuperar datos del paciente
+        patient = await db.pool.fetchrow("SELECT first_name, last_name, email FROM patients WHERE phone_number = $1", phone)
+        patient_name = f"{patient['first_name']} {patient['last_name'] or ''}".strip()
         
-        return "He solicitado que un representante humano te atienda lo antes posible. En breve se comunicarán con vos."
+        # Recuperar historial (últimos 5 mensajes para contexto)
+        history = await db.pool.fetch("""
+            SELECT role, content, created_at FROM chat_messages 
+            WHERE from_number = $1 ORDER BY created_at DESC LIMIT 5
+        """, phone)
+        
+        history_text = "<br>".join([f"<b>{msg['role']}:</b> {msg['content']}" for msg in reversed(history)])
+        
+        # Obtener email destino (del tenant o env var)
+        destination_email = os.getenv("NOTIFICATIONS_EMAIL", "gamarradrian200@gmail.com")
+        
+        email_sent = email_service.send_handoff_email(
+            to_email=destination_email, 
+            patient_name=patient_name, 
+            phone=phone, 
+            reason=reason,
+            chat_history_preview=history_text
+        )
+        
+        if email_sent:
+            return "He notificado a un asesor humano. Te contactará por WhatsApp en breve."
+        else:
+            return "Ya he solicitado que un humano revise tu caso. Aguardanos un momento."
+            
     except Exception as e:
         logger.error(f"Error en derivhumano: {e}")
-        return "Hubo un problema al derivarte, pero ya he dado aviso. Por favor, aguardá un momento."
+        return "Hubo un problema al derivarte, pero ya he dejado el aviso en el sistema."
 
 DENTAL_TOOLS = [check_availability, book_appointment, triage_urgency, cancel_appointment, reschedule_appointment, list_services, derivhumano]
 
@@ -503,7 +540,13 @@ POLÍTICAS DURAS:
 • ZONA HORARIA: America/Argentina/Buenos_Aires. 
 • HORARIOS DE ATENCIÓN: Lunes a Sábados de 09:00 a 13:00 y 14:00 a 18:00 (Domingos cerrado).
 • CANCELACIONES/CAMBIOS: Solo permitidos con 24h de anticipación.
-• DERIVACIÓN: Si el usuario pide hablar con una persona, está frustrado o rechaza a la IA, usá 'derivhumano' de inmediato.
+• DERIVACIÓN (Human Handoff): 
+  - Usá 'derivhumano' SI: 
+    (a) El usuario pide explícitamente "hablar con alguien/persona/humano".
+    (b) Detectás FRUSTRACIÓN (>0.7), enojo o insultos.
+    (c) El usuario pregunta algo complejo que escapa a tus tools.
+  - ANTES de derivar: Validá el sentimiento ("Entiendo tu molestia, voy a pasar esto a un supervisor...").
+  - SIEMPRE proveé un 'reason' claro al tool (ej: "Cliente frustrado por demora", "Solicita precios especiales").
 
 ---
 FLUJO DE AGENDAMIENTO:
