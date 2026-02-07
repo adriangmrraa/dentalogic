@@ -108,12 +108,14 @@ def parse_date(date_query: str) -> date:
         'martes': lambda: get_next_weekday(1),
         'tuesday': lambda: get_next_weekday(1),
         'miércoles': lambda: get_next_weekday(2),
+        'miercoles': lambda: get_next_weekday(2),
         'wednesday': lambda: get_next_weekday(2),
         'jueves': lambda: get_next_weekday(3),
         'thursday': lambda: get_next_weekday(3),
         'viernes': lambda: get_next_weekday(4),
         'friday': lambda: get_next_weekday(4),
         'sábado': lambda: get_next_weekday(5),
+        'sabado': lambda: get_next_weekday(5),
         'saturday': lambda: get_next_weekday(5),
         'domingo': lambda: get_next_weekday(6),
         'sunday': lambda: get_next_weekday(6),
@@ -670,6 +672,10 @@ async def cancel_appointment(date_query: str):
             WHERE id = $1
         """, apt['id'])
         
+        # 3. Notificar a la UI (Borrado visual)
+        from main import sio
+        await sio.emit("APPOINTMENT_DELETED", apt['id'])
+
         logger.info(f"🚫 Turno cancelado por IA: {apt['id']} ({phone})")
         return f"Entendido. He cancelado tu turno del {date_query}. ¿Te puedo ayudar con algo más?"
         
@@ -1128,10 +1134,14 @@ async def chat_endpoint(req: ChatRequest):
                 messages.append(AIMessage(content=msg['content']))
         
         # 3. Invocar agente
+        now = get_now_arg()
+        dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+        nombre_dia = dias_semana[now.weekday()]
+        
         response = await agent_executor.ainvoke({
             "input": req.final_message,
             "chat_history": messages,
-            "current_time": get_now_arg().strftime('%d/%m/%Y %H:%M')
+            "current_time": f"{nombre_dia} {now.strftime('%d/%m/%Y %H:%M')}"
         })
         
         assistant_response = response.get("output", "Error procesando respuesta")

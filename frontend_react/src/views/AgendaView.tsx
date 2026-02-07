@@ -644,13 +644,26 @@ export default function AgendaView() {
   };
 
   const handleDelete = async () => {
-    if (!selectedEvent || !confirm('¿Cancelar este turno?')) return;
+    if (!selectedEvent || !confirm('¿Cancelar este turno? El registro permanecerá en el sistema con estado "cancelado".')) return;
     try {
       await api.put(`/admin/appointments/${selectedEvent.id}/status`, { status: 'cancelled' });
       fetchData();
       setShowModal(false);
     } catch (error) {
       console.error('Error cancelling appointment:', error);
+      alert('Error al cancelar turno');
+    }
+  };
+
+  const handlePhysicalDelete = async () => {
+    if (!selectedEvent || !confirm('¿BORRAR DEFINITIVAMENTE este turno? Esta acción no se puede deshacer y el registro desaparecerá por completo.')) return;
+    try {
+      await api.delete(`/admin/appointments/${selectedEvent.id}`);
+      fetchData();
+      setShowModal(false);
+    } catch (error) {
+      console.error('Error deleting appointment:', error);
+      alert('Error al eliminar el turno');
     }
   };
 
@@ -1029,17 +1042,24 @@ export default function AgendaView() {
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-3 mt-6">
+                <div className="flex flex-col sm:flex-row justify-end gap-2 mt-6 border-t pt-4">
+                  <button
+                    onClick={handlePhysicalDelete}
+                    className="px-4 py-2 text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 flex items-center gap-2 text-sm font-medium"
+                  >
+                    <X size={18} />
+                    Borrar Definitivamente
+                  </button>
                   <button
                     onClick={handleDelete}
-                    className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 flex items-center gap-2"
+                    className="px-4 py-2 text-white bg-orange-500 rounded-lg hover:bg-orange-600 flex items-center gap-2 text-sm font-medium"
                   >
                     <AlertTriangle size={18} />
                     Cancelar Turno
                   </button>
                   <button
                     onClick={() => { setShowModal(false); setCollisionWarning(null); setInsuranceStatus(null); }}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm font-medium"
                   >
                     Cerrar
                   </button>

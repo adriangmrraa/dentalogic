@@ -1095,6 +1095,7 @@ async def create_appointment_manual(apt: AppointmentCreate, request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creando turno: {str(e)}")
 
+@router.put("/appointments/{id}/status", dependencies=[Depends(verify_admin_token)])
 @router.patch("/appointments/{id}/status", dependencies=[Depends(verify_admin_token)])
 async def update_appointment_status(id: str, status: str, request: Request):
     """Cambiar estado: confirmed, cancelled, attended, no_show."""
@@ -1135,11 +1136,47 @@ async def update_appointment_status(id: str, status: str, request: Request):
 
         # 2. Emitir evento según el nuevo estado
         if status == 'cancelled':
-            await emit_appointment_event("APPOINTMENT_DELETED", {"id": id}, request)
+            await emit_appointment_event("APPOINTMENT_DELETED", id, request)
         else:
             await emit_appointment_event("APPOINTMENT_UPDATED", dict(appointment_data), request)
     
     return {"status": "updated"}
+
+@router.delete("/appointments/{id}", dependencies=[Depends(verify_admin_token)])
+async def delete_appointment(id: str, request: Request):
+    """Eliminar turno físicamente de la base de datos y de GCal."""
+    try:
+        # 1. Obtener datos antes de borrar
+        apt = await db.pool.fetchrow("""
+            SELECT google_calendar_event_id, professional_id 
+            FROM appointments WHERE id = $1
+        """, id)
+        
+        if not apt:
+             raise HTTPException(status_code=404, detail="Turno no encontrado")
+             
+        # 2. Borrar de Google Calendar si existe
+        if apt['google_calendar_event_id']:
+            try:
+                google_calendar_id = await db.pool.fetchval(
+                    "SELECT google_calendar_id FROM professionals WHERE id = $1", 
+                    apt['professional_id']
+                )
+                if google_calendar_id:
+                    gcal_service.delete_event(calendar_id=google_calendar_id, event_id=apt['google_calendar_event_id'])
+            except Exception as ge:
+                logger.error(f"Error borrando de GCal: {ge}")
+
+        # 3. Borrar de la base de datos
+        await db.pool.execute("DELETE FROM appointments WHERE id = $1", id)
+        
+        # 4. Notificar a la UI
+        await emit_appointment_event("APPOINTMENT_DELETED", id, request)
+        
+        return {"status": "deleted", "id": id}
+    except Exception as e:
+        logger.error(f"Error deleting appointment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==================== ENDPOINTS SLOTS DISPONIBLES ====================
 
