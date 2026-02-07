@@ -370,15 +370,18 @@ async def get_chat_sessions():
 
 
 @router.get("/chat/messages/{phone}", dependencies=[Depends(verify_admin_token)])
-async def get_chat_messages(phone: str, limit: int = 100):
-    """Obtiene el historial de mensajes para un número de teléfono específico."""
+async def get_chat_messages(phone: str, limit: int = 50, offset: int = 0):
+    """Obtiene el historial de mensajes para un número de teléfono específico con paginación."""
     rows = await db.pool.fetch("""
         SELECT id, from_number, role, content, created_at, correlation_id
         FROM chat_messages
         WHERE from_number = $1
-        ORDER BY created_at ASC
-        LIMIT $2
-    """, phone, limit)
+        ORDER BY created_at DESC
+        LIMIT $2 OFFSET $3
+    """, phone, limit, offset)
+    
+    # Invertir para que lleguen en orden cronológico al frontend
+    rows = sorted(rows, key=lambda x: x['created_at'])
     
     messages = []
     for row in rows:

@@ -70,9 +70,11 @@ export default function ChatsView() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [patientContext, setPatientContext] = useState<PatientContext | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [messageOffset, setMessageOffset] = useState(0);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Estados de UI
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -313,14 +315,37 @@ export default function ChatsView() {
     }
   };
 
-  const fetchMessages = async (phone: string) => {
+  const fetchMessages = async (phone: string, append: boolean = false) => {
     try {
-      const response = await api.get(`/admin/chat/messages/${phone}`);
-      setMessages(response.data);
+      const currentOffset = append ? messageOffset + 50 : 0;
+      const response = await api.get(`/admin/chat/messages/${phone}`, {
+        params: { limit: 50, offset: currentOffset }
+      });
+
+      const newBatch = response.data;
+
+      if (append) {
+        setMessages(prev => [...newBatch, ...prev]);
+        setMessageOffset(currentOffset);
+      } else {
+        setMessages(newBatch);
+        setMessageOffset(0);
+        scrollToBottom();
+      }
+
+      setHasMoreMessages(newBatch.length === 50);
     } catch (error) {
       console.error('Error fetching messages:', error);
-      setMessages([]);
+      if (!append) setMessages([]);
+    } finally {
+      setLoadingMore(false);
     }
+  };
+
+  const handleLoadMore = () => {
+    if (!selectedSession || loadingMore || !hasMoreMessages) return;
+    setLoadingMore(true);
+    fetchMessages(selectedSession.phone_number, true);
   };
 
   const fetchPatientContext = async (phone: string) => {
@@ -489,7 +514,7 @@ export default function ChatsView() {
   // ============================================
 
   return (
-    <div className="h-[calc(100vh-64px)] lg:h-[calc(100vh-100px)] flex relative overflow-hidden">
+    <div className="h-full flex relative overflow-hidden bg-white">
       {/* Audio para notificaciones */}
       <audio ref={audioRef} src="/notification.mp3" preload="auto" />
 
