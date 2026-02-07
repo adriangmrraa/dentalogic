@@ -61,15 +61,21 @@ AgendaView / Odontograma
 **Función:** Procesamiento de lenguaje natural, clasificación de urgencias y gestión de agenda.
 
 **Tools Clínicas Integradas:**
-- `check_availability(date)`: Consulta disponibilidad real en la base de datos.
-- `book_appointment(datetime, reason)`: Registra un nuevo turno y emite eventos WebSocket.
-- `triage_urgency(symptoms)`: Clasifica el nivel de dolor/gravedad (emergency, high, normal, low).
-- `derivhumano(reason)`: Notifica al profesional y silencia el bot por 24h.
+- `check_availability(date)`: Implementa lógica **Just-in-Time (JIT)**.
+  1. Consulta eventos en vivo a Google Calendar API (Mirroring).
+  2. Actualiza caché local `google_calendar_blocks`.
+  3. Calcula huecos libres combinando `appointments` + `google_calendar_blocks`.
+- `book_appointment(...)`: 
+  - Valida datos obligatorios para leads (DNI, Obra Social).
+  - Registra turno en PG + GCal.
+  - Emite eventos WebSocket (`NEW_APPOINTMENT`) para actualizar UI.
 
 **Gestión de Datos:**
-- **Memoria Persistente:** Vincula cada chat con el `patient_id` para mantener la continuidad del tratamiento.
-- **Sincronización:** Emite eventos `NEW_APPOINTMENT` vía Socket.IO para actualizar la AgendaView instantáneamente.
-- **Multi-Tenancy:** Soporte para múltiples consultorios/clínicas bajo la misma infraestructura.
+- **Memoria Persistente:** Vincula cada chat con el `patient_id`.
+- **Sincronización Real-Time:** 
+  - Server Socket.IO (namespace `/`) emite eventos: `NEW_APPOINTMENT`, `APPOINTMENT_UPDATED`.
+  - Frontend escucha y renderiza sin refrescar.
+- **Multi-Tenancy:** Soporte para múltiples consultorios/clínicas.
 
 ### C. Frontend React (Puerto 80) - **Centro de Operaciones**
 

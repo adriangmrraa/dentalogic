@@ -18,9 +18,10 @@ Si un paciente agenda un turno por WhatsApp con la asistente, la IA envía una s
 
  La IA tiene "superpoderes" llamados herramientas (tools) que usa según lo que necesite el paciente:
 
-1.  **Agenda Inteligente:** Cuando alguien pregunta "¿Tenés turno para mañana?", la IA mira la agenda real y ofrece los huecos libres.
-2.  **Anotar Turno:** Una vez que el paciente elige, la IA lo anota oficialmente y aparece al instante en el calendario de la clínica.
-3.  **Triaje de Urgencias:** Si un paciente dice "Me duele mucho", la IA detecta la gravedad y marca el chat con un aviso de "Urgencia" resaltado. Además, el sistema ordena las conversaciones automáticamente, poniendo los mensajes más recientes o urgentes arriba de todo.
+1.  **Agenda Inteligente 2.0 (Vista Semanal):** La agenda muestra por defecto la semana completa con una visualización clara y espaciosa tipo tarjetas. Los turnos se ven con colores según su estado (Confirmado, Pendiente, etc.) y la IA evita automáticamente agendar en horarios pasados.
+2.  **Sincronización Híbrida (Google Calendar):** El sistema "espeja" tu calendario de Google. Si creás un evento personal en tu celular, el hueco desaparece de la agenda de la clínica al instante para que la IA no lo ofrezca.
+3.  **Anotar Turno:** Una vez que el paciente elige, la IA lo anota oficialmente y aparece al instante en el calendario de la clínica.
+4.  **Triaje de Urgencias:** Si un paciente dice "Me duele mucho", la IA detecta la gravedad y marca el chat con un aviso de "Urgencia" resaltado. Además, el sistema ordena las conversaciones automáticamente, poniendo los mensajes más recientes o urgentes arriba de todo.
 
 ## 4. El Trabajo en Equipo: Frontend, Base de Datos y la IA
 Todos los componentes trabajan juntos para que no se pierda ninguna información:
