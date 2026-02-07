@@ -757,6 +757,17 @@ export default function AgendaView() {
             font-weight: 600 !important;
             padding: 8px !important;
           }
+          
+          /* Opacar días pasados visualmente */
+          .fc-day-past {
+            background-color: #f9fafb !important;
+            opacity: 0.5 !important;
+          }
+          
+          .fc-timegrid-col.fc-day-past {
+            background-color: #f3f4f6 !important;
+            pointer-events: none !important;
+          }
         `}</style>
 
         {loading && appointments.length === 0 ? (
@@ -769,13 +780,11 @@ export default function AgendaView() {
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="timeGridWeek"
+            initialDate={new Date()}
             headerToolbar={{
               left: 'prev,next today',
               center: 'title',
               right: 'timeGridWeek,timeGridDay,dayGridMonth',
-            }}
-            validRange={{
-              start: new Date().toISOString().split('T')[0], // Solo desde hoy en adelante
             }}
             selectAllow={(selectInfo) => {
               // Bloquear selección de fechas/horas pasadas
