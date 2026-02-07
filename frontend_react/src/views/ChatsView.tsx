@@ -78,6 +78,7 @@ export default function ChatsView() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showToast, setShowToast] = useState<Toast | null>(null);
   const [highlightedSession, setHighlightedSession] = useState<string | null>(null);
+  const [showMobileContext, setShowMobileContext] = useState(false);
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -482,25 +483,6 @@ export default function ChatsView() {
     };
   };
 
-  const getUrgencyBadge = (level?: string) => {
-    if (!level) return null;
-
-    const normalizedLevel = level.toUpperCase();
-    const colors: Record<string, string> = {
-      LOW: 'bg-green-100 text-green-800',
-      NORMAL: 'bg-blue-100 text-blue-800',
-      MEDIUM: 'bg-yellow-100 text-yellow-800',
-      HIGH: 'bg-orange-100 text-orange-800',
-      CRITICAL: 'bg-red-100 text-red-800',
-      EMERGENCY: 'bg-red-100 text-red-800 animate-pulse',
-    };
-
-    return (
-      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${colors[normalizedLevel] || 'bg-gray-100'}`}>
-        {level}
-      </span>
-    );
-  };
 
   // ============================================
   // RENDER
@@ -567,44 +549,59 @@ export default function ChatsView() {
             <div className="p-4 text-center text-gray-500">No hay conversaciones</div>
           ) : (
             filteredSessions.map(session => {
-              const { badge, avatarBg, cardBorder } = getStatusConfig(session);
+              const { avatarBg } = getStatusConfig(session);
               const isHighlighted = highlightedSession === session.phone_number;
+              const isSelected = selectedSession?.phone_number === session.phone_number;
 
               return (
                 <div
                   key={session.phone_number}
                   onClick={() => setSelectedSession(session)}
-                  className={`p-4 border-b cursor-pointer transition-all ${selectedSession?.phone_number === session.phone_number
-                    ? 'bg-primary-light'
-                    : 'hover:bg-gray-50'
-                    } ${isHighlighted ? 'bg-orange-50 animate-pulse' : ''} ${cardBorder}`}
+                  className={`px-4 py-3 border-b cursor-pointer transition-all relative
+                    ${isSelected ? 'bg-medical-50' : 'hover:bg-gray-50 active:bg-gray-100'}
+                    ${isHighlighted ? 'bg-orange-50 animate-pulse' : ''}
+                  `}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${avatarBg}`}>
-                      {(session.patient_name || session.phone_number).charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium truncate">
-                            {session.patient_name || 'Sin nombre'}
-                          </span>
-                          {getUrgencyBadge(session.urgency_level)}
+                  <div className="flex items-center gap-3">
+                    {/* Avatar with Status Ring */}
+                    <div className="relative shrink-0">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm ${avatarBg}`}>
+                        {(session.patient_name || session.phone_number).charAt(0)}
+                      </div>
+                      {session.status === 'human_handling' && (
+                        <div className="absolute -bottom-1 -right-1 bg-white p-0.5 rounded-full shadow-sm">
+                          <User size={12} className="text-orange-500 fill-orange-500" />
                         </div>
-                        <span className="text-xs text-gray-400">{formatTime(session.last_message_time)}</span>
-                      </div>
-                      <p className="text-sm text-gray-500 truncate">{session.last_message}</p>
-                      {badge}
+                      )}
                     </div>
-                    {session.unread_count > 0 && (
-                      <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                        {session.unread_count}
-                      </span>
-                    )}
-                    {session.last_derivhumano_at && (
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                        <AlertCircle size={16} className="text-orange-500" />
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-baseline mb-0.5">
+                        <span className={`font-semibold truncate ${isSelected ? 'text-medical-900' : 'text-gray-900'}`}>
+                          {session.patient_name || session.phone_number}
+                        </span>
+                        <span className={`text-[11px] shrink-0 ml-2 ${session.unread_count > 0 ? 'text-medical-600 font-bold' : 'text-gray-400'}`}>
+                          {formatTime(session.last_message_time)}
+                        </span>
                       </div>
+
+                      <div className="flex justify-between items-center">
+                        <p className={`text-sm truncate pr-4 ${session.unread_count > 0 ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                          {session.last_message || 'Sin mensajes'}
+                        </p>
+                        {session.unread_count > 0 && (
+                          <span className="bg-medical-600 text-white text-[10px] font-bold min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center">
+                            {session.unread_count}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Floating Urgency Indicator for Mobile */}
+                  <div className="absolute top-3 right-4 lg:hidden">
+                    {session.urgency_level === 'CRITICAL' && (
+                      <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
                     )}
                   </div>
                 </div>
@@ -616,55 +613,64 @@ export default function ChatsView() {
 
       {/* Chat Detail */}
       {selectedSession ? (
-        <div className="flex-1 flex flex-col min-w-0 bg-gray-50 h-full">
-          {/* Messages */}
-          <div className="flex-1 flex flex-col">
-            {/* Header */}
-            <div className="p-4 border-b bg-white flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setSelectedSession(null)}
-                  className="lg:hidden p-2 hover:bg-gray-100 rounded"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
-                  ? 'bg-orange-500'
-                  : 'bg-primary'
-                  }`}>
-                  {(selectedSession.patient_name || selectedSession.phone_number).charAt(0)}
-                </div>
-                <div>
-                  <h3 className="font-medium">{selectedSession.patient_name || 'Sin nombre'}</h3>
-                  <p className="text-sm text-gray-500">{selectedSession.phone_number}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* Mostrar estado de silencio override */}
-                {selectedSession.human_override_until && (
-                  <div className="flex items-center gap-2 px-3 py-1 bg-red-50 text-red-700 rounded-lg text-sm">
-                    <VolumeX size={14} />
-                    <span>
-                      Silenciado hasta {new Date(selectedSession.human_override_until).toLocaleTimeString()}
-                    </span>
+        <>
+          <div className="flex-1 flex flex-col min-w-0 bg-gray-50 h-full">
+            {/* Messages */}
+            <div className="flex-1 flex flex-col">
+              {/* Header */}
+              <div className="p-4 border-b bg-white flex justify-between items-center">
+                <div className="flex items-center gap-3 min-w-0">
+                  <button
+                    onClick={() => {
+                      setSelectedSession(null);
+                      setShowMobileContext(false);
+                    }}
+                    className="lg:hidden p-2 -ml-2 hover:bg-gray-100 rounded-full text-gray-600 active:bg-gray-200 transition-colors"
+                  >
+                    <ChevronLeft size={24} />
+                  </button>
+                  <div
+                    onClick={() => window.innerWidth < 1280 && setShowMobileContext(!showMobileContext)}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shrink-0 cursor-pointer ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
+                      ? 'bg-orange-500'
+                      : 'bg-medical-600'
+                      }`}
+                  >
+                    {(selectedSession.patient_name || selectedSession.phone_number).charAt(0)}
                   </div>
-                )}
+                  <div className="min-w-0 flex-1 cursor-pointer" onClick={() => window.innerWidth < 1280 && setShowMobileContext(!showMobileContext)}>
+                    <h3 className="font-bold text-gray-900 truncate leading-tight">
+                      {selectedSession.patient_name || 'Sin nombre'}
+                    </h3>
+                    <p className="text-xs text-gray-500 truncate">{selectedSession.phone_number}</p>
+                  </div>
+                </div>
 
-                {/* Botón de control */}
-                <button
-                  onClick={handleToggleHumanMode}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
-                    ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                    : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                    }`}
-                >
-                  {selectedSession.status === 'human_handling' || selectedSession.status === 'silenced' ? (
-                    <><Play size={16} /> Activar IA</>
-                  ) : (
-                    <><Pause size={16} /> Modo Manual</>
-                  )}
-                </button>
+                {/* Header Actions */}
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <button
+                    onClick={() => setShowMobileContext(!showMobileContext)}
+                    className="p-2 text-medical-600 hover:bg-medical-50 rounded-full lg:hidden transition-colors"
+                    title="Ver ficha clínica"
+                  >
+                    <Activity size={20} />
+                  </button>
+
+                  <button
+                    onClick={handleToggleHumanMode}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm
+                      ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-200'
+                        : 'bg-orange-100 text-orange-700 hover:bg-orange-200 border border-orange-200'
+                      }`}
+                  >
+                    {selectedSession.status === 'human_handling' || selectedSession.status === 'silenced' ? (
+                      <><Play size={14} className="fill-current" /> <span className="hidden sm:inline">Activar IA</span></>
+                    ) : (
+                      <><Pause size={14} className="fill-current" /> <span className="hidden sm:inline">Manual</span></>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -768,16 +774,35 @@ export default function ChatsView() {
             </form>
           </div>
 
-          {/* Clinical Context Panel - Hidden on Mobile */}
-          <div className="hidden xl:block w-80 border-l bg-white overflow-y-auto">
-            <div className="p-4 border-b">
-              <h3 className="font-medium flex items-center gap-2">
-                <Activity size={18} className="text-primary" />
-                Contexto Clínico
-              </h3>
+          {/* Clinical Context Panel - WhatsApp Style Overlay on Mobile / Sidebar on Desktop */}
+          <div className={`
+            ${showMobileContext ? 'flex' : 'hidden'} 
+            xl:flex flex-col
+            fixed inset-0 z-40 bg-white 
+            xl:relative xl:z-0 xl:w-80 xl:border-l xl:inset-auto
+            animate-slide-in xl:animate-none
+          `}>
+            {/* Context Header (Mobile only) */}
+            <div className="p-4 border-b flex justify-between items-center xl:hidden">
+              <div className="flex items-center gap-2">
+                <User className="text-medical-600" size={20} />
+                <h3 className="font-bold">Perfil del Paciente</h3>
+              </div>
+              <button
+                onClick={() => setShowMobileContext(false)}
+                className="p-2 hover:bg-gray-100 rounded-full"
+              >
+                <ChevronLeft size={24} className="rotate-180" />
+              </button>
             </div>
 
-            <div className="p-4 space-y-4">
+            {/* Desktop Context Header */}
+            <div className="hidden xl:flex p-4 border-b items-center gap-2">
+              <Activity size={18} className="text-primary" />
+              <h3 className="font-medium">Contexto Clínico</h3>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
               {/* AI Status */}
               <div className={`p-3 rounded-lg ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
                 ? 'bg-orange-50 border border-orange-200'
@@ -869,14 +894,12 @@ export default function ChatsView() {
               </div>
             </div>
           </div>
-        </div>
+        </>
       ) : (
-        <div className="flex-1 flex items-center justify-center bg-gray-50">
-          <div className="text-center text-gray-400">
-            <MessageCircle size={64} className="mx-auto mb-4 opacity-50" />
-            <p className="text-lg">Selecciona una conversación</p>
-            <p className="text-sm mt-1">para ver los mensajes</p>
-          </div>
+        <div className="hidden lg:flex flex-1 items-center justify-center bg-gray-50 flex-col gap-4">
+          <MessageCircle size={64} className="opacity-20" />
+          <p className="text-lg font-medium text-gray-400">Selecciona una conversación</p>
+          <p className="text-sm text-gray-400">para comenzar a chatear</p>
         </div>
       )}
 
