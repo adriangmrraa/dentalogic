@@ -146,7 +146,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 min-h-0 bg-gray-100 p-4 lg:p-6 overflow-hidden">
+        <div className="flex-1 min-h-0 bg-gray-100 overflow-hidden">
           {children}
         </div>
       </main>

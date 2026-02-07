@@ -365,7 +365,7 @@ export default function DashboardView() {
   // ============================================
 
   return (
-    <div className="p-6 h-full overflow-y-auto relative">
+    <div className="p-4 lg:p-6 h-full overflow-y-auto relative">
       {/* ======================================== */}
       {/* TOAST NOTIFICATIONS */}
       {/* ======================================== */}
