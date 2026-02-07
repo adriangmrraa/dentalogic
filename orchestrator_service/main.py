@@ -182,7 +182,8 @@ def to_json_safe(data):
     return data
 
 def generate_free_slots(target_date: date, busy_times: List[tuple], 
-                        start_time_str="09:00", end_time_str="18:00", interval_minutes=30) -> List[str]:
+                        start_time_str="09:00", end_time_str="18:00", interval_minutes=30, 
+                        limit=20, time_preference: Optional[str] = None) -> List[str]:
     """Genera lista de horarios disponibles (30min intervals)."""
     slots = []
     
@@ -202,8 +203,6 @@ def generate_free_slots(target_date: date, busy_times: List[tuple],
     # Pre-calculate busy intervals (30 min granularity)
     busy_intervals = set()
     for busy_start, duration in busy_times:
-        # Round start to nearest 30m slot if necessary? (Standardizing to 30m slots)
-        # For simplicity, we block any 30m slot that overlaps with the busy period
         busy_end = busy_start + timedelta(minutes=duration)
         it = busy_start
         while it < busy_end:
@@ -211,36 +210,46 @@ def generate_free_slots(target_date: date, busy_times: List[tuple],
             it += timedelta(minutes=30)
     
     while current < end_limit:
-        # 1. Saltar almuerzo (opcional, podrías hacerlo dinámico también)
-        if current.hour >= 13 and current.hour < 14:
+        # 1. Filtro por preferencia de horario (mañana/tarde/todo)
+        # Mañana: < 13:00, Tarde: >= 13:00
+        if time_preference == 'mañana' and current.hour >= 13:
+            current += timedelta(minutes=interval_minutes)
+            continue
+        if time_preference == 'tarde' and current.hour < 13:
+            current += timedelta(minutes=interval_minutes)
+            continue
+
+        # 2. Saltar almuerzo (opcional)
+        if current.hour >= 13 and current.hour < 14 and not time_preference:
             current += timedelta(minutes=interval_minutes)
             continue
         
-        # 2. No ofrecer turnos en el pasado (si es hoy)
+        # 3. No ofrecer turnos en el pasado (si es hoy)
         if target_date == now.date() and current <= now:
             current += timedelta(minutes=interval_minutes)
             continue
             
-        # 3. Verificar que no está ocupado
+        # 4. Verificar que no está ocupado
         time_str = current.strftime("%H:%M")
         if time_str not in busy_intervals:
-            # Asegurar que el turno cabe antes de que cierre la clínica (asumiendo 30m o 60m)
-            # Si el turno dura 1h, no debería empezar a las 18:30 si cierran a las 19:00
-            # Por ahora permitimos si el inicio < end_limit
             slots.append(time_str)
         
+        if len(slots) >= limit:
+            break
+
         current += timedelta(minutes=interval_minutes)
     
-    return slots[:10]  # Retornar hasta 10 opciones
+    return slots
 
 # --- TOOLS DENTALES ---
 
 @tool
-async def check_availability(date_query: str, professional_name: Optional[str] = None):
+async def check_availability(date_query: str, professional_name: Optional[str] = None, time_preference: Optional[str] = None):
     """
     Consulta la disponibilidad REAL de turnos en la BD para una fecha.
     date_query: Descripción de la fecha (ej: 'mañana', 'lunes', '2025-05-10')
     professional_name: (Opcional) Nombre del profesional específico.
+    time_preference: (Opcional) 'mañana', 'tarde' o 'todo'. Úsalo si el usuario pide un horario específico.
     Devuelve: Horarios disponibles
     """
     try:
@@ -357,7 +366,9 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
             target_date, 
             busy_times, 
             start_time_str=CLINIC_HOURS_START, 
-            end_time_str=CLINIC_HOURS_END
+            end_time_str=CLINIC_HOURS_END,
+            time_preference=time_preference,
+            limit=20
         )
         
         if available_slots:
