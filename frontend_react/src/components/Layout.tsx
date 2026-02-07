@@ -90,8 +90,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Sidebar - Desktop and Mobile Drawer */}
       <div className={`
-        fixed lg:static inset-y-0 left-0 z-50 transition-transform duration-300 transform
+        fixed lg:relative inset-y-0 left-0 z-50 transition-all duration-300 transform
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        ${sidebarCollapsed ? 'lg:w-16 md:w-0' : 'lg:w-64 md:w-0'}
       `}>
         <Sidebar
           collapsed={sidebarCollapsed}

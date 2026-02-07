@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
     { id: 'approvals', label: 'Personal', icon: <ShieldCheck size={20} />, path: '/aprobaciones', roles: ['ceo'] },
     { id: 'professionals', label: 'Profesionales', icon: <Stethoscope size={20} />, path: '/profesionales', roles: ['ceo', 'secretary'] },
     { id: 'analytics', label: 'Estrategia', icon: <BarChart3 size={20} />, path: '/analytics/professionals', roles: ['ceo'] },
-    { id: 'treatments', label: 'Tratamientos', icon: <Clock size={20} />, path: '/tratamientos', roles: ['ceo', 'secretary'] },
+    { id: 'treatments', label: 'Tratamientos', icon: <Clock size={20} />, path: '/treatments', roles: ['ceo', 'secretary'] },
     { id: 'profile', label: 'Mi Perfil', icon: <User size={20} />, path: '/perfil', roles: ['ceo', 'professional', 'secretary'] },
     { id: 'settings', label: 'Configuración', icon: <Settings size={20} />, path: '/configuracion', roles: ['ceo'] },
   ];
@@ -51,17 +51,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-screen bg-medical-900 text-white transition-all duration-300 z-50 ${collapsed ? 'w-16' : 'w-64'
-        }`}
+      className={`fixed lg:absolute left-0 top-0 h-screen bg-medical-900 text-white transition-all duration-300 z-50 
+        ${collapsed ? 'w-16' : 'w-64'}
+      `}
     >
       {/* Logo */}
       <div className={`h-16 flex items-center ${collapsed ? 'justify-center' : 'px-6'} border-b border-medical-800`}>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
             <Stethoscope size={18} className="text-white" />
           </div>
-          {!collapsed && (
-            <span className="font-semibold text-lg">Dental Clinic</span>
+          {(!collapsed || onCloseMobile) && (
+            <span className="font-semibold text-lg truncate">Dental Clinic</span>
           )}
         </div>
 
@@ -69,7 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
         {onCloseMobile && (
           <button
             onClick={onCloseMobile}
-            className="lg:hidden p-2 text-gray-400 hover:text-white"
+            className="lg:hidden p-2 ml-auto text-gray-400 hover:text-white"
           >
             <X size={24} />
           </button>
@@ -79,8 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
       {/* Toggle Button (Desktop only) */}
       <button
         onClick={onToggle}
-        className={`hidden lg:flex absolute -right-3 top-20 w-6 h-6 bg-white rounded-full shadow-lg items-center justify-center text-medical-900 hover:bg-gray-100 transition-colors ${collapsed ? 'left-1/2 -translate-x-1/2' : ''
-          }`}
+        className="hidden lg:flex absolute -right-3 top-20 w-6 h-6 bg-white rounded-full shadow-lg items-center justify-center text-medical-900 hover:bg-gray-100 transition-colors z-10"
       >
         {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
       </button>
@@ -98,28 +98,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
               ? 'bg-white/10 text-white'
               : 'text-gray-400 hover:bg-white/5 hover:text-white'
               }`}
-            title={collapsed ? item.label : undefined}
+            title={collapsed && !onCloseMobile ? item.label : undefined}
           >
             <span className="flex-shrink-0">{item.icon}</span>
-            {(!collapsed || onCloseMobile) && <span className="font-medium text-sm">{item.label}</span>}
+            {(!collapsed || onCloseMobile) && <span className="font-medium text-sm truncate">{item.label}</span>}
           </button>
         ))}
 
         <button
           onClick={logout}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 mt-4 text-red-400 hover:bg-red-500/10`}
-          title={collapsed ? 'Cerrar Sesión' : undefined}
+          title={collapsed && !onCloseMobile ? 'Cerrar Sesión' : undefined}
         >
           <LogOut size={20} />
-          {!collapsed && <span className="font-medium text-sm">Cerrar Sesión</span>}
+          {(!collapsed || onCloseMobile) && <span className="font-medium text-sm">Cerrar Sesión</span>}
         </button>
       </nav>
 
       {/* Tenant Info at Bottom */}
-      {!collapsed && (
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-medical-800">
+      {(!collapsed || onCloseMobile) && (
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-medical-800 bg-medical-900 overflow-hidden">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-medical-600 flex items-center justify-center text-xs font-medium uppercase">
+            <div className="w-8 h-8 rounded-full bg-medical-600 flex items-center justify-center text-xs font-medium uppercase shrink-0">
               {user?.email?.[0] || 'U'}
             </div>
             <div className="flex-1 min-w-0">
