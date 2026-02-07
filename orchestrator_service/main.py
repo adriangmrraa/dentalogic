@@ -538,7 +538,9 @@ async def book_appointment(date_time: str, treatment_reason: str,
         appointment_data = await db.pool.fetchrow("""
             SELECT a.id, a.patient_id, a.professional_id, a.appointment_datetime, 
                    a.appointment_type, a.status, a.urgency_level,
-                   p.first_name, p.last_name, p.phone_number,
+                   (p.first_name || ' ' || COALESCE(p.last_name, '')) as patient_name, 
+                   p.phone_number as patient_phone,
+                   p.first_name, p.last_name, p.phone_number, -- Para GCal summary/desc
                    prof.first_name as professional_name
             FROM appointments a
             JOIN patients p ON a.patient_id = p.id

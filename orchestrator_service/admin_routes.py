@@ -904,7 +904,8 @@ async def list_appointments(start_date: str, end_date: str, professional_id: Opt
     query = """
         SELECT a.id, a.appointment_datetime, a.duration_minutes, a.status, a.urgency_level,
                a.source, a.appointment_type, a.notes,
-               p.first_name, p.last_name, p.phone_number,
+               (p.first_name || ' ' || COALESCE(p.last_name, '')) as patient_name, 
+               p.phone_number as patient_phone,
                prof.first_name as professional_name, prof.id as professional_id
         FROM appointments a
         JOIN patients p ON a.patient_id = p.id
@@ -1036,7 +1037,21 @@ async def create_appointment_manual(apt: AppointmentCreate, request: Request):
             ) VALUES ($1, $2, $3, $4, $5, 60, $6, 'confirmed', 'normal', 'manual', NOW())
         """, new_id, tenant_id, pid, apt.professional_id, apt.datetime, apt.type)
         
-        # 5. Sincronizar con Google Calendar
+        # 5. Obtener datos completos del turno para evento y GCal
+        appointment_data = await db.pool.fetchrow("""
+            SELECT a.id, a.patient_id, a.professional_id, a.appointment_datetime, 
+                   a.appointment_type, a.status, a.urgency_level,
+                   (p.first_name || ' ' || COALESCE(p.last_name, '')) as patient_name, 
+                   p.phone_number as patient_phone,
+                   p.first_name, p.last_name, -- Para el summary de GCal
+                   prof.first_name as professional_name
+            FROM appointments a
+            JOIN patients p ON a.patient_id = p.id
+            JOIN professionals prof ON a.professional_id = prof.id
+            WHERE a.id = $1
+        """, new_id)
+
+        # 6. Sincronizar con Google Calendar
         try:
             # Obtener google_calendar_id del profesional
             google_calendar_id = await db.pool.fetchval(
@@ -1044,7 +1059,7 @@ async def create_appointment_manual(apt: AppointmentCreate, request: Request):
                 apt.professional_id
             )
             
-            if google_calendar_id:
+            if google_calendar_id and appointment_data:
                 summary = f"Cita Dental: {appointment_data['first_name']} {appointment_data['last_name'] or ''} - {apt.type}"
                 start_time = apt.datetime.isoformat()
                 end_time = (apt.datetime + timedelta(minutes=60)).isoformat()
@@ -1065,7 +1080,7 @@ async def create_appointment_manual(apt: AppointmentCreate, request: Request):
         except Exception as ge:
             print(f"Error syncing with GCal: {ge}")
 
-        # 6. Emitir evento de Socket.IO para actualización en tiempo real
+        # 7. Emitir evento de Socket.IO para actualización en tiempo real
         if appointment_data:
             await emit_appointment_event("NEW_APPOINTMENT", dict(appointment_data), request)
         
@@ -1089,7 +1104,8 @@ async def update_appointment_status(id: str, status: str, request: Request):
     appointment_data = await db.pool.fetchrow("""
         SELECT a.id, a.patient_id, a.professional_id, a.appointment_datetime, 
                a.appointment_type, a.status, a.urgency_level,
-               p.first_name, p.last_name, p.phone_number,
+               (p.first_name || ' ' || COALESCE(p.last_name, '')) as patient_name, 
+               p.phone_number as patient_phone,
                prof.first_name as professional_name,
                a.google_calendar_event_id, a.google_calendar_sync_status
         FROM appointments a
