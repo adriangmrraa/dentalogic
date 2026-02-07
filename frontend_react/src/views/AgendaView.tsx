@@ -125,8 +125,17 @@ const getSourceLabel = (source: string | undefined): string => {
   return SOURCE_COLORS[source]?.label || source.toUpperCase();
 };
 
+// Fallback clinic hours
+const DEFAULT_START = '08:00';
+const DEFAULT_END = '19:00';
+
 export default function AgendaView() {
   const { user } = useAuth();
+  const [clinicSettings, setClinicSettings] = useState({
+    hours_start: DEFAULT_START,
+    hours_end: DEFAULT_END,
+    name: 'Consultorio'
+  });
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [googleBlocks, setGoogleBlocks] = useState<GoogleCalendarBlock[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
@@ -276,10 +285,23 @@ export default function AgendaView() {
     }
   }, []);
 
+  // Fetch clinic settings
+  const fetchClinicSettings = useCallback(async () => {
+    try {
+      const response = await api.get('/admin/settings/clinic');
+      setClinicSettings(response.data);
+    } catch (error) {
+      console.error('Error fetching clinic settings:', error);
+    }
+  }, []);
+
   // Fetch all data
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+
+      // Fetch settings first if needed or concurrently
+      fetchClinicSettings();
 
       // Get current calendar date range
       let startDate = new Date();
@@ -789,6 +811,8 @@ export default function AgendaView() {
             dateClick={handleDateClick}
             eventClick={handleEventClick}
             slotEventOverlap={false}
+            slotMinTime={`${clinicSettings.hours_start}:00`}
+            slotMaxTime={`${clinicSettings.hours_end}:00`}
             eventTimeFormat={{
               hour: '2-digit',
               minute: '2-digit',

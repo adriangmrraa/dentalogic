@@ -124,10 +124,10 @@ class GCalService:
             start_dt = datetime.combine(date_obj, datetime.min.time()).replace(tzinfo=None)
             end_dt = datetime.combine(date_obj, datetime.max.time()).replace(tzinfo=None)
             
-            # Format to RFC3339 timestamp with Z suffix (UTC) or offset
-            # Using simple ISO format and appending 'Z' for UTC/Zulu time which GCal expects
-            time_min = start_dt.isoformat() + 'Z'
-            time_max = end_dt.isoformat() + 'Z'
+            # Format to RFC3339 timestamp with Argentina offset (-03:00)
+            # GCal expects ISO format. We append the offset for clarity and reliability.
+            time_min = start_dt.isoformat() + '-03:00'
+            time_max = end_dt.isoformat() + '-03:00'
             
             return self.list_events(calendar_id=calendar_id, time_min=time_min, time_max=time_max)
         except Exception as e:

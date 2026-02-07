@@ -594,6 +594,18 @@ async def get_deployment_config(request: Request):
         "environment": os.getenv("ENVIRONMENT", "development")
     }
 
+@router.get("/settings/clinic", dependencies=[Depends(verify_admin_token)])
+async def get_clinic_settings():
+    """Retorna la configuración operativa de la clínica (horarios, nombre, etc)."""
+    return {
+        "name": os.getenv("CLINIC_NAME", "Consultorio Dental"),
+        "location": os.getenv("CLINIC_LOCATION", "Mercedes, Buenos Aires"),
+        "hours_start": os.getenv("CLINIC_HOURS_START", "08:00"),
+        "hours_end": os.getenv("CLINIC_HOURS_END", "19:00"),
+        "working_days": [0, 1, 2, 3, 4, 5], # 0=Lunes, 5=Sábado
+        "time_zone": "America/Argentina/Buenos_Aires"
+    }
+
 # ==================== ENDPOINTS BÚSQUEDA SEMÁNTICA ====================
 
 @router.get("/patients/search-semantic", dependencies=[Depends(verify_admin_token)])

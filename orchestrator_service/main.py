@@ -44,6 +44,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 POSTGRES_DSN = os.getenv("POSTGRES_DSN", "")
 CLINIC_NAME = os.getenv("CLINIC_NAME", "Consultorio Dental")
 CLINIC_LOCATION = os.getenv("CLINIC_LOCATION", "Buenos Aires, Argentina")
+CLINIC_HOURS_START = os.getenv("CLINIC_HOURS_START", "08:00")
+CLINIC_HOURS_END = os.getenv("CLINIC_HOURS_END", "19:00")
 
 # ContextVars para rastrear el usuario en la sesión de LangChain
 current_customer_phone: ContextVar[Optional[str]] = ContextVar("current_customer_phone", default=None)
@@ -146,31 +148,56 @@ def to_json_safe(data):
     return data
 
 def generate_free_slots(target_date: date, busy_times: List[tuple], 
-                       start_hour=9, end_hour=18, interval_minutes=30) -> List[str]:
+                        start_time_str="09:00", end_time_str="18:00", interval_minutes=30) -> List[str]:
     """Genera lista de horarios disponibles (30min intervals)."""
     slots = []
-    current = datetime.combine(target_date, datetime.min.time()).replace(hour=start_hour)
-    end = datetime.combine(target_date, datetime.min.time()).replace(hour=end_hour)
     
-    # Convertir busy_times a set de horas
-    busy_hours = set()
+    # Parse start and end times
+    try:
+        sh, sm = map(int, start_time_str.split(':'))
+        eh, em = map(int, end_time_str.split(':'))
+    except:
+        sh, sm = 9, 0
+        eh, em = 18, 0
+
+    current = datetime.combine(target_date, datetime.min.time()).replace(hour=sh, minute=sm)
+    end_limit = datetime.combine(target_date, datetime.min.time()).replace(hour=eh, minute=em)
+    
+    now = datetime.now()
+    
+    # Pre-calculate busy intervals (30 min granularity)
+    busy_intervals = set()
     for busy_start, duration in busy_times:
-        busy_hours.add(busy_start.hour + (busy_start.minute / 60))
+        # Round start to nearest 30m slot if necessary? (Standardizing to 30m slots)
+        # For simplicity, we block any 30m slot that overlaps with the busy period
+        busy_end = busy_start + timedelta(minutes=duration)
+        it = busy_start
+        while it < busy_end:
+            busy_intervals.add(it.strftime("%H:%M"))
+            it += timedelta(minutes=30)
     
-    while current < end:
-        # Saltar almuerzo 13:00-14:00
+    while current < end_limit:
+        # 1. Saltar almuerzo (opcional, podrías hacerlo dinámico también)
         if current.hour >= 13 and current.hour < 14:
             current += timedelta(minutes=interval_minutes)
             continue
         
-        # Verificar que no está ocupado
-        hour_decimal = current.hour + (current.minute / 60)
-        if hour_decimal not in busy_hours:
-            slots.append(current.strftime("%H:%M"))
+        # 2. No ofrecer turnos en el pasado (si es hoy)
+        if target_date == now.date() and current <= now:
+            current += timedelta(minutes=interval_minutes)
+            continue
+            
+        # 3. Verificar que no está ocupado
+        time_str = current.strftime("%H:%M")
+        if time_str not in busy_intervals:
+            # Asegurar que el turno cabe antes de que cierre la clínica (asumiendo 30m o 60m)
+            # Si el turno dura 1h, no debería empezar a las 18:30 si cierran a las 19:00
+            # Por ahora permitimos si el inicio < end_limit
+            slots.append(time_str)
         
         current += timedelta(minutes=interval_minutes)
     
-    return slots[:5]  # Retornar primeros 5
+    return slots[:10]  # Retornar hasta 10 opciones
 
 # --- TOOLS DENTALES ---
 
@@ -198,6 +225,10 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
             return "❌ Actualmente no hay profesionales registrados o activos en la clínica para realizar reservas."
 
         target_date = parse_date(date_query)
+
+        # 1. Verificar si es Domingo (Cerrado)
+        if target_date.weekday() == 6:
+            return f"Lo siento, el {date_query} es domingo y la clínica está cerrada. Atendemos de Lunes a Sábados."
         
         # --- JIT VALIDATION: Fetch Real-Time Events from Google ---
         # Fetch fresh events for the requested day and update local DB to ensure mirror accuracy.
@@ -282,17 +313,22 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         busy_times.sort(key=lambda x: x[0])
         
         # Generar slots libres
-        available_slots = generate_free_slots(target_date, busy_times)
+        available_slots = generate_free_slots(
+            target_date, 
+            busy_times, 
+            start_time_str=CLINIC_HOURS_START, 
+            end_time_str=CLINIC_HOURS_END
+        )
         
         if available_slots:
             slots_str = ", ".join(available_slots)
             resp = f"Tenemos disponibilidad para {date_query}"
             if professional_name:
                 resp += f" con el/la Dr/a. {active_professionals[0]['first_name']}"
-            resp += f": {slots_str} (30 min cada turno)."
+            resp += f": {slots_str}. ¿Te queda bien alguno?"
             return resp
         else:
-            return f"No hay disponibilidad para {date_query}. ¿Te interesa otro día?"
+            return f"No hay disponibilidad para {date_query} en ese horario o ya pasó la hora de atención. ¿Te interesa otro día?"
             
     except Exception as e:
         logger.error(f"Error en check_availability: {e}")
@@ -757,8 +793,10 @@ IDENTIDAD Y TONO ARGENTINO (FUNDAMENTAL):
 POLÍTICAS DURAS:
 • NUNCA INVENTES: No inventes horarios ni disponibilidad. Siempre usá 'check_availability'.
 • NO DIAGNOSTICAR: Ante dudas clínicas, decí: "La Dra. Laura va a tener que evaluarte acá en el consultorio para darte un diagnóstico certero y ver bien qué necesitás".
-• ZONA HORARIA: America/Argentina/Buenos_Aires. 
-• HORARIOS DE ATENCIÓN: Lunes a Sábados de 09:00 a 13:00 y 14:00 a 18:00 (Domingos cerrado).
+• ZONA HORARIA: America/Argentina/Buenos_Aires (GMT-3). 
+• TIEMPO ACTUAL: {datetime.now().strftime('%d/%m/%Y %H:%M')}.
+• HORARIOS DE ATENCIÓN: Lunes a Sábados de {CLINIC_HOURS_START} a {CLINIC_HOURS_END} (Domingos cerrado).
+• REGLA ANTI-PASADO: No podés agendar turnos para horarios que ya pasaron. Si un paciente pide hoy a las 15:00 y son las 15:30, informale amablemente que ese horario ya pasó y ofrecele los siguientes disponibles.
 • DERIVACIÓN (Human Handoff): 
   - Usá 'derivhumano' INMEDIATAMENTE si: 
     (a) Hay una URGENCIA crítica (sangrado, trauma, mucho dolor) detectada por 'triage_urgency'.
