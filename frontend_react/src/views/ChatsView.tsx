@@ -672,113 +672,113 @@ export default function ChatsView() {
                   </button>
                 </div>
               </div>
-            </div>
 
-            {/* Alert Banner para derivhumano */}
-            {selectedSession.last_derivhumano_at ? (
-              <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center gap-2">
-                <AlertCircle size={16} className="text-orange-500" />
-                <span className="text-sm text-orange-700">
-                  ⚠️ Derivación Automática: El bot derivó este chat a las {new Date(selectedSession.last_derivhumano_at).toLocaleTimeString()}
-                </span>
-                <button
-                  onClick={handleRemoveSilence}
-                  className="ml-auto text-xs text-orange-600 hover:underline"
-                >
-                  Quitar silencio
-                </button>
-              </div>
-            ) : (selectedSession.status === 'silenced' || selectedSession.status === 'human_handling') && (
-              <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex items-center gap-2">
-                <Pause size={16} className="text-blue-500" />
-                <span className="text-sm text-blue-700">
-                  ✋ Modo Manual Activo. El asistente no responderá.
-                </span>
-                <button
-                  onClick={handleToggleHumanMode}
-                  className="ml-auto text-xs text-blue-600 hover:underline"
-                >
-                  Activar IA
-                </button>
-              </div>
-            )}
-
-            {/* Banner de Ventana de 24hs Cerrada */}
-            {selectedSession.is_window_open === false && (
-              <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 flex items-center gap-2">
-                <Clock size={16} className="text-yellow-600" />
-                <span className="text-sm text-yellow-700">
-                  ⏳ <strong>Ventana de 24hs cerrada:</strong> No puedes enviar mensajes manuales hasta que el paciente te escriba de nuevo.
-                </span>
-              </div>
-            )}
-
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.role === 'user' ? 'justify-start' : 'justify-end'}`}
-                >
-                  <div
-                    className={`max-w-[70%] rounded-lg px-4 py-3 ${message.role === 'user'
-                      ? 'bg-white shadow-sm'
-                      : message.is_derivhumano
-                        ? 'bg-orange-100 border border-orange-300 shadow-sm text-gray-800'
-                        : 'bg-blue-600 text-white shadow-sm'
-                      }`}
+              {/* Alert Banner para derivhumano */}
+              {selectedSession.last_derivhumano_at ? (
+                <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center gap-2">
+                  <AlertCircle size={16} className="text-orange-500" />
+                  <span className="text-sm text-orange-700">
+                    ⚠️ Derivación Automática: El bot derivó este chat a las {new Date(selectedSession.last_derivhumano_at).toLocaleTimeString()}
+                  </span>
+                  <button
+                    onClick={handleRemoveSilence}
+                    className="ml-auto text-xs text-orange-600 hover:underline"
                   >
-                    {message.is_derivhumano && (
-                      <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
-                        <User size={12} />
-                        <span className="font-medium">Derivación automática</span>
-                      </div>
-                    )}
-                    <p className="text-sm">{message.content}</p>
-                    <p className={`text-xs mt-1 ${message.role === 'user' ? 'text-gray-400' : 'text-blue-200'
-                      }`}>
-                      {new Date(message.created_at).toLocaleTimeString()}
-                    </p>
-                  </div>
+                    Quitar silencio
+                  </button>
                 </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
+              ) : (selectedSession.status === 'silenced' || selectedSession.status === 'human_handling') && (
+                <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex items-center gap-2">
+                  <Pause size={16} className="text-blue-500" />
+                  <span className="text-sm text-blue-700">
+                    ✋ Modo Manual Activo. El asistente no responderá.
+                  </span>
+                  <button
+                    onClick={handleToggleHumanMode}
+                    className="ml-auto text-xs text-blue-600 hover:underline"
+                  >
+                    Activar IA
+                  </button>
+                </div>
+              )}
 
-            {/* Input */}
-            <form onSubmit={handleSendMessage} className="p-4 border-t bg-white">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder={selectedSession.is_window_open === false ? "Ventana cerrada - Esperando paciente..." : "Escribe un mensaje..."}
-                  disabled={selectedSession.is_window_open === false}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage(e as any);
-                    }
-                  }}
-                  className={`flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-medical-500 bg-white text-gray-900 ${selectedSession.is_window_open === false ? 'bg-gray-100 cursor-not-allowed opacity-75' : ''}`}
-                />
-                <button
-                  type="submit"
-                  disabled={sending || !newMessage.trim() || selectedSession.is_window_open === false}
-                  className="p-2 bg-medical-600 text-white rounded-lg hover:bg-medical-700 disabled:opacity-50 flex items-center justify-center transition-colors min-w-[44px]"
-                  title={selectedSession.is_window_open === false ? "Ventana de 24hs cerrada" : "Enviar mensaje"}
-                >
-                  <Send size={20} />
-                </button>
+              {/* Banner de Ventana de 24hs Cerrada */}
+              {selectedSession.is_window_open === false && (
+                <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 flex items-center gap-2">
+                  <Clock size={16} className="text-yellow-600" />
+                  <span className="text-sm text-yellow-700">
+                    ⏳ <strong>Ventana de 24hs cerrada:</strong> No puedes enviar mensajes manuales hasta que el paciente te escriba de nuevo.
+                  </span>
+                </div>
+              )}
+
+              {/* Messages Area */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex ${message.role === 'user' ? 'justify-start' : 'justify-end'}`}
+                  >
+                    <div
+                      className={`max-w-[70%] rounded-lg px-4 py-3 ${message.role === 'user'
+                        ? 'bg-white shadow-sm'
+                        : message.is_derivhumano
+                          ? 'bg-orange-100 border border-orange-300 shadow-sm text-gray-800'
+                          : 'bg-blue-600 text-white shadow-sm'
+                        }`}
+                    >
+                      {message.is_derivhumano && (
+                        <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
+                          <User size={12} />
+                          <span className="font-medium">Derivación automática</span>
+                        </div>
+                      )}
+                      <p className="text-sm">{message.content}</p>
+                      <p className={`text-xs mt-1 ${message.role === 'user' ? 'text-gray-400' : 'text-blue-200'
+                        }`}>
+                        {new Date(message.created_at).toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
               </div>
-            </form>
+
+              {/* Input */}
+              <form onSubmit={handleSendMessage} className="p-4 border-t bg-white">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder={selectedSession.is_window_open === false ? "Ventana cerrada - Esperando paciente..." : "Escribe un mensaje..."}
+                    disabled={selectedSession.is_window_open === false}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage(e as any);
+                      }
+                    }}
+                    className={`flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-medical-500 bg-white text-gray-900 ${selectedSession.is_window_open === false ? 'bg-gray-100 cursor-not-allowed opacity-75' : ''}`}
+                  />
+                  <button
+                    type="submit"
+                    disabled={sending || !newMessage.trim() || selectedSession.is_window_open === false}
+                    className="p-2 bg-medical-600 text-white rounded-lg hover:bg-medical-700 disabled:opacity-50 flex items-center justify-center transition-colors min-w-[44px]"
+                    title={selectedSession.is_window_open === false ? "Ventana de 24hs cerrada" : "Enviar mensaje"}
+                  >
+                    <Send size={20} />
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
 
           {/* Clinical Context Panel - WhatsApp Style Overlay on Mobile / Sidebar on Desktop */}
           <div className={`
-            ${showMobileContext ? 'flex' : 'hidden'} 
+            ${showMobileContext ? 'flex' : 'hidden'}
             xl:flex flex-col
-            fixed inset-0 z-40 bg-white 
+            fixed inset-0 z-40 bg-white
             xl:relative xl:z-0 xl:w-80 xl:border-l xl:inset-auto
             animate-slide-in xl:animate-none
           `}>
