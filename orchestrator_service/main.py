@@ -126,17 +126,46 @@ def parse_date(date_query: str) -> date:
     try:
         return dateutil_parse(query, dayfirst=True).date()
     except:
-        return datetime.now().date()
+        return get_now_arg().date()
 
 def parse_datetime(datetime_query: str) -> datetime:
-    """Convierte 'mañana 14:00', '2025-02-05 14:30' a datetime."""
-    try:
-        dt = dateutil_parse(datetime_query, dayfirst=True)
-        return dt
-    except:
-        # Fallback: mañana a las 14:00
-        tomorrow = get_now_arg() + timedelta(days=1)
-        return tomorrow.replace(hour=14, minute=0, second=0, microsecond=0)
+    """Convierte 'lunes 15:30', 'mañana 14:00', '2025-02-05 14:30' a datetime localizado."""
+    query = datetime_query.lower().strip()
+    target_date = None
+    target_time = (14, 0) # Default
+
+    # 1. Extraer hora (HH:MM)
+    time_match = re.search(r'(\d{1,2})[:h](\d{2})', query)
+    if time_match:
+        target_time = (int(time_match.group(1)), int(time_match.group(2)))
+    
+    # 2. Extraer fecha (usando la lógica de parse_date)
+    # Buscamos palabras clave o fechas en la query
+    words = query.split()
+    for word in words:
+        try:
+            # Intentamos parsear la palabra individualmente como fecha (mañana, lunes, etc)
+            d = parse_date(word)
+            # Si no es hoy, o si la query explícitamente dice 'hoy', lo tomamos
+            if d != get_now_arg().date() or 'hoy' in query or 'today' in query:
+                target_date = d
+                break
+        except:
+            continue
+
+    # 3. Fallback a dateutil para formatos estándar (YYYY-MM-DD)
+    if not target_date:
+        try:
+            dt = dateutil_parse(query, dayfirst=True)
+            if dt.year > 2000: # Evitar años raros
+                target_date = dt.date()
+                if not time_match: target_time = (dt.hour, dt.minute)
+        except:
+            target_date = (get_now_arg() + timedelta(days=1)).date()
+
+    return datetime.combine(target_date, datetime.min.time()).replace(
+        hour=target_time[0], minute=target_time[1], second=0, microsecond=0, tzinfo=ARG_TZ
+    )
 
 def to_json_safe(data):
     """
@@ -247,11 +276,15 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
                 g_events = gcal_service.get_events_for_day(calendar_id=cal_id, date_obj=target_date)
                 
                 # 2. Side-Effect Update: Refresh blocks for this day/prof in local DB
-                # First delete existing blocks for this specific day/prof to avoid stale data
+                # Delete any block that overlaps with the requested day range
+                start_day = datetime.combine(target_date, datetime.min.time(), tzinfo=ARG_TZ)
+                end_day = datetime.combine(target_date, datetime.max.time(), tzinfo=ARG_TZ)
+                
                 await db.pool.execute("""
                     DELETE FROM google_calendar_blocks 
-                    WHERE professional_id = $1 AND DATE(start_datetime) = $2
-                """, prof_id, target_date)
+                    WHERE professional_id = $1 
+                    AND (start_datetime < $3 AND end_datetime > $2)
+                """, prof_id, start_day, end_day)
                 
                 # Insert fresh blocks
                 for event in g_events:
@@ -286,23 +319,25 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
 
         # Query BD: obtener turnos confirmados para esa fecha para los profesionales seleccionados
         prof_ids = [p['id'] for p in active_professionals]
+        # 2. Obtener ocupación (Rangos que se solapan con el día solicitado)
+        start_day = datetime.combine(target_date, datetime.min.time(), tzinfo=ARG_TZ)
+        end_day = datetime.combine(target_date, datetime.max.time(), tzinfo=ARG_TZ)
+
         busy_appointments = await db.pool.fetch("""
-            SELECT appointment_datetime as start, duration_minutes, professional_id
+            SELECT appointment_datetime as start, duration_minutes
             FROM appointments
-            WHERE DATE(appointment_datetime) = $1
-            AND professional_id = ANY($2)
+            WHERE professional_id = ANY($1)
             AND status IN ('scheduled', 'confirmed')
-            ORDER BY appointment_datetime ASC
-        """, target_date, prof_ids)
-        
-        # Query BD: obtener bloques de GCalendar (AHORA FRESCOS)
+            AND (appointment_datetime < $3 AND (appointment_datetime + interval '1 minute' * COALESCE(duration_minutes, 60)) > $2)
+        """, prof_ids, start_day, end_day)
+
         gcal_blocks = await db.pool.fetch("""
             SELECT start_datetime as start, end_datetime as end, professional_id
             FROM google_calendar_blocks
-            WHERE DATE(start_datetime) = $1
-            AND professional_id = ANY($2)
+            WHERE professional_id = ANY($1)
+            AND (start_datetime < $3 AND end_datetime > $2)
             ORDER BY start_datetime ASC
-        """, target_date, prof_ids)
+        """, prof_ids, start_day, end_day)
 
         # Extraer times ocupados (normalizando duraciones)
         busy_times = []
@@ -433,25 +468,53 @@ async def book_appointment(date_time: str, treatment_reason: str,
         if not professional:
             return "❌ No es posible agendar el turno porque no hay profesionales registrados o activos en el sistema en este momento. Por favor, contacta directamente a la clínica por otros medios."
         
-        # 4. Verificar que no hay sobrelapamiento
-        overlap = await db.pool.fetchval("""
+        # 4. Verificar que no hay sobrelapamiento (Duración estándar 60 min)
+        duration = 60
+        end_apt = apt_datetime + timedelta(minutes=duration)
+        
+        # 4.a Colisiones en BD Local
+        db_overlap = await db.pool.fetchval("""
             SELECT COUNT(*) FROM appointments
             WHERE professional_id = $1
-            AND DATE(appointment_datetime) = $2
             AND status IN ('scheduled', 'confirmed')
-        """, professional['id'], apt_datetime.date())
+            AND (appointment_datetime < $3 AND (appointment_datetime + interval '1 minute' * COALESCE(duration_minutes, 60)) > $2)
+        """, professional['id'], apt_datetime, end_apt)
         
-        if overlap > 0:
-            return f"❌ No hay disponibilidad exacta en {date_time}. ¿Probás con otro horario?"
+        # 4.b Colisiones en Google Calendar Blocks (Caché local) - Incluye bloques globales (NULL)
+        gcal_overlap = await db.pool.fetchval("""
+            SELECT COUNT(*) FROM google_calendar_blocks
+            WHERE (professional_id = $1 OR professional_id IS NULL)
+            AND (start_datetime < $3 AND end_datetime > $2)
+        """, professional['id'], apt_datetime, end_apt)
+        
+        if db_overlap > 0:
+            # Fetch the conflicting appointment details for better logging/feedback
+            conflict = await db.pool.fetchrow("""
+                SELECT id, appointment_datetime FROM appointments
+                WHERE professional_id = $1 AND status IN ('scheduled', 'confirmed')
+                AND (appointment_datetime < $3 AND (appointment_datetime + interval '1 minute' * COALESCE(duration_minutes, 60)) > $2)
+                LIMIT 1
+            """, professional['id'], apt_datetime, end_apt)
+            return f"❌ Colisión local con el turno ID {str(conflict['id'])[:8]} a las {conflict['appointment_datetime'].strftime('%H:%M')}. ¿Probás con otro horario?"
+            
+        if gcal_overlap > 0:
+            # Fetch the conflicting block details
+            conflict = await db.pool.fetchrow("""
+                SELECT title, start_datetime, end_datetime FROM google_calendar_blocks
+                WHERE (professional_id = $1 OR professional_id IS NULL)
+                AND (start_datetime < $3 AND end_datetime > $2)
+                LIMIT 1
+            """, professional['id'], apt_datetime, end_apt)
+            return f"❌ Google Calendar bloqueado por '{conflict['title']}' ({conflict['start_datetime'].strftime('%H:%M')} - {conflict['end_datetime'].strftime('%H:%M')}). ¿Te interesa otro?"
         
         # 5. Insertar turno
         apt_id = str(uuid.uuid4())
         tenant_id = 1 # Por defecto en v1.0
         await db.pool.execute("""
             INSERT INTO appointments 
-            (id, tenant_id, patient_id, professional_id, appointment_datetime, appointment_type, status, urgency_level, source, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', 'normal', 'ai', NOW())
-        """, apt_id, tenant_id, patient_id, professional['id'], apt_datetime, treatment_reason)
+            (id, tenant_id, patient_id, professional_id, appointment_datetime, duration_minutes, appointment_type, status, urgency_level, source, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'scheduled', 'normal', 'ai', NOW())
+        """, apt_id, tenant_id, patient_id, professional['id'], apt_datetime, duration, treatment_reason)
         
         logger.info(f"✅ Turno registrado: {apt_id} para {phone}")
         current_patient_id.set(patient_id)
