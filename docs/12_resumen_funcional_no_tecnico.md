@@ -29,7 +29,7 @@ Todos los componentes trabajan juntos para que no se pierda ninguna información
 *   **La Base de Datos (La Memoria):** Aquí se guarda todo. La IA recuerda si un paciente es alérgico a la penicilina o si hace mucho que no viene. 
 *   **Historias Clínicas Inteligentes:** Cuando la asistente charla con un paciente, ella "anota" en su memoria los síntomas que el paciente mencionó. Luego, cuando el doctor abre la ficha del paciente en el **Frontend**, ya puede ver un resumen de lo que el paciente le contó a la IA antes de entrar al consultorio.
 *   **Detección de Alertas:** Si el doctor anota que un paciente es diabético en el Frontend, la próxima vez que ese paciente hable con la IA, ella lo sabrá y podrá ser más cuidadosa o dar avisos específicos.
-
+ 
 ## 5. El "Control Humano" y la Ventana de 24hs
 Si la IA no entiende algo o si el paciente pide hablar con una persona, la IA se retira (se "silencia"). 
 
