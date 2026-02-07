@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
     { id: 'approvals', label: 'Personal', icon: <ShieldCheck size={20} />, path: '/aprobaciones', roles: ['ceo'] },
     { id: 'professionals', label: 'Profesionales', icon: <Stethoscope size={20} />, path: '/profesionales', roles: ['ceo', 'secretary'] },
     { id: 'analytics', label: 'Estrategia', icon: <BarChart3 size={20} />, path: '/analytics/professionals', roles: ['ceo'] },
-    { id: 'treatments', label: 'Tratamientos', icon: <Clock size={20} />, path: '/treatments', roles: ['ceo', 'secretary'] },
+    { id: 'treatments', label: 'Tratamientos', icon: <Clock size={20} />, path: '/tratamientos', roles: ['ceo', 'secretary'] },
     { id: 'profile', label: 'Mi Perfil', icon: <User size={20} />, path: '/perfil', roles: ['ceo', 'professional', 'secretary'] },
     { id: 'settings', label: 'Configuración', icon: <Settings size={20} />, path: '/configuracion', roles: ['ceo'] },
   ];
@@ -50,27 +50,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
   };
 
   return (
-    <aside
-      className={`fixed lg:absolute left-0 top-0 h-screen bg-medical-900 text-white transition-all duration-300 z-50 
-        ${collapsed ? 'w-16' : 'w-64'}
-      `}
-    >
-      {/* Logo */}
-      <div className={`h-16 flex items-center ${collapsed ? 'justify-center' : 'px-6'} border-b border-medical-800`}>
+    <aside className="h-full bg-medical-900 text-white flex flex-col relative shadow-xl overflow-hidden">
+      {/* Logo Area */}
+      <div className={`h-16 flex items-center ${collapsed && !onCloseMobile ? 'justify-center' : 'px-6'} border-b border-medical-800 shrink-0`}>
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
             <Stethoscope size={18} className="text-white" />
           </div>
           {(!collapsed || onCloseMobile) && (
-            <span className="font-semibold text-lg truncate">Dental Clinic</span>
+            <span className="font-semibold text-lg truncate whitespace-nowrap">Dental Clinic</span>
           )}
         </div>
 
-        {/* Mobile Close Button */}
+        {/* Mobile Close Button - Visible only in drawer mode */}
         {onCloseMobile && (
           <button
             onClick={onCloseMobile}
-            className="lg:hidden p-2 ml-auto text-gray-400 hover:text-white"
+            className="lg:hidden p-2 ml-auto text-gray-400 hover:text-white transition-colors"
+            aria-label="Cerrar menú"
           >
             <X size={24} />
           </button>
@@ -78,15 +75,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
       </div>
 
       {/* Toggle Button (Desktop only) */}
-      <button
-        onClick={onToggle}
-        className="hidden lg:flex absolute -right-3 top-20 w-6 h-6 bg-white rounded-full shadow-lg items-center justify-center text-medical-900 hover:bg-gray-100 transition-colors z-10"
-      >
-        {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-      </button>
+      {!onCloseMobile && (
+        <button
+          onClick={onToggle}
+          className="hidden lg:flex absolute -right-3 top-20 w-6 h-6 bg-white rounded-full shadow-lg items-center justify-center text-medical-900 hover:bg-gray-100 transition-all z-20"
+          aria-label={collapsed ? "Expandir" : "Contraer"}
+        >
+          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
+      )}
 
       {/* Navigation */}
-      <nav className={`py-4 ${collapsed ? 'px-2' : 'px-3'}`}>
+      <nav className={`flex-1 py-4 overflow-y-auto overflow-x-hidden ${collapsed && !onCloseMobile ? 'px-2' : 'px-3'}`}>
         {filteredItems.map((item) => (
           <button
             key={item.id}
@@ -94,37 +94,37 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
               navigate(item.path);
               onCloseMobile?.();
             }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 mb-1 ${isActive(item.path)
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 mb-1 group ${isActive(item.path)
               ? 'bg-white/10 text-white'
               : 'text-gray-400 hover:bg-white/5 hover:text-white'
               }`}
             title={collapsed && !onCloseMobile ? item.label : undefined}
           >
-            <span className="flex-shrink-0">{item.icon}</span>
+            <span className="flex-shrink-0 group-hover:scale-110 transition-transform">{item.icon}</span>
             {(!collapsed || onCloseMobile) && <span className="font-medium text-sm truncate">{item.label}</span>}
           </button>
         ))}
 
         <button
           onClick={logout}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 mt-4 text-red-400 hover:bg-red-500/10`}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 mt-4 text-red-400 hover:bg-red-500/10 group`}
           title={collapsed && !onCloseMobile ? 'Cerrar Sesión' : undefined}
         >
-          <LogOut size={20} />
+          <LogOut size={20} className="group-hover:rotate-12 transition-transform" />
           {(!collapsed || onCloseMobile) && <span className="font-medium text-sm">Cerrar Sesión</span>}
         </button>
       </nav>
 
-      {/* Tenant Info at Bottom */}
+      {/* Footer Info */}
       {(!collapsed || onCloseMobile) && (
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-medical-800 bg-medical-900 overflow-hidden">
+        <div className="p-4 border-t border-medical-800 bg-medical-900/50 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-medical-600 flex items-center justify-center text-xs font-medium uppercase shrink-0">
               {user?.email?.[0] || 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user?.email}</p>
-              <p className="text-xs text-gray-400 truncate uppercase">{user?.role}</p>
+              <p className="text-sm font-medium truncate text-white">{user?.email}</p>
+              <p className="text-[10px] text-gray-400 truncate uppercase tracking-wider font-semibold">{user?.role}</p>
             </div>
           </div>
         </div>
