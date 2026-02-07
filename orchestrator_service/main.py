@@ -203,6 +203,10 @@ def generate_free_slots(target_date: date, busy_times: List[tuple],
     # Pre-calculate busy intervals (30 min granularity)
     busy_intervals = set()
     for busy_start, duration in busy_times:
+        # Asegurar que el tiempo esté en zona horaria de Argentina antes de stringificar
+        if busy_start.tzinfo and busy_start.tzinfo != ARG_TZ:
+            busy_start = busy_start.astimezone(ARG_TZ)
+        
         busy_end = busy_start + timedelta(minutes=duration)
         it = busy_start
         while it < busy_end:
@@ -291,7 +295,7 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
                 
                 await db.pool.execute("""
                     DELETE FROM google_calendar_blocks 
-                    WHERE professional_id = $1 
+                    WHERE (professional_id = $1 OR professional_id IS NULL)
                     AND (start_datetime < $3 AND end_datetime > $2)
                 """, prof_id, start_day, end_day)
                 
@@ -343,7 +347,7 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         gcal_blocks = await db.pool.fetch("""
             SELECT start_datetime as start, end_datetime as end, professional_id
             FROM google_calendar_blocks
-            WHERE professional_id = ANY($1)
+            WHERE (professional_id = ANY($1) OR professional_id IS NULL)
             AND (start_datetime < $3 AND end_datetime > $2)
             ORDER BY start_datetime ASC
         """, prof_ids, start_day, end_day)
@@ -368,7 +372,7 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
             start_time_str=CLINIC_HOURS_START, 
             end_time_str=CLINIC_HOURS_END,
             time_preference=time_preference,
-            limit=20
+            limit=50
         )
         
         if available_slots:
