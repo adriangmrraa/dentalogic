@@ -633,7 +633,7 @@ export default function AgendaView() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 h-full overflow-y-auto bg-gray-100">
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full lg:w-auto gap-4">

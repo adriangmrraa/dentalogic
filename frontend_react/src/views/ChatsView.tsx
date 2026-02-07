@@ -70,6 +70,7 @@ export default function ChatsView() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [patientContext, setPatientContext] = useState<PatientContext | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [messageOffset, setMessageOffset] = useState(0);
@@ -738,7 +739,19 @@ export default function ChatsView() {
               )}
 
               {/* Messages Area */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 flex flex-col">
+                {hasMoreMessages && (
+                  <button
+                    onClick={handleLoadMore}
+                    disabled={loadingMore}
+                    className="mx-auto py-2 px-4 text-xs text-medical-600 hover:text-medical-700 font-medium bg-white rounded-full shadow-sm border border-medical-100 mb-4 transition-all disabled:opacity-50 shrink-0"
+                  >
+                    {loadingMore ? 'Cargando...' : 'Cargar mensajes anteriores'}
+                  </button>
+                )}
+
+                <div className="flex-1" /> {/* Spacer to push messages down if few */}
+
                 {messages.map((message) => (
                   <div
                     key={message.id}
