@@ -230,8 +230,8 @@ class AppointmentCreate(BaseModel):
     patient_id: Optional[int] = None
     patient_phone: Optional[str] = None # Si es paciente nuevo rápido
     professional_id: int
-    datetime: datetime
-    type: str = "checkup"
+    appointment_datetime: datetime
+    appointment_type: str = "checkup"
     notes: Optional[str] = None
     check_collisions: bool = True # Por defecto verificar colisiones
 
@@ -676,7 +676,7 @@ async def get_patient_insurance_status(patient_id: int):
         # Obtener datos del paciente y su obra social
         patient = await db.pool.fetchrow("""
             SELECT id, first_name, last_name, phone_number, insurance_provider, 
-                   insurance_number, insurance_expiry_date, insurance_verified
+                   insurance_id, insurance_valid_until, status
             FROM patients
             WHERE id = $1 AND status = 'active'
         """, patient_id)
@@ -685,7 +685,7 @@ async def get_patient_insurance_status(patient_id: int):
             raise HTTPException(status_code=404, detail="Paciente no encontrado")
         
         insurance_provider = patient.get('insurance_provider') or ''
-        expiry_date = patient.get('insurance_expiry_date')
+        expiry_date = patient.get('insurance_valid_until')
         
         # Si no tiene obra social configurada
         if not insurance_provider:
@@ -703,11 +703,16 @@ async def get_patient_insurance_status(patient_id: int):
         # Calcular días hasta vencimiento
         expiration_days = None
         if expiry_date:
+            # Asegurar que sea objeto date para la resta
             if isinstance(expiry_date, str):
-                expiry_date = datetime.fromisoformat(expiry_date.split('T')[0])
+                expiry_dt = date.fromisoformat(expiry_date.split('T')[0])
+            elif isinstance(expiry_date, datetime):
+                expiry_dt = expiry_date.date()
+            else:
+                expiry_dt = expiry_date # Asumimos que ya es date
             
             today = date.today()
-            delta = expiry_date - today
+            delta = expiry_dt - today
             expiration_days = delta.days
         
         # Determinar estado
@@ -980,7 +985,7 @@ async def create_appointment_manual(apt: AppointmentCreate, request: Request):
         if apt.check_collisions:
             collision_response = await check_collisions(
                 apt.professional_id,
-                apt.datetime.isoformat(),
+                apt.appointment_datetime.isoformat(),
                 60,
                 None
             )
@@ -1035,7 +1040,7 @@ async def create_appointment_manual(apt: AppointmentCreate, request: Request):
                 id, tenant_id, patient_id, professional_id, appointment_datetime, 
                 duration_minutes, appointment_type, status, urgency_level, source, created_at
             ) VALUES ($1, $2, $3, $4, $5, 60, $6, 'confirmed', 'normal', 'manual', NOW())
-        """, new_id, tenant_id, pid, apt.professional_id, apt.datetime, apt.type)
+        """, new_id, tenant_id, pid, apt.professional_id, apt.appointment_datetime, apt.appointment_type)
         
         # 5. Obtener datos completos del turno para evento y GCal
         appointment_data = await db.pool.fetchrow("""
@@ -1060,16 +1065,16 @@ async def create_appointment_manual(apt: AppointmentCreate, request: Request):
             )
             
             if google_calendar_id and appointment_data:
-                summary = f"Cita Dental: {appointment_data['first_name']} {appointment_data['last_name'] or ''} - {apt.type}"
-                start_time = apt.datetime.isoformat()
-                end_time = (apt.datetime + timedelta(minutes=60)).isoformat()
+                summary = f"Cita Dental: {appointment_data['first_name']} {appointment_data['last_name'] or ''} - {apt.appointment_type}"
+                start_time = apt.appointment_datetime.isoformat()
+                end_time = (apt.appointment_datetime + timedelta(minutes=60)).isoformat()
                 
                 gcal_event = gcal_service.create_event(
                     calendar_id=google_calendar_id,
                     summary=summary,
                     start_time=start_time,
                     end_time=end_time,
-                    description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['phone_number']}\nNotas: {apt.notes or ''}"
+                    description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['patient_phone']}\nNotas: {apt.notes or ''}"
                 )
                 
                 if gcal_event:
@@ -1141,6 +1146,117 @@ async def update_appointment_status(id: str, status: str, request: Request):
             await emit_appointment_event("APPOINTMENT_UPDATED", dict(appointment_data), request)
     
     return {"status": "updated"}
+
+@router.put("/appointments/{id}", dependencies=[Depends(verify_admin_token)])
+async def update_appointment(id: str, apt: AppointmentCreate, request: Request):
+    """Actualizar datos de un turno (fecha, profesional, tipo, notas)."""
+    try:
+        # 1. Obtener datos actuales
+        old_apt = await db.pool.fetchrow("""
+            SELECT id, professional_id, appointment_datetime, google_calendar_event_id, status
+            FROM appointments WHERE id = $1
+        """, id)
+        
+        if not old_apt:
+            raise HTTPException(status_code=404, detail="Turno no encontrado")
+
+        # 2. Verificar colisiones si la fecha o el profesional cambiaron
+        date_changed = old_apt['appointment_datetime'] != apt.appointment_datetime
+        prof_changed = old_apt['professional_id'] != apt.professional_id
+        
+        if apt.check_collisions and (date_changed or prof_changed):
+            collision_response = await check_collisions(
+                apt.professional_id,
+                apt.appointment_datetime.isoformat(),
+                60,
+                id # Excluir este mismo turno de la búsqueda de colisiones
+            )
+            if collision_response["has_collisions"]:
+                raise HTTPException(status_code=409, detail="Hay colisiones de horario en la nueva fecha/profesional")
+
+        # 3. Actualizar en Base de Datos
+        await db.pool.execute("""
+            UPDATE appointments SET 
+                patient_id = $1,
+                professional_id = $2,
+                appointment_datetime = $3,
+                appointment_type = $4,
+                notes = $5,
+                updated_at = NOW()
+            WHERE id = $6
+        """, apt.patient_id, apt.professional_id, apt.appointment_datetime, apt.appointment_type, apt.notes, id)
+
+        # 4. Sincronizar con Google Calendar
+        try:
+            # Obtener datos completos para GCal
+            appointment_data = await db.pool.fetchrow("""
+                SELECT a.id, p.first_name, p.last_name, p.phone_number as patient_phone,
+                       prof.first_name as professional_name, prof.google_calendar_id
+                FROM appointments a
+                JOIN patients p ON a.patient_id = p.id
+                JOIN professionals prof ON a.professional_id = prof.id
+                WHERE a.id = $1
+            """, id)
+
+            if appointment_data:
+                # Si cambió el profesional, hay que borrar el evento del calendario viejo y crear uno en el nuevo
+                if prof_changed and old_apt['google_calendar_event_id']:
+                    old_prof_gcal = await db.pool.fetchval("SELECT google_calendar_id FROM professionals WHERE id = $1", old_apt['professional_id'])
+                    if old_prof_gcal:
+                        gcal_service.delete_event(calendar_id=old_prof_gcal, event_id=old_apt['google_calendar_event_id'])
+                    
+                    # Crear nuevo evento en el nuevo calendario
+                    if appointment_data['google_calendar_id']:
+                        summary = f"Cita Dental: {appointment_data['first_name']} {appointment_data['last_name'] or ''} - {apt.appointment_type}"
+                        new_gcal = gcal_service.create_event(
+                            calendar_id=appointment_data['google_calendar_id'],
+                            summary=summary,
+                            start_time=apt.appointment_datetime.isoformat(),
+                            end_time=(apt.appointment_datetime + timedelta(minutes=60)).isoformat(),
+                            description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['patient_phone']}\nNotas: {apt.notes or ''}"
+                        )
+                        if new_gcal:
+                            await db.pool.execute("UPDATE appointments SET google_calendar_event_id = $1 WHERE id = $2", new_gcal['id'], id)
+                
+                # Si no cambió el profesional pero sí la fecha u otros datos, intentar actualizar el evento existente
+                elif old_apt['google_calendar_event_id'] and appointment_data['google_calendar_id']:
+                    # Por ahora el gcal_service solo tiene create y delete, así que borramos y creamos
+                    # TODO: Implementar update_event en gcal_service para mayor eficiencia
+                    gcal_service.delete_event(calendar_id=appointment_data['google_calendar_id'], event_id=old_apt['google_calendar_event_id'])
+                    summary = f"Cita Dental: {appointment_data['first_name']} {appointment_data['last_name'] or ''} - {apt.appointment_type}"
+                    new_gcal = gcal_service.create_event(
+                        calendar_id=appointment_data['google_calendar_id'],
+                        summary=summary,
+                        start_time=apt.appointment_datetime.isoformat(),
+                        end_time=(apt.appointment_datetime + timedelta(minutes=60)).isoformat(),
+                        description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['patient_phone']}\nNotas: {apt.notes or ''}"
+                    )
+                    if new_gcal:
+                        await db.pool.execute("UPDATE appointments SET google_calendar_event_id = $1 WHERE id = $2", new_gcal['id'], id)
+
+        except Exception as ge:
+            logger.error(f"Error syncing GCal on update: {ge}")
+
+        # 5. Emitir evento Socket.IO
+        full_data = await db.pool.fetchrow("""
+            SELECT a.id, a.patient_id, a.professional_id, a.appointment_datetime, 
+                   a.appointment_type, a.status, a.urgency_level,
+                   (p.first_name || ' ' || COALESCE(p.last_name, '')) as patient_name, 
+                   p.phone_number as patient_phone, prof.first_name as professional_name
+            FROM appointments a
+            JOIN patients p ON a.patient_id = p.id
+            JOIN professionals prof ON a.professional_id = prof.id
+            WHERE a.id = $1
+        """, id)
+        if full_data:
+            await emit_appointment_event("APPOINTMENT_UPDATED", dict(full_data), request)
+
+        return {"status": "updated", "id": id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating appointment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/appointments/{id}", dependencies=[Depends(verify_admin_token)])
 async def delete_appointment(id: str, request: Request):
