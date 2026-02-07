@@ -65,6 +65,7 @@ Maneja la integración con YCloud y la IA de audio (Whisper).
 | **Prompt Architect** | *Identity, Persona* | Mantenimiento de la identidad (Dra. Laura Delgado) y tono rioplatense. |
 | **DB Schema Surgeon** | *Postgres, SQL* | Gestión avanzada de modelos, índices y parches SQL. |
 | **Maintenance Robot Architect**| *db.py, miguel* | Arquitecto de evolución de base de datos segura y self-healing. |
+| **Mobile Adaptation Architect**| *responsivo, mobile* | Especialista en transformación de UI desktop a mobile sin regresiones. |
 
 ---
 *Actualizado: 2026-02-06 - Protocolo Platinum Resilience v7.6*

@@ -214,14 +214,14 @@ export default function ProfessionalsView() {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Profesionales</h1>
-          <p className="text-gray-500">Gestión del staff médico y disponibilidad</p>
+          <p className="text-sm text-gray-500">Gestión del staff médico y disponibilidad</p>
         </div>
         <button
           onClick={openCreateModal}
-          className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition-colors"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition-colors text-sm"
         >
           <Plus size={20} />
           Nuevo Profesional
@@ -229,17 +229,17 @@ export default function ProfessionalsView() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Total</div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white rounded-lg shadow p-4 border-l-4 border-primary">
+          <div className="text-xs text-gray-500 uppercase font-semibold">Total</div>
           <div className="text-2xl font-bold">{professionals.length}</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Activos</div>
+        <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+          <div className="text-xs text-gray-500 uppercase font-semibold">Activos</div>
           <div className="text-2xl font-bold text-green-600">{getActiveProfessionals()}</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Inactivos</div>
+        <div className="bg-white rounded-lg shadow p-4 border-l-4 border-gray-300">
+          <div className="text-xs text-gray-500 uppercase font-semibold">Inactivos</div>
           <div className="text-2xl font-bold text-gray-400">
             {professionals.length - getActiveProfessionals()}
           </div>
@@ -257,70 +257,72 @@ export default function ProfessionalsView() {
         ) : (
           <div className="divide-y">
             {professionals.map((professional: Professional) => (
-              <div key={professional.id} className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${professional.is_active ? 'bg-primary' : 'bg-gray-400'
+              <div key={professional.id} className="p-4 hover:bg-gray-50 transition-colors">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-4 w-full">
+                    <div className={`w-12 h-12 rounded-full shrink-0 flex items-center justify-center text-white font-bold ${professional.is_active ? 'bg-primary' : 'bg-gray-400'
                       }`}>
                       {professional.name.charAt(0)}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-gray-900">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-semibold text-gray-900 truncate">
                           Dr. {professional.name}
                         </h3>
                         {professional.is_active ? (
-                          <CheckCircle className="text-green-500" size={16} />
+                          <CheckCircle className="text-green-500 shrink-0" size={16} />
                         ) : (
-                          <XCircle className="text-gray-400" size={16} />
+                          <XCircle className="text-gray-400 shrink-0" size={16} />
                         )}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-gray-500 font-medium truncate">
                         {professional.specialty || 'Sin especialidad'}
                       </div>
-                      <div className="flex gap-4 mt-1 text-xs text-gray-400">
+                      <div className="flex flex-col gap-0.5 mt-1">
                         {professional.email && (
-                          <span className="flex items-center gap-1">
-                            <Mail size={12} /> {professional.email}
+                          <span className="flex items-center gap-1.5 text-xs text-gray-400 truncate">
+                            <Mail size={12} className="shrink-0" /> {professional.email}
                           </span>
                         )}
                         {professional.phone && (
-                          <span className="flex items-center gap-1">
-                            <Phone size={12} /> {professional.phone}
+                          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                            <Phone size={12} className="shrink-0" /> {professional.phone}
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <div className="flex items-center gap-1 text-sm text-gray-500">
+                  <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-none border-gray-100">
+                    <div className="text-left sm:text-right">
+                      <div className="flex items-center gap-1 text-xs font-medium text-gray-500">
                         <Clock size={14} />
                         {getTotalSlots(professional.availability)} bloques
                       </div>
                     </div>
-                    <button
-                      onClick={() => openEditModal(professional)}
-                      className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded"
-                    >
-                      <Edit size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleToggleActive(professional)}
-                      className={`p-2 rounded ${professional.is_active
-                        ? 'text-gray-600 hover:text-red-600 hover:bg-red-50'
-                        : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
-                        }`}
-                    >
-                      {professional.is_active ? <XCircle size={18} /> : <CheckCircle size={18} />}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openEditModal(professional)}
+                        className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 sm:border-none"
+                      >
+                        <Edit size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleToggleActive(professional)}
+                        className={`p-2 rounded-lg transition-colors border sm:border-none ${professional.is_active
+                          ? 'text-gray-600 hover:text-red-600 hover:bg-red-50 border-gray-200'
+                          : 'text-gray-400 hover:text-green-600 hover:bg-green-50 border-gray-200'
+                          }`}
+                      >
+                        {professional.is_active ? <XCircle size={18} /> : <CheckCircle size={18} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 {/* Availability Preview */}
                 {professional.availability && getTotalSlots(professional.availability) > 0 && (
-                  <div className="mt-3 ml-16">
+                  <div className="mt-3 sm:ml-16">
                     <button
                       onClick={() => toggleDay(professional.id, 'toggle')}
                       className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"

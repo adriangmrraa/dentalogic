@@ -507,7 +507,7 @@ export default function ChatsView() {
   // ============================================
 
   return (
-    <div className="h-[calc(100vh-100px)] flex relative">
+    <div className="h-[calc(100vh-64px)] lg:h-[calc(100vh-100px)] flex relative overflow-hidden">
       {/* Audio para notificaciones */}
       <audio ref={audioRef} src="/notification.mp3" preload="auto" />
 
@@ -533,7 +533,10 @@ export default function ChatsView() {
       )}
 
       {/* Chat List */}
-      <div className="w-80 border-r bg-white flex flex-col">
+      <div className={`
+        ${selectedSession ? 'hidden lg:flex' : 'flex'} 
+        w-full lg:w-80 border-r bg-white flex-col
+      `}>
         <div className="p-4 border-b">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-lg font-bold">Conversaciones</h2>
@@ -613,7 +616,7 @@ export default function ChatsView() {
 
       {/* Chat Detail */}
       {selectedSession ? (
-        <>
+        <div className="flex-1 flex flex-col min-w-0 bg-gray-50 h-full">
           {/* Messages */}
           <div className="flex-1 flex flex-col">
             {/* Header */}
@@ -765,8 +768,8 @@ export default function ChatsView() {
             </form>
           </div>
 
-          {/* Clinical Context Panel */}
-          <div className="w-80 border-l bg-white overflow-y-auto">
+          {/* Clinical Context Panel - Hidden on Mobile */}
+          <div className="hidden xl:block w-80 border-l bg-white overflow-y-auto">
             <div className="p-4 border-b">
               <h3 className="font-medium flex items-center gap-2">
                 <Activity size={18} className="text-primary" />
@@ -866,7 +869,7 @@ export default function ChatsView() {
               </div>
             </div>
           </div>
-        </>
+        </div>
       ) : (
         <div className="flex-1 flex items-center justify-center bg-gray-50">
           <div className="text-center text-gray-400">

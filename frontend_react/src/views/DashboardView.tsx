@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Activity, AlertTriangle, AlertCircle, CheckCircle, 
-  XCircle, Pause, Play, Bell, BellOff, ShieldAlert,
+import {
+  Activity, AlertTriangle, AlertCircle, CheckCircle,
+  XCircle, Bell, BellOff, ShieldAlert,
   Users, Calendar, MessageSquare, TrendingUp, Clock, Plus
 } from 'lucide-react';
 import api, { BACKEND_URL } from '../api/axios';
@@ -53,19 +53,19 @@ interface TimeSlot {
 
 export default function DashboardView() {
   const navigate = useNavigate();
-  
+
   // Estado de alertas de triaje
   const [notifications, setNotifications] = useState<TriageNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  
+
   // Estado de slots disponibles (Smart Availability Widget)
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(true);
-  
+
   // Estado del bot
   const [botEnabled, setBotEnabled] = useState(true);
   const [botStatus, setBotStatus] = useState<'connected' | 'disconnected' | 'paused'>('connected');
-  
+
   // Estado de estadísticas
   const [stats, setStats] = useState<DashboardStats>({
     today_appointments: 0,
@@ -75,11 +75,11 @@ export default function DashboardView() {
     messages_today: 0,
     completed_today: 0,
   });
-  
+
   // Estado de toasts
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [showToastContainer, setShowToastContainer] = useState(true);
-  
+
   // Refs
   const socketRef = useRef<Socket | null>(null);
   const toastsRef = useRef<HTMLDivElement>(null);
@@ -97,7 +97,7 @@ export default function DashboardView() {
       timestamp: new Date(),
     };
     setToasts(prev => [...prev, newToast]);
-    
+
     // Auto-remove after 8 seconds
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== newToast.id));
@@ -140,15 +140,15 @@ export default function DashboardView() {
   useEffect(() => {
     // Conectar al WebSocket
     socketRef.current = io(BACKEND_URL);
-    
+
     // Evento: Nueva alerta de triaje de alta urgencia
     socketRef.current.on('HIGH_URGENCY_TRIAGE', (data: TriageNotification) => {
       setNotifications(prev => [data, ...prev]);
       setUnreadCount(prev => prev + 1);
-      
+
       // Mostrar toast de urgencia alta
       addToast('warning', 'URGENCIA ALTA', `${data.patient_name}: ${data.symptoms.slice(0, 2).join(', ')}`);
-      
+
       // Actualizar contador de alertas
       setStats(prev => ({ ...prev, high_urgency_alerts: prev.high_urgency_alerts + 1 }));
     });
@@ -157,10 +157,10 @@ export default function DashboardView() {
     socketRef.current.on('CRITICAL_TRIAGE', (data: TriageNotification) => {
       setNotifications(prev => [data, ...prev]);
       setUnreadCount(prev => prev + 1);
-      
+
       // Mostrar toast crítico (más persistente)
       addToast('error', 'CRITICO', `${data.patient_name} requiere atención inmediata`);
-      
+
       setStats(prev => ({ ...prev, high_urgency_alerts: prev.high_urgency_alerts + 1 }));
     });
 
@@ -199,17 +199,17 @@ export default function DashboardView() {
           api.get('/admin/dashboard/stats'),
           api.get('/admin/triage/notifications'),
         ]);
-        
+
         if (statsRes.data) {
           setStats(prev => ({
             ...prev,
             ...statsRes.data,
-            high_urgency_alerts: notificationsRes.data.filter((n: TriageNotification) => 
+            high_urgency_alerts: notificationsRes.data.filter((n: TriageNotification) =>
               n.urgency_level === 'HIGH' || n.urgency_level === 'CRITICAL'
             ).length,
           }));
         }
-        
+
         if (notificationsRes.data) {
           setNotifications(notificationsRes.data);
           setUnreadCount(notificationsRes.data.filter((n: TriageNotification) => !n.read).length);
@@ -229,7 +229,7 @@ export default function DashboardView() {
     };
 
     fetchStats();
-    
+
     // Refresh cada 60 segundos
     const interval = setInterval(fetchStats, 60000);
     return () => clearInterval(interval);
@@ -242,7 +242,7 @@ export default function DashboardView() {
   const toggleBot = async () => {
     const newState = !botEnabled;
     setBotEnabled(newState);
-    
+
     try {
       await api.put('/admin/bot/toggle', { enabled: newState });
       setBotStatus(newState ? 'connected' : 'paused');
@@ -259,11 +259,11 @@ export default function DashboardView() {
   // ============================================
 
   const markAsRead = async (id: string) => {
-    setNotifications(prev => 
+    setNotifications(prev =>
       prev.map(n => n.id === id ? { ...n, read: true } : n)
     );
     setUnreadCount(prev => Math.max(0, prev - 1));
-    
+
     try {
       await api.put(`/admin/triage/notifications/${id}/read`);
     } catch (error) {
@@ -292,7 +292,7 @@ export default function DashboardView() {
 
   useEffect(() => {
     fetchAvailableSlots();
-    
+
     // Refresh slots every 2 minutes
     const interval = setInterval(fetchAvailableSlots, 120000);
     return () => clearInterval(interval);
@@ -305,8 +305,8 @@ export default function DashboardView() {
 
   const formatSlotTime = (slotStart: string) => {
     const date = new Date(slotStart);
-    return date.toLocaleTimeString('es-AR', { 
-      hour: '2-digit', 
+    return date.toLocaleTimeString('es-AR', {
+      hour: '2-digit',
       minute: '2-digit',
       weekday: 'short'
     });
@@ -317,7 +317,7 @@ export default function DashboardView() {
     const now = new Date();
     const diffMs = date.getTime() - now.getTime();
     const diffMins = Math.round(diffMs / 60000);
-    
+
     if (diffMins < 0) {
       return 'Pasado';
     } else if (diffMins < 60) {
@@ -370,7 +370,7 @@ export default function DashboardView() {
       {/* TOAST NOTIFICATIONS */}
       {/* ======================================== */}
       {showToastContainer && (
-        <div 
+        <div
           ref={toastsRef}
           className="fixed top-4 right-4 z-50 flex flex-col gap-3 max-w-sm"
         >
@@ -403,14 +403,14 @@ export default function DashboardView() {
       {/* ======================================== */}
       {/* HEADER */}
       {/* ======================================== */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
-          <p className="text-gray-500 mt-1">Panel de control en tiempo real</p>
+          <h1 className="text-2xl lg:text-3xl font-bold text-gray-800">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">Panel de control en tiempo real</p>
         </div>
-        
+
         {/* Bot Control Switch */}
-        <div className="flex items-center gap-4 bg-white px-4 py-3 rounded-xl shadow-sm border">
+        <div className="flex items-center justify-between w-full sm:w-auto gap-4 bg-white px-4 py-3 rounded-xl shadow-sm border">
           <div className="flex items-center gap-3">
             <div className={`
               w-3 h-3 rounded-full transition-colors duration-300
@@ -421,7 +421,7 @@ export default function DashboardView() {
               Bot IA: {botEnabled ? 'Activo' : 'Pausado'}
             </span>
           </div>
-          
+
           <button
             onClick={toggleBot}
             className={`
@@ -436,7 +436,7 @@ export default function DashboardView() {
               `}
             />
           </button>
-          
+
           <button
             onClick={() => setShowToastContainer(!showToastContainer)}
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -450,7 +450,7 @@ export default function DashboardView() {
       {/* ======================================== */}
       {/* STATS GRID */}
       {/* ======================================== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-8">
         <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
           <div className="flex justify-between items-start">
             <div>
@@ -510,17 +510,17 @@ export default function DashboardView() {
       {/* SMART AVAILABILITY WIDGET */}
       {/* ======================================== */}
       <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl shadow-lg p-6 mb-8 text-white">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/20 rounded-lg">
+            <div className="p-2 bg-white/20 rounded-lg shrink-0">
               <Clock className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">Disponibilidad para Urgencias</h2>
-              <p className="text-white/80 text-sm">Próximos huecos de 15-20 min para triage</p>
+              <h2 className="text-lg lg:text-xl font-bold">Disponibilidad para Urgencias</h2>
+              <p className="text-white/80 text-xs lg:text-sm">Próximos huecos de 15-20 min para triage</p>
             </div>
           </div>
-          <button 
+          <button
             onClick={fetchAvailableSlots}
             disabled={loadingSlots}
             className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors disabled:opacity-50"
@@ -529,7 +529,7 @@ export default function DashboardView() {
             <Clock className={`w-5 h-5 ${loadingSlots ? 'animate-spin' : ''}`} />
           </button>
         </div>
-        
+
         {loadingSlots ? (
           <div className="flex items-center gap-2 py-4">
             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
@@ -582,27 +582,27 @@ export default function DashboardView() {
       {/* TRIAGE ALERTS SECTION */}
       {/* ======================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+
         {/* Notificaciones de Triaje */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+          <div className="p-4 border-b bg-gray-50 flex justify-between items-center sticky top-0 z-10">
             <div className="flex items-center gap-2">
               <ShieldAlert className="w-5 h-5 text-red-500" />
-              <h2 className="font-semibold text-gray-800">Alertas de Triaje</h2>
+              <h2 className="font-semibold text-gray-800 text-sm lg:text-base">Alertas de Triaje</h2>
               {unreadCount > 0 && (
                 <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
                   {unreadCount}
                 </span>
               )}
             </div>
-            <button 
+            <button
               onClick={() => setNotifications([])}
               className="text-sm text-gray-500 hover:text-gray-700"
             >
               Limpiar
             </button>
           </div>
-          
+
           <div className="max-h-96 overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
@@ -623,7 +623,7 @@ export default function DashboardView() {
                   >
                     <div className="flex items-start gap-3">
                       <div className={`
-                        p-2 rounded-lg ${getUrgencyColor(notification.urgency_level)}
+                        p-2 rounded-lg shrink-0 ${getUrgencyColor(notification.urgency_level)}
                       `}>
                         {getUrgencyIcon(notification.urgency_level)}
                       </div>
@@ -668,7 +668,7 @@ export default function DashboardView() {
             <Users className="w-5 h-5 text-blue-500" />
             Resumen de Actividad
           </h2>
-          
+
           <div className="space-y-4">
             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
               <div className="flex items-center gap-3">
@@ -677,7 +677,7 @@ export default function DashboardView() {
               </div>
               <span className="font-semibold text-gray-800">{stats.total_patients}</span>
             </div>
-            
+
             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
               <div className="flex items-center gap-3">
                 <Calendar className="w-5 h-5 text-gray-400" />
@@ -687,14 +687,14 @@ export default function DashboardView() {
                 {stats.today_appointments - stats.pending_confirmations}
               </span>
             </div>
-            
+
             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
               <div className="flex items-center gap-3">
                 <MessageSquare className="w-5 h-5 text-gray-400" />
                 <span className="text-gray-700">Tasa de Resolucion</span>
               </div>
               <span className="font-semibold text-blue-600">
-                {stats.messages_today > 0 
+                {stats.messages_today > 0
                   ? Math.round((stats.completed_today / stats.messages_today) * 100)
                   : 0}%
               </span>

@@ -242,14 +242,14 @@ export default function PatientsView() {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Pacientes</h1>
-          <p className="text-gray-500">Gestiona los pacientes de la clínica</p>
+          <p className="text-sm text-gray-500">Gestiona los pacientes de la clínica</p>
         </div>
         <button
           onClick={openCreateModal}
-          className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition-colors"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition-colors text-sm"
         >
           <Plus size={20} />
           Nuevo Paciente
@@ -257,36 +257,31 @@ export default function PatientsView() {
       </div>
 
       {/* Search */}
-      <div className="mb-6 space-y-4">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+      <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
           <input
             type="text"
             placeholder="Buscar por nombre, DNI o teléfono..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
           />
         </div>
 
         {/* Semantic Search */}
-        <div className="relative max-w-md">
-          <Brain className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-500" size={20} />
+        <div className="relative">
+          <Brain className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-500" size={18} />
           <input
             type="text"
             placeholder="Buscar por síntomas (IA)..."
             value={semanticSearchTerm}
             onChange={(e) => handleSemanticSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
           />
           {semanticLoading && (
             <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          )}
-          {semanticResults.length > 0 && (
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500">
-              <Search size={20} />
+              <div className="w-3 h-3 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
             </div>
           )}
         </div>
@@ -301,98 +296,157 @@ export default function PatientsView() {
             No se encontraron pacientes
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Paciente
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Contacto
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    DNI / Obra Social
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Salud
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fecha Alta
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredPatients.map((patient) => (
-                  <tr key={patient.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10 bg-primary-light rounded-full flex items-center justify-center text-white font-medium">
-                          {patient.first_name?.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="ml-4">
-                          <div className="flex items-center gap-2">
-                            <div className="text-sm font-medium text-gray-900">
-                              {patient.first_name} {patient.last_name}
+          <>
+            <div className="overflow-x-auto hidden md:block">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Paciente
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Contacto
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      DNI / Obra Social
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Salud
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Fecha Alta
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Acciones
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredPatients.map((patient) => (
+                    <tr key={patient.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10 bg-primary-light rounded-full flex items-center justify-center text-white font-medium">
+                            {patient.first_name?.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="ml-4">
+                            <div className="flex items-center gap-2">
+                              <div className="text-sm font-medium text-gray-900">
+                                {patient.first_name} {patient.last_name}
+                              </div>
+                              {semanticResults.some(r => r.id === patient.id) && (
+                                <Brain size={16} className="text-purple-500" />
+                              )}
                             </div>
-                            {semanticResults.some(r => r.id === patient.id) && (
-                              <Brain
-                                size={16}
-                                className="text-purple-500"
-                              />
-                            )}
                           </div>
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{patient.phone_number}</div>
+                        <div className="text-sm text-gray-500">{patient.email}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{patient.dni || '-'}</div>
+                        <div className="text-sm text-gray-500">{patient.obra_social || '-'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">-</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(patient.created_at).toLocaleDateString('es-AR')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => navigate(`/pacientes/${patient.id}`)}
+                            className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors"
+                            title="Ver Ficha"
+                          >
+                            <FileText size={18} />
+                          </button>
+                          <button
+                            onClick={() => openEditModal(patient)}
+                            className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors"
+                            title="Editar"
+                          >
+                            <Edit size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(patient.id)}
+                            className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-lg transition-colors"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Cards for Mobile */}
+            <div className="md:hidden divide-y">
+              {filteredPatients.map((patient) => (
+                <div key={patient.id} className="p-4 bg-white hover:bg-gray-50 transition-colors">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 bg-primary-light rounded-full flex items-center justify-center text-white font-medium shrink-0">
+                        {patient.first_name?.charAt(0).toUpperCase()}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{patient.phone_number}</div>
-                      <div className="text-sm text-gray-500">{patient.email}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{patient.dni || '-'}</div>
-                      <div className="text-sm text-gray-500">{patient.obra_social || '-'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {/* Health conditions placeholder */}
-                      -
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(patient.created_at).toLocaleDateString('es-AR')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => navigate(`/pacientes/${patient.id}`)}
-                          className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded"
-                          title="Ver Ficha"
-                        >
-                          <FileText size={18} />
-                        </button>
-                        <button
-                          onClick={() => openEditModal(patient)}
-                          className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded"
-                          title="Editar"
-                        >
-                          <Edit size={18} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(patient.id)}
-                          className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded"
-                          title="Eliminar"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold text-gray-900 truncate">
+                            {patient.first_name} {patient.last_name}
+                          </h3>
+                          {semanticResults.some(r => r.id === patient.id) && (
+                            <Brain size={14} className="text-purple-500 shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 truncate">DNI: {patient.dni || '-'}</p>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => navigate(`/pacientes/${patient.id}`)}
+                        className="p-2 text-gray-600 hover:text-primary active:bg-gray-200 rounded-lg"
+                      >
+                        <FileText size={18} />
+                      </button>
+                      <button
+                        onClick={() => openEditModal(patient)}
+                        className="p-2 text-gray-600 hover:text-primary active:bg-gray-200 rounded-lg"
+                      >
+                        <Edit size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-500 mb-3 bg-gray-50 p-2 rounded-lg">
+                    <div>
+                      <span className="block text-[10px] text-gray-400 uppercase font-semibold">Teléfono</span>
+                      {patient.phone_number}
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-gray-400 uppercase font-semibold">Obra Social</span>
+                      {patient.obra_social || '-'}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-[10px] text-gray-400">
+                      Cargado el {new Date(patient.created_at).toLocaleDateString('es-AR')}
+                    </span>
+                    <button
+                      onClick={() => handleDelete(patient.id)}
+                      className="text-xs text-red-500 font-medium px-2 py-1 hover:bg-red-50 rounded"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

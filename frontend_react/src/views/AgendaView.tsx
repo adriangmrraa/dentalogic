@@ -3,7 +3,7 @@ import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import timeGridPlugin from '@fullcalendar/timegrid';
-import { Calendar, X, User, Stethoscope, Clock, Phone, MessageCircle, AlertTriangle, Wifi, WifiOff, RefreshCw, Cloud, CloudOff, CheckCircle, AlertCircle } from 'lucide-react';
+import { Calendar, X, User, Stethoscope, Clock, Phone, MessageCircle, AlertTriangle, Wifi, WifiOff, RefreshCw, CloudOff, CheckCircle, AlertCircle } from 'lucide-react';
 import api from '../api/axios';
 import { io, Socket } from 'socket.io-client';
 import { BACKEND_URL } from '../api/axios';
@@ -136,7 +136,6 @@ export default function AgendaView() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Appointment | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [selectedProfessionalId, setSelectedProfessionalId] = useState<string>('all');
   const [syncStatus, setSyncStatus] = useState<{ syncing: boolean; lastSync: Date | null; error: string | null }>({
     syncing: false,
@@ -326,7 +325,6 @@ export default function AgendaView() {
       setGoogleBlocks(blocksRes || []);
       setProfessionals(professionalsRes.data.filter((p: Professional) => p.is_active));
       setPatients(patientsRes.data);
-      setLastUpdate(new Date());
 
       // Force calendar refetch if calendar instance exists
       if (calendarRef.current) {
@@ -404,8 +402,6 @@ export default function AgendaView() {
         return updated;
       });
 
-      setLastUpdate(new Date());
-
       // Add event directly to calendar without refetching
       if (calendarRef.current) {
         const calendarApi = calendarRef.current.getApi();
@@ -433,7 +429,6 @@ export default function AgendaView() {
         return updated;
       });
 
-      setLastUpdate(new Date());
 
       // Update event in calendar
       if (calendarRef.current) {
@@ -462,7 +457,6 @@ export default function AgendaView() {
         return updated;
       });
 
-      setLastUpdate(new Date());
 
       // Remove event from calendar
       if (calendarRef.current) {
@@ -641,114 +635,88 @@ export default function AgendaView() {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Agenda</h1>
-          <p className="text-gray-500">Gestión de turnos y citas</p>
-        </div>
-
-        {/* Professional Filter (CEO/Secretary only) */}
-        {(user?.role === 'ceo' || user?.role === 'secretary') && (
-          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100">
-            <Stethoscope size={18} className="text-medical-600" />
-            <select
-              value={selectedProfessionalId}
-              onChange={(e) => setSelectedProfessionalId(e.target.value)}
-              className="bg-transparent border-none text-sm font-medium focus:ring-0 outline-none text-medical-900 cursor-pointer"
-            >
-              <option value="all">Todos los Profesionales</option>
-              {professionals.map(p => (
-                <option key={p.id} value={p.id.toString()}>
-                  Dr. {p.first_name} {p.last_name || ''}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Connection Status & Controls */}
-        <div className="flex items-center gap-4">
-          {/* Source Legend */}
-          <div className="flex gap-3">
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-              <span className="text-xs text-gray-600 hidden sm:inline">AI</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded-full bg-green-500"></div>
-              <span className="text-xs text-gray-600 hidden sm:inline">Manual</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded-full bg-gray-500"></div>
-              <span className="text-xs text-gray-600 hidden sm:inline">GCal</span>
-            </div>
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full lg:w-auto gap-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Agenda</h1>
+            <p className="text-xs sm:text-sm text-gray-500">Gestión de turnos y citas</p>
           </div>
 
-          {/* WebSocket Status */}
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-full">
-            {socketConnected ? (
-              <>
-                <Wifi size={16} className="text-green-500" />
-                <span className="text-xs text-green-600 font-medium">Conectado</span>
-              </>
-            ) : (
-              <>
-                <WifiOff size={16} className="text-red-500" />
-                <span className="text-xs text-red-600 font-medium">Desconectado</span>
-              </>
-            )}
-          </div>
-
-          {/* Sync Status */}
-          <div className="flex items-center gap-2">
-            {syncStatus.syncing ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-100 rounded-full">
-                <RefreshCw size={16} className="text-yellow-600 animate-spin" />
-                <span className="text-xs text-yellow-600 font-medium">Sincronizando...</span>
-              </div>
-            ) : syncStatus.lastSync ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 rounded-full">
-                <Cloud size={16} className="text-green-600" />
-                <span className="text-xs text-green-600 font-medium">Sincronizado</span>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Sync Now Button */}
-          <button
-            onClick={() => handleSyncNow(false)}
-            disabled={syncStatus.syncing}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${syncStatus.syncing
-              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-              }`}
-            title="Sincronizar con Google Calendar"
-          >
-            <Cloud size={18} />
-            <span className="hidden sm:inline">Sync Now</span>
-          </button>
-
-          {/* Last Update */}
-          {lastUpdate && (
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <RefreshCw size={14} />
-              <span>Actualizado: {lastUpdate.toLocaleTimeString()}</span>
+          {/* Professional Filter (CEO/Secretary only) - Mobile Stacking */}
+          {(user?.role === 'ceo' || user?.role === 'secretary') && (
+            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl shadow-sm border border-gray-100 w-full sm:w-auto">
+              <Stethoscope size={16} className="text-medical-600 shrink-0" />
+              <select
+                value={selectedProfessionalId}
+                onChange={(e) => setSelectedProfessionalId(e.target.value)}
+                className="bg-transparent border-none text-xs font-medium focus:ring-0 outline-none text-medical-900 cursor-pointer w-full"
+              >
+                <option value="all">Todos los Profesionales</option>
+                {professionals.map(p => (
+                  <option key={p.id} value={p.id.toString()}>
+                    Dr. {p.first_name} {p.last_name || ''}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
+        </div>
 
-          {/* Manual Refresh */}
-          <button
-            onClick={fetchData}
-            className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors"
-            title="Actualizar agenda"
-          >
-            <RefreshCw size={20} />
-          </button>
+        {/* Connection Status & Controls */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full lg:w-auto">
+          {/* Source Legend - Compact on Mobile */}
+          <div className="flex gap-2 sm:gap-3 bg-white px-3 py-1.5 rounded-full border border-gray-50">
+            <div className="flex items-center gap-1">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
+              <span className="text-[10px] text-gray-600">AI</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+              <span className="text-[10px] text-gray-600">Man</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2.5 h-2.5 rounded-full bg-gray-500"></div>
+              <span className="text-[10px] text-gray-600">GCal</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto lg:ml-0">
+            {/* WebSocket Status */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-full border border-gray-100">
+              {socketConnected ? (
+                <Wifi size={14} className="text-green-500" />
+              ) : (
+                <WifiOff size={14} className="text-red-500" />
+              )}
+              <span className={`text-[10px] font-medium hidden sm:inline ${socketConnected ? 'text-green-600' : 'text-red-600'}`}>
+                {socketConnected ? 'Conectado' : 'Desconectado'}
+              </span>
+            </div>
+
+            {/* Sync Now Button */}
+            <button
+              onClick={() => handleSyncNow(false)}
+              disabled={syncStatus.syncing}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-xs font-medium ${syncStatus.syncing
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-primary text-white hover:bg-primary-dark shadow-sm'
+                }`}
+            >
+              <RefreshCw size={14} className={syncStatus.syncing ? 'animate-spin' : ''} />
+              <span>GCal Sync</span>
+            </button>
+            <button
+              onClick={fetchData}
+              className="p-1.5 text-gray-600 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+            >
+              <RefreshCw size={18} />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Calendar */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-white rounded-xl shadow-md border border-gray-100 p-2 sm:p-4">
         {/* Custom FullCalendar Styles for Spacious TimeGrid */}
         <style>{`
           /* Aumentar altura de slots de tiempo en vista semanal/diaria */
@@ -798,22 +766,22 @@ export default function AgendaView() {
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-            initialView="rollingWeek"
+            initialView={window.innerWidth < 768 ? 'timeGridDay' : 'rollingWeek'}
             views={{
               rollingWeek: {
                 type: 'timeGrid',
                 duration: { days: 7 },
-                buttonText: 'week'
+                buttonText: 'semana'
               }
             }}
             initialDate={new Date()}
             headerToolbar={{
-              left: 'prev,next today',
+              left: window.innerWidth < 768 ? 'prev,next' : 'prev,next today',
               center: 'title',
-              right: 'rollingWeek,timeGridDay,dayGridMonth',
+              right: window.innerWidth < 768 ? 'timeGridDay,dayGridMonth' : 'rollingWeek,timeGridDay,dayGridMonth',
             }}
+            height={window.innerWidth < 768 ? 'auto' : 800}
             selectAllow={(selectInfo) => {
-              // Bloquear selección de fechas/horas pasadas
               const now = new Date();
               return selectInfo.start >= now;
             }}

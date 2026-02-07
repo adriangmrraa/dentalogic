@@ -166,32 +166,35 @@ export default function PatientDetail() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 lg:p-6">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <button
-          onClick={() => navigate('/pacientes')}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">
-            {patient.first_name} {patient.last_name}
-          </h1>
-          <p className="text-gray-500">Historia Clínica Digital</p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate('/pacientes')}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div className="min-w-0">
+            <h1 className="text-xl lg:text-2xl font-bold text-gray-800 truncate">
+              {patient.first_name} {patient.last_name}
+            </h1>
+            <p className="text-sm text-gray-500">Historia Clínica Digital</p>
+          </div>
         </div>
+
         {criticalConditionsFound.length > 0 && (
-          <div className="ml-auto flex items-center gap-2 bg-red-100 text-red-800 px-3 py-1 rounded-full">
-            <AlertTriangle size={16} />
-            <span className="text-sm font-medium">Antecedentes Críticos</span>
+          <div className="sm:ml-auto flex items-center gap-2 bg-red-100 text-red-800 px-3 py-1.5 rounded-full shadow-sm">
+            <AlertTriangle size={16} className="shrink-0" />
+            <span className="text-xs sm:text-sm font-semibold truncate">Antecedentes Críticos</span>
           </div>
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Patient Profile */}
-        <div className="col-span-1 space-y-4">
+        <div className="lg:col-span-1 space-y-4">
           {/* Basic Info */}
           <div className="bg-white rounded-lg shadow p-4">
             <div className="flex items-center gap-3 mb-4">
@@ -272,7 +275,7 @@ export default function PatientDetail() {
         </div>
 
         {/* Clinical Records Timeline */}
-        <div className="col-span-2">
+        <div className="lg:col-span-2">
           <div className="bg-white rounded-lg shadow">
             <div className="p-4 border-b">
               <h2 className="font-medium text-gray-900">Línea de Tiempo Clínica</h2>

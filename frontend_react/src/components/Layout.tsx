@@ -12,6 +12,7 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
   const socketRef = useRef<Socket | null>(null);
@@ -79,39 +80,63 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="flex h-screen bg-gray-100 relative">
-      {/* Sidebar */}
-      <Sidebar
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-      />
+      {/* Mobile Backdrop */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Desktop and Mobile Drawer */}
+      <div className={`
+        fixed lg:static inset-y-0 left-0 z-50 transition-transform duration-300 transform
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onCloseMobile={() => setIsMobileMenuOpen(false)}
+        />
+      </div>
 
       {/* Main Content */}
       <main
-        className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-64'
-          }`}
+        className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 w-full min-w-0`}
       >
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-semibold text-medical-900">
-              Sistema de Gestión Dental
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-6 shadow-sm sticky top-0 z-30">
+          <div className="flex items-center gap-3 lg:gap-4">
+            {/* Hamburger Button for Mobile */}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg text-gray-600"
+            >
+              <div className="w-6 h-5 flex flex-col justify-between">
+                <span className="w-full h-0.5 bg-current rounded-full"></span>
+                <span className="w-full h-0.5 bg-current rounded-full"></span>
+                <span className="w-full h-0.5 bg-current rounded-full"></span>
+              </div>
+            </button>
+            <h1 className="text-lg lg:text-xl font-semibold text-medical-900 truncate max-w-[150px] md:max-w-none">
+              Sistema Dental
             </h1>
           </div>
 
-          <div className="flex items-center gap-4">
-            {/* Tenant Selector */}
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg text-sm">
+          <div className="flex items-center gap-2 lg:gap-4">
+            {/* Tenant Selector - Hidden on small mobile */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg text-sm">
               <span className="text-gray-500">Sucursal:</span>
               <span className="font-medium text-medical-900">Principal</span>
             </div>
 
             {/* User Menu */}
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col items-end">
-                <span className="text-sm font-medium text-medical-900">{user?.email?.split('@')[0]}</span>
-                <span className="text-xs text-secondary uppercase">{user?.role}</span>
+            <div className="flex items-center gap-2 lg:gap-3">
+              <div className="hidden xs:flex flex-col items-end">
+                <span className="text-xs lg:text-sm font-medium text-medical-900">{user?.email?.split('@')[0]}</span>
+                <span className="text-[10px] lg:text-xs text-secondary uppercase leading-none">{user?.role}</span>
               </div>
-              <div className="w-9 h-9 rounded-full bg-medical-600 flex items-center justify-center text-white font-semibold text-lg border-2 border-white shadow-sm">
+              <div className="w-8 h-8 lg:w-9 lg:h-9 rounded-full bg-medical-600 flex items-center justify-center text-white font-semibold text-sm lg:text-lg border-2 border-white shadow-sm">
                 {user?.email?.[0].toUpperCase() || 'U'}
               </div>
             </div>
@@ -119,7 +144,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 overflow-auto bg-gray-100 p-6">
+        <div className="flex-1 overflow-auto bg-gray-100 p-4 lg:p-6">
           {children}
         </div>
       </main>

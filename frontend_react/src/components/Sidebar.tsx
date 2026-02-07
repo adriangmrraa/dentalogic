@@ -13,16 +13,18 @@ import {
   Clock,
   ShieldCheck,
   LogOut,
-  User
+  User,
+  X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  onCloseMobile?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMobile }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
@@ -62,12 +64,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
             <span className="font-semibold text-lg">Dental Clinic</span>
           )}
         </div>
+
+        {/* Mobile Close Button */}
+        {onCloseMobile && (
+          <button
+            onClick={onCloseMobile}
+            className="lg:hidden p-2 text-gray-400 hover:text-white"
+          >
+            <X size={24} />
+          </button>
+        )}
       </div>
 
-      {/* Toggle Button */}
+      {/* Toggle Button (Desktop only) */}
       <button
         onClick={onToggle}
-        className={`absolute -right-3 top-20 w-6 h-6 bg-white rounded-full shadow-lg flex items-center justify-center text-medical-900 hover:bg-gray-100 transition-colors ${collapsed ? 'left-1/2 -translate-x-1/2' : ''
+        className={`hidden lg:flex absolute -right-3 top-20 w-6 h-6 bg-white rounded-full shadow-lg items-center justify-center text-medical-900 hover:bg-gray-100 transition-colors ${collapsed ? 'left-1/2 -translate-x-1/2' : ''
           }`}
       >
         {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
@@ -78,7 +90,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
         {filteredItems.map((item) => (
           <button
             key={item.id}
-            onClick={() => navigate(item.path)}
+            onClick={() => {
+              navigate(item.path);
+              onCloseMobile?.();
+            }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 mb-1 ${isActive(item.path)
               ? 'bg-white/10 text-white'
               : 'text-gray-400 hover:bg-white/5 hover:text-white'
@@ -86,7 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
             title={collapsed ? item.label : undefined}
           >
             <span className="flex-shrink-0">{item.icon}</span>
-            {!collapsed && <span className="font-medium text-sm">{item.label}</span>}
+            {(!collapsed || onCloseMobile) && <span className="font-medium text-sm">{item.label}</span>}
           </button>
         ))}
 
