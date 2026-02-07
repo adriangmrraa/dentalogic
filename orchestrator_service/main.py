@@ -194,7 +194,7 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
                 
             try:
                 # 1. Fetch from Google
-                g_events = gcal_service.get_events_for_day(target_date, calendar_id=cal_id)
+                g_events = gcal_service.get_events_for_day(calendar_id=cal_id, date_obj=target_date)
                 
                 # 2. Side-Effect Update: Refresh blocks for this day/prof in local DB
                 # First delete existing blocks for this specific day/prof to avoid stale data
@@ -217,16 +217,19 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
                     end = event['end'].get('dateTime') or event['end'].get('date')
                     all_day = 'date' in event['start']
                     
-                    dt_start = datetime.fromisoformat(start.replace('Z', '+00:00'))
-                    dt_end = datetime.fromisoformat(end.replace('Z', '+00:00'))
-                    
-                    await db.pool.execute("""
-                        INSERT INTO google_calendar_blocks (
-                            tenant_id, google_event_id, title, description,
-                            start_datetime, end_datetime, all_day, professional_id, sync_status
-                        ) VALUES (1, $1, $2, $3, $4, $5, $6, $7, 'synced')
-                    """, g_id, summary, description, dt_start, dt_end, all_day, prof_id)
-                    
+                    try:
+                        dt_start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                        dt_end = datetime.fromisoformat(end.replace('Z', '+00:00'))
+                        
+                        await db.pool.execute("""
+                            INSERT INTO google_calendar_blocks (
+                                tenant_id, google_event_id, title, description,
+                                start_datetime, end_datetime, all_day, professional_id, sync_status
+                            ) VALUES (1, $1, $2, $3, $4, $5, $6, $7, 'synced')
+                        """, g_id, summary, description, dt_start, dt_end, all_day, prof_id)
+                    except Exception as e:
+                         logger.warning(f"Error parsing GCal event {g_id}: {e}")
+
             except Exception as e:
                 logger.error(f"JIT Fetch failed for prof {prof_id}: {e}")
                 # Continue with whatever is in DB if JIT fails (Fallback)
@@ -417,11 +420,11 @@ async def book_appointment(date_time: str, treatment_reason: str,
             end_time = (apt_datetime + timedelta(minutes=60)).isoformat()
             
             gcal_event = gcal_service.create_event(
+                calendar_id=professional['google_calendar_id'],
                 summary=summary,
                 start_time=start_time,
                 end_time=end_time,
-                description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['phone_number']}\nMotivo: {treatment_reason}\nCreado por Asistente IA",
-                calendar_id=professional['google_calendar_id']
+                description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['phone_number']}\nMotivo: {treatment_reason}\nCreado por Asistente IA"
             )
             
             if gcal_event:
@@ -516,7 +519,13 @@ async def cancel_appointment(date_query: str):
 
         # 1. Cancelar en GCal
         if apt['google_calendar_event_id']:
-            gcal_service.delete_event(apt['google_calendar_event_id'])
+            # Fetch professional's calendar ID
+            google_calendar_id = await db.pool.fetchval(
+                "SELECT google_calendar_id FROM professionals WHERE id = (SELECT professional_id FROM appointments WHERE id = $1)", 
+                apt['id']
+            )
+            if google_calendar_id:
+                gcal_service.delete_event(calendar_id=google_calendar_id, event_id=apt['google_calendar_event_id'])
             
         # 2. Marcar como cancelado en BD
         await db.pool.execute("""
@@ -569,17 +578,27 @@ async def reschedule_appointment(original_date: str, new_date_time: str):
             return f"Lo siento, el horario {new_date_time} ya está ocupado. ¿Probamos con otro?"
 
         # 3. Actualizar GCal
-        if apt['google_calendar_event_id']:
+        # Fetch professional's calendar ID
+        google_calendar_id = await db.pool.fetchval(
+            "SELECT google_calendar_id FROM professionals WHERE id = (SELECT professional_id FROM appointments WHERE id = $1)", 
+            apt['id']
+        )
+
+        if apt['google_calendar_event_id'] and google_calendar_id:
             # Podríamos usar gcal_service.update_event si existiera, o delete/create
             # Para simplificar, borramos el viejo y creamos uno nuevo (o implementamos update en el service)
-            gcal_service.delete_event(apt['google_calendar_event_id'])
+            gcal_service.delete_event(calendar_id=google_calendar_id, event_id=apt['google_calendar_event_id'])
             
         summary = f"Cita Dental AI (Reprogramada): {phone}"
-        new_gcal = gcal_service.create_event(
-            summary=summary,
-            start_time=new_dt.isoformat(),
-            end_time=(new_dt + timedelta(minutes=60)).isoformat()
-        )
+        if google_calendar_id:
+            new_gcal = gcal_service.create_event(
+                calendar_id=google_calendar_id,
+                summary=summary,
+                start_time=new_dt.isoformat(),
+                end_time=(new_dt + timedelta(minutes=60)).isoformat()
+            )
+        else:
+            new_gcal = None
         
         # 4. Actualizar BD
         await db.pool.execute("""
