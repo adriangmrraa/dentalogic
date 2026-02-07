@@ -5,7 +5,7 @@ import asyncpg
 import httpx
 import logging
 import re
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Header, Depends, Request, status, BackgroundTasks
 from pydantic import BaseModel
@@ -940,22 +940,30 @@ async def create_appointment_manual(apt: AppointmentCreate, request: Request):
         
         # 5. Sincronizar con Google Calendar
         try:
-            summary = f"Cita Dental: {appointment_data['first_name']} {appointment_data['last_name'] or ''} - {apt.type}"
-            start_time = apt.datetime.isoformat()
-            end_time = (apt.datetime + timedelta(minutes=60)).isoformat()
-            
-            gcal_event = gcal_service.create_event(
-                summary=summary,
-                start_time=start_time,
-                end_time=end_time,
-                description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['phone_number']}\nNotas: {apt.notes or ''}"
+            # Obtener google_calendar_id del profesional
+            google_calendar_id = await db.pool.fetchval(
+                "SELECT google_calendar_id FROM professionals WHERE id = $1", 
+                apt.professional_id
             )
             
-            if gcal_event:
-                await db.pool.execute(
-                    "UPDATE appointments SET google_calendar_event_id = $1, google_calendar_sync_status = 'synced' WHERE id = $2",
-                    gcal_event['id'], new_id
+            if google_calendar_id:
+                summary = f"Cita Dental: {appointment_data['first_name']} {appointment_data['last_name'] or ''} - {apt.type}"
+                start_time = apt.datetime.isoformat()
+                end_time = (apt.datetime + timedelta(minutes=60)).isoformat()
+                
+                gcal_event = gcal_service.create_event(
+                    calendar_id=google_calendar_id,
+                    summary=summary,
+                    start_time=start_time,
+                    end_time=end_time,
+                    description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['phone_number']}\nNotas: {apt.notes or ''}"
                 )
+                
+                if gcal_event:
+                    await db.pool.execute(
+                        "UPDATE appointments SET google_calendar_event_id = $1, google_calendar_sync_status = 'synced' WHERE id = $2",
+                        gcal_event['id'], new_id
+                    )
         except Exception as ge:
             print(f"Error syncing with GCal: {ge}")
 
@@ -996,11 +1004,18 @@ async def update_appointment_status(id: str, status: str, request: Request):
         # 1. Sincronizar cancelación con Google Calendar
         if status == 'cancelled' and appointment_data['google_calendar_event_id']:
             try:
-                gcal_service.delete_event(appointment_data['google_calendar_event_id'])
-                await db.pool.execute(
-                    "UPDATE appointments SET google_calendar_sync_status = 'cancelled' WHERE id = $1",
-                    id
+                # Need to fetch professional's calendar ID
+                google_calendar_id = await db.pool.fetchval(
+                    "SELECT google_calendar_id FROM professionals WHERE id = $1", 
+                    appointment_data['professional_id']
                 )
+                
+                if google_calendar_id:
+                    gcal_service.delete_event(calendar_id=google_calendar_id, event_id=appointment_data['google_calendar_event_id'])
+                    await db.pool.execute(
+                        "UPDATE appointments SET google_calendar_sync_status = 'cancelled' WHERE id = $1",
+                        id
+                    )
             except Exception as ge:
                 print(f"Error deleting GCal event: {ge}")
 
@@ -1239,7 +1254,7 @@ async def trigger_sync():
             
             logger.info(f"🔄 Syncing GCal for {prof['first_name']} (ID: {prof_id}) on {cal_id}")
             
-            events = gcal_service.list_events(time_min=time_min, time_max=time_max, calendar_id=cal_id)
+            events = gcal_service.list_events(calendar_id=cal_id, time_min=time_min, time_max=time_max)
             total_processed += len(events)
             
             # Obtener IDs ya existentes para este profesional

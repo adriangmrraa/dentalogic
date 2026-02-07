@@ -179,9 +179,11 @@ export default function AgendaView() {
   }, []);
 
   // Trigger Google Calendar sync
-  const handleSyncNow = async () => {
+  const handleSyncNow = async (silent: boolean = false) => {
     try {
-      setSyncStatus({ ...syncStatus, syncing: true, error: null });
+      if (!silent) {
+        setSyncStatus({ ...syncStatus, syncing: true, error: null });
+      }
       // Both work because of aliases on backend
       const response = await api.post('/admin/calendar/sync');
       setSyncStatus({
@@ -192,7 +194,9 @@ export default function AgendaView() {
 
       // Refresh calendar data after sync
       fetchData();
-      alert(response.data.message || 'Sincronización completada');
+      if (!silent) {
+        alert(response.data.message || 'Sincronización completada');
+      }
     } catch (error: any) {
       console.error('Error syncing calendar:', error);
       setSyncStatus({
@@ -200,9 +204,24 @@ export default function AgendaView() {
         syncing: false,
         error: error.response?.data?.message || 'Error en sincronización',
       });
-      alert(`Error en sincronización: ${error.response?.data?.message || error.message}`);
+      if (!silent) {
+        alert(`Error en sincronización: ${error.response?.data?.message || error.message}`);
+      }
     }
   };
+
+  // Auto-sync on mount
+  useEffect(() => {
+    const autoSync = async () => {
+      // Only auto-sync if user has rights
+      if (user?.role === 'ceo' || user?.role === 'secretary' || user?.role === 'professional') {
+        console.log('🔄 Triggering auto-sync for Google Calendar...');
+        await handleSyncNow(true);
+      }
+    };
+
+    autoSync();
+  }, []); // Run once on mount
 
   // Check for collisions before creating appointment
   const checkCollisions = useCallback(async (professionalId: string, datetimeStr: string): Promise<boolean> => {
@@ -697,7 +716,7 @@ export default function AgendaView() {
 
           {/* Sync Now Button */}
           <button
-            onClick={handleSyncNow}
+            onClick={() => handleSyncNow(false)}
             disabled={syncStatus.syncing}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${syncStatus.syncing
               ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
