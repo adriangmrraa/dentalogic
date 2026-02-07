@@ -5,6 +5,7 @@ import AgendaView from './views/AgendaView';
 import PatientsView from './views/PatientsView';
 import PatientDetail from './views/PatientDetail';
 import ProfessionalsView from './views/ProfessionalsView';
+import ProfessionalAnalyticsView from './views/ProfessionalAnalyticsView';
 import ChatsView from './views/ChatsView';
 import TreatmentsView from './views/TreatmentsView';
 import LoginView from './views/LoginView';
@@ -30,6 +31,11 @@ function App() {
                   <Route path="pacientes/:id" element={<PatientDetail />} />
                   <Route path="chats" element={<ChatsView />} />
                   <Route path="profesionales" element={<ProfessionalsView />} />
+                  <Route path="analytics/professionals" element={
+                    <ProtectedRoute allowedRoles={['ceo']}>
+                      <ProfessionalAnalyticsView />
+                    </ProtectedRoute>
+                  } />
                   <Route path="tratamientos" element={<TreatmentsView />} />
                   <Route path="perfil" element={<ProfileView />} />
                   <Route path="aprobaciones" element={

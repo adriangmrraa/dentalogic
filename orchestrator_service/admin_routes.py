@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Header, Depends, Request, status, 
 from pydantic import BaseModel
 from db import db
 from gcal_service import gcal_service
+from analytics_service import analytics_service
 
 logger = logging.getLogger(__name__)
 
@@ -1470,3 +1471,35 @@ async def list_treatment_types():
     query = "SELECT code, name, description, category FROM treatment_types WHERE is_active = true ORDER BY name"
     rows = await db.pool.fetch(query)
     return [dict(row) for row in rows]
+
+# ==================== ENDPOINTS ANALYTICS ====================
+
+@router.get("/analytics/professionals/summary")
+async def get_professionals_analytics(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    user_data = Depends(verify_admin_token)
+):
+    """
+    Retorna métricas estratégicas de los profesionales para el dashboard del CEO.
+    """
+    try:
+        # Default to current month if not specified
+        if not start_date or not end_date:
+            today = datetime.now()
+            start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            # End of month roughly
+            if today.month == 12:
+                 end = today.replace(year=today.year+1, month=1, day=1) - timedelta(days=1)
+            else:
+                 end = today.replace(month=today.month+1, day=1) - timedelta(days=1)
+        else:
+            start = datetime.fromisoformat(start_date)
+            end = datetime.fromisoformat(end_date)
+            
+        data = await analytics_service.get_professionals_summary(start, end)
+        return data
+        
+    except Exception as e:
+        logger.error(f"Error in analytics endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
