@@ -11,7 +11,7 @@ EasyPanel Dashboard
   → New Project
   → Select Source: GitHub (o Git Repo)
   → Seleccionar este repositorio
-```
+``` 
 
 ### 1.2 Agregar Infraestructura (Add-ons)
 
