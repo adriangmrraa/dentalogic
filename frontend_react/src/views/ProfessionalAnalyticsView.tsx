@@ -123,7 +123,7 @@ export default function ProfessionalAnalyticsView() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 {/* Chart Section */}
-                <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="lg:col-span-2 card">
                     <h3 className="text-lg font-bold text-gray-800 mb-4">Rendimiento Comparativo</h3>
                     <div className="h-80">
                         <ResponsiveContainer width="100%" height="100%">
@@ -143,7 +143,7 @@ export default function ProfessionalAnalyticsView() {
                 </div>
 
                 {/* Top Performers / Strategic Insights */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="card">
                     <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                         <TrendingUp className="text-blue-500" /> Insights
                     </h3>
@@ -168,7 +168,7 @@ export default function ProfessionalAnalyticsView() {
             </div>
 
             {/* Detailed Table */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="card overflow-hidden p-0">
                 <div className="p-6 border-b border-gray-100">
                     <h3 className="text-lg font-bold text-gray-800">Detalle Operativo</h3>
                 </div>

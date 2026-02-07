@@ -37,7 +37,7 @@ const KPICard: React.FC<KPICardProps> = ({ title, value, subtext, trend, icon, c
     };
 
     return (
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div className="card border-l-4" style={{ borderLeftColor: color === 'blue' ? 'var(--medical-500)' : color === 'green' ? 'var(--success)' : color }}>
             <div className="flex justify-between items-start">
                 <div>
                     <p className="text-sm font-medium text-gray-500 mb-1">{title}</p>

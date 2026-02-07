@@ -85,7 +85,12 @@ export default function ProfessionalsView() {
     try {
       setLoading(true);
       const response = await api.get('/admin/professionals');
-      setProfessionals(response.data);
+      // Map API response to Component State (handling first_name/last_name mismatch)
+      const mappedData = response.data.map((p: any) => ({
+        ...p,
+        name: p.name || `${p.first_name} ${p.last_name || ''}`.trim()
+      }));
+      setProfessionals(mappedData);
     } catch (error) {
       console.error('Error fetching professionals:', error);
     } finally {
@@ -255,9 +260,8 @@ export default function ProfessionalsView() {
               <div key={professional.id} className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${
-                      professional.is_active ? 'bg-primary' : 'bg-gray-400'
-                    }`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${professional.is_active ? 'bg-primary' : 'bg-gray-400'
+                      }`}>
                       {professional.name.charAt(0)}
                     </div>
                     <div>
@@ -304,11 +308,10 @@ export default function ProfessionalsView() {
                     </button>
                     <button
                       onClick={() => handleToggleActive(professional)}
-                      className={`p-2 rounded ${
-                        professional.is_active
+                      className={`p-2 rounded ${professional.is_active
                           ? 'text-gray-600 hover:text-red-600 hover:bg-red-50'
                           : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
-                      }`}
+                        }`}
                     >
                       {professional.is_active ? <XCircle size={18} /> : <CheckCircle size={18} />}
                     </button>
