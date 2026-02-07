@@ -246,10 +246,25 @@ class ClinicalNote(BaseModel):
     content: str
     odontogram_data: Optional[Dict] = None
 
+class ProfessionalCreate(BaseModel):
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    specialty: Optional[str] = None
+    license_number: Optional[str] = None
+    address: Optional[str] = None
+    is_active: bool = True
+    availability: Dict[str, Any] = {}
+
 class ProfessionalUpdate(BaseModel):
     name: str
-    specialty: str
-    active: bool
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    specialty: Optional[str] = None
+    license_number: Optional[str] = None
+    is_active: bool
+    availability: Dict[str, Any]
+
 
 class ChatSendMessage(BaseModel):
     phone: str
@@ -736,6 +751,67 @@ async def list_patients(search: str = None, limit: int = 50):
         rows = await db.pool.fetch(query, *params)
         
     return [dict(row) for row in rows]
+
+@router.post("/professionals", dependencies=[Depends(verify_admin_token)])
+async def create_professional(professional: ProfessionalCreate):
+    """Crear un nuevo profesional."""
+    try:
+        # 1. Crear usuario asociado
+        user_id = uuid.uuid4()
+        # Generar un email dummy si no se provee, o usar el real
+        email = professional.email or f"prof_{uuid.uuid4().hex[:8]}@dentalogic.local"
+        
+        await db.pool.execute("""
+            INSERT INTO users (id, email, password_hash, role, first_name, status, created_at)
+            VALUES ($1, $2, $3, 'professional', $4, 'active', NOW())
+        """, user_id, email, "hash_placeholder", professional.name)
+
+        # 2. Crear profesional
+        await db.pool.execute("""
+            INSERT INTO professionals (
+                user_id, first_name, specialty, license_number, phone_number, 
+                address, is_active, availability, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        """, user_id, professional.name, professional.specialty, professional.license_number,
+             professional.phone, professional.address, professional.is_active,
+             json.dumps(professional.availability))
+             
+        return {"status": "created", "user_id": str(user_id)}
+    except Exception as e:
+        logger.error(f"Error creating professional: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/professionals/{id}", dependencies=[Depends(verify_admin_token)])
+async def update_professional(id: int, payload: ProfessionalUpdate):
+    """Actualizar datos de un profesional por su ID numérico."""
+    try:
+        # Verificar existencia
+        exists = await db.pool.fetchval("SELECT 1 FROM professionals WHERE id = $1", id)
+        if not exists:
+            raise HTTPException(status_code=404, detail="Profesional no encontrado")
+
+        # Actualizar datos básicos y disponibilidad
+        await db.pool.execute("""
+            UPDATE professionals SET
+                first_name = $1,
+                specialty = $2,
+                license_number = $3,
+                phone_number = $4,
+                email = $5,
+                is_active = $6,
+                availability = $7::jsonb,
+                updated_at = NOW()
+            WHERE id = $8
+        """, payload.name, payload.specialty, payload.license_number, 
+             payload.phone, payload.email, payload.is_active, 
+             json.dumps(payload.availability), id)
+             
+        return {"id": id, "status": "updated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating professional {id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/patients/{id}", dependencies=[Depends(verify_admin_token)])
 async def get_patient(id: int):

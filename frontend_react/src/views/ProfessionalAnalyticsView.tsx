@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { useState, useEffect } from 'react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import api from '../api/axios';
 import { Zap, Crown, Award, TrendingUp, AlertTriangle } from 'lucide-react';
 import KPICard from '../components/analytics/KPICard';
@@ -22,13 +22,11 @@ interface MetricData {
 
 export default function ProfessionalAnalyticsView() {
     const [data, setData] = useState<MetricData[]>([]);
-    const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState({ startDate: '', endDate: '', professionalIds: [] as number[] });
 
     const fetchData = async () => {
         if (!filters.startDate || !filters.endDate) return;
 
-        setLoading(true);
         try {
             const params = new URLSearchParams({
                 start_date: filters.startDate,
@@ -44,8 +42,6 @@ export default function ProfessionalAnalyticsView() {
             setData(filteredData);
         } catch (error) {
             console.error("Error fetching analytics", error);
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -134,9 +130,8 @@ export default function ProfessionalAnalyticsView() {
                                 <Tooltip
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
                                 />
-                                <Legend />
-                                <Bar dataKey="metrics.completion_rate" name="Tasa Completitud (%)" fill="#8884d8" radius={[0, 4, 4, 0]} barSize={20} />
-                                <Bar dataKey="metrics.retention_rate" name="Tasa Retención (%)" fill="#82ca9d" radius={[0, 4, 4, 0]} barSize={20} />
+                                <Bar dataKey="completionRate" name="Tasa Completitud" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
+                                <Bar dataKey="retentionRate" name="Tasa Retención" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>

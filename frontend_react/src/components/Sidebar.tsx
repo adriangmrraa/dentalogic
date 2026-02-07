@@ -1,16 +1,13 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard,
   Calendar,
   Users,
   MessageSquare,
   Settings,
-  Activity,
   ChevronLeft,
   ChevronRight,
   Stethoscope,
-  FileText,
   BarChart3,
   Home,
   Clock,

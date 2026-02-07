@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  User, Plus, Edit, Clock, Calendar, Mail, Phone,
-  ChevronDown, ChevronUp, CheckCircle, XCircle, Save, X
+  Plus, Edit, Clock, Calendar, Mail, Phone,
+  ChevronDown, ChevronUp, CheckCircle, XCircle, Save, X, ClipboardList
 } from 'lucide-react';
 import api from '../api/axios';
 
@@ -158,17 +158,17 @@ export default function ProfessionalsView() {
   };
 
   const toggleDay = (professionalId: number, day: string) => {
-    setExpandedDays(prev => {
+    setExpandedDays((prev: Record<number, string[]>) => {
       const current = prev[professionalId] || [];
       if (current.includes(day)) {
-        return { ...prev, [professionalId]: current.filter(d => d !== day) };
+        return { ...prev, [professionalId]: current.filter((d: string) => d !== day) };
       }
       return { ...prev, [professionalId]: [...current, day] };
     });
   };
 
   const addTimeSlot = (dayKey: string) => {
-    setFormData(prev => ({
+    setFormData((prev: any) => ({
       ...prev,
       availability: {
         ...prev.availability,
@@ -181,28 +181,28 @@ export default function ProfessionalsView() {
   };
 
   const removeTimeSlot = (dayKey: string, index: number) => {
-    setFormData(prev => ({
+    setFormData((prev: any) => ({
       ...prev,
       availability: {
         ...prev.availability,
-        [dayKey]: prev.availability[dayKey as keyof ProfessionalAvailability].filter((_, i) => i !== index),
+        [dayKey]: prev.availability[dayKey as keyof ProfessionalAvailability].filter((_: any, i: number) => i !== index),
       },
     }));
   };
 
   const updateTimeSlot = (dayKey: string, index: number, field: 'start' | 'end', value: string) => {
-    setFormData(prev => ({
+    setFormData((prev: any) => ({
       ...prev,
       availability: {
         ...prev.availability,
-        [dayKey]: prev.availability[dayKey as keyof ProfessionalAvailability].map((slot, i) =>
+        [dayKey]: prev.availability[dayKey as keyof ProfessionalAvailability].map((slot: TimeSlot, i: number) =>
           i === index ? { ...slot, [field]: value } : slot
         ),
       },
     }));
   };
 
-  const getActiveProfessionals = () => professionals.filter(p => p.is_active).length;
+  const getActiveProfessionals = () => professionals.filter((p: Professional) => p.is_active).length;
 
   const getTotalSlots = (availability?: ProfessionalAvailability) => {
     if (!availability) return 0;
@@ -256,7 +256,7 @@ export default function ProfessionalsView() {
           </div>
         ) : (
           <div className="divide-y">
-            {professionals.map((professional) => (
+            {professionals.map((professional: Professional) => (
               <div key={professional.id} className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -309,8 +309,8 @@ export default function ProfessionalsView() {
                     <button
                       onClick={() => handleToggleActive(professional)}
                       className={`p-2 rounded ${professional.is_active
-                          ? 'text-gray-600 hover:text-red-600 hover:bg-red-50'
-                          : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+                        ? 'text-gray-600 hover:text-red-600 hover:bg-red-50'
+                        : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
                         }`}
                     >
                       {professional.is_active ? <XCircle size={18} /> : <CheckCircle size={18} />}
@@ -340,7 +340,7 @@ export default function ProfessionalsView() {
                           if (slots && slots.length > 0) {
                             return (
                               <span key={day.key} className="text-xs bg-secondary text-primary px-2 py-1 rounded">
-                                {day.label}: {slots.map(s => `${s.start}-${s.end}`).join(', ')}
+                                {day.label}: {slots.map((s: TimeSlot) => `${s.start}-${s.end}`).join(', ')}
                               </span>
                             );
                           }
@@ -356,169 +356,221 @@ export default function ProfessionalsView() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modal - Enhanced Nexus UI */}
       {editingProfessional !== null && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg w-full max-w-2xl mx-4 my-8">
-            <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white">
-              <h2 className="text-xl font-bold">
-                {editingProfessional ? `Editar: Dr. ${editingProfessional.name}` : 'Nuevo Profesional'}
-              </h2>
-              <button onClick={closeModal} className="text-gray-500 hover:text-gray-700">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-4 animate-in fade-in duration-300">
+          <div className="bg-white/90 backdrop-blur-md rounded-2xl w-full max-w-3xl shadow-2xl border border-white/20 overflow-hidden transform animate-in slide-in-from-bottom-4 duration-300">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-white/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                  {editingProfessional.id ? <Edit size={24} /> : <Plus size={24} />}
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">
+                    {editingProfessional.id ? `Editar Perfil: Dr. ${editingProfessional.name}` : 'Nuevo Profesional'}
+                  </h2>
+                  <p className="text-sm text-gray-500">Completa la información del staff médico</p>
+                </div>
+              </div>
+              <button
+                onClick={closeModal}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600"
+              >
                 <X size={24} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4">
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Especialidad
-                  </label>
-                  <select
-                    value={formData.specialty}
-                    onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="">Seleccionar...</option>
-                    {SPECIALTIES.map(spec => (
-                      <option key={spec} value={spec}>{spec}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Teléfono
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Matrícula
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.license_number}
-                    onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-                <div className="flex items-center">
-                  <label className="flex items-center gap-2 cursor-pointer">
+            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[70vh]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                {/* Basic Info Section */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                    <ClipboardList size={16} /> Datos Principales
+                  </h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Nombre Completo <span className="text-red-500">*</span>
+                    </label>
                     <input
-                      type="checkbox"
-                      checked={formData.is_active}
-                      onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                      className="w-4 h-4 text-primary rounded"
+                      type="text"
+                      required
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
+                      placeholder="Ej: Juan Pérez"
                     />
-                    <span className="text-sm font-medium text-gray-700">Profesional activo</span>
-                  </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Especialidad Principial
+                    </label>
+                    <select
+                      value={formData.specialty}
+                      onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
+                    >
+                      <option value="">Seleccionar especialidad...</option>
+                      {SPECIALTIES.map(spec => (
+                        <option key={spec} value={spec}>{spec}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Matrícula / Registro
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.license_number}
+                      onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
+                      placeholder="Ej: MN 12345"
+                    />
+                  </div>
+                </div>
+
+                {/* Contact Section */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                    <Mail size={16} /> Contacto & Estado
+                  </h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Correo Electrónico
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
+                      placeholder="doctor@clinica.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Teléfono Personal (WhatsApp)
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
+                      placeholder="+54 9..."
+                    />
+                  </div>
+
+                  <div className="pt-4">
+                    <label className="relative flex items-center p-4 border border-gray-100 rounded-xl bg-gray-50/50 cursor-pointer hover:bg-white transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={formData.is_active}
+                        onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                        className="w-5 h-5 text-primary rounded-lg border-gray-300 focus:ring-primary/20"
+                      />
+                      <div className="ml-3">
+                        <span className="block text-sm font-bold text-gray-900">Estado Activo</span>
+                        <span className="block text-xs text-gray-500">Permite asignar turnos y recibir pacientes</span>
+                      </div>
+                    </label>
+                  </div>
                 </div>
               </div>
 
-              {/* Availability */}
-              <div className="mb-4">
-                <h3 className="font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <Clock size={18} />
-                  Disponibilidad para Agendamiento
-                </h3>
-                <p className="text-xs text-gray-500 mb-3">
-                  Define los horarios disponibles. El bot de IA usará esta información para ofrecer turnos.
+              {/* Availability Section - Enhanced */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                    <Clock size={16} /> Disponibilidad Semanal
+                  </h3>
+                  <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold">Bot IA Sincronizado</span>
+                </div>
+
+                <p className="text-xs text-gray-500 mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100 italic">
+                  "El bot de IA utiliza estos intervalos para proponer turnos automáticos por WhatsApp."
                 </p>
 
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {DAYS.map(day => (
-                    <div key={day.key} className="border rounded-lg overflow-hidden">
+                    <div key={day.key} className="group border border-gray-100 rounded-xl overflow-hidden hover:border-primary/30 transition-all bg-white">
                       <button
                         type="button"
                         onClick={() => toggleDay(-1, day.key)}
-                        className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100"
+                        className={`w-full flex items-center justify-between p-3 transition-colors ${formData.availability[day.key as keyof ProfessionalAvailability]?.length > 0
+                          ? 'bg-primary/5' : 'bg-gray-50/50'
+                          }`}
                       >
-                        <span className="font-medium text-sm">{day.label}</span>
-                        <span className="text-xs text-gray-500">
-                          {formData.availability[day.key as keyof ProfessionalAvailability]?.length || 0} bloques
-                        </span>
+                        <span className={`font-bold text-xs ${formData.availability[day.key as keyof ProfessionalAvailability]?.length > 0
+                          ? 'text-primary' : 'text-gray-600'
+                          }`}>{day.label}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-gray-400 font-medium">
+                            {formData.availability[day.key as keyof ProfessionalAvailability]?.length || 0} bloques
+                          </span>
+                          <ChevronDown size={14} className="text-gray-400 group-hover:text-primary" />
+                        </div>
                       </button>
-                      <div className="p-3 bg-white">
-                        {formData.availability[day.key as keyof ProfessionalAvailability]?.map((slot, index) => (
-                          <div key={index} className="flex items-center gap-2 mb-2">
-                            <input
-                              type="time"
-                              value={slot.start}
-                              onChange={(e) => updateTimeSlot(day.key, index, 'start', e.target.value)}
-                              className="px-2 py-1 border rounded text-sm"
-                            />
-                            <span className="text-gray-400">-</span>
-                            <input
-                              type="time"
-                              value={slot.end}
-                              onChange={(e) => updateTimeSlot(day.key, index, 'end', e.target.value)}
-                              className="px-2 py-1 border rounded text-sm"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => removeTimeSlot(day.key, index)}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        ))}
-                        <button
-                          type="button"
-                          onClick={() => addTimeSlot(day.key)}
-                          className="text-xs text-primary hover:underline"
-                        >
-                          + Agregar bloque horario
-                        </button>
-                      </div>
+
+                      {(expandedDays[-1] || []).includes(day.key) && (
+                        <div className="p-3 space-y-2 bg-white animate-in slide-in-from-top-2 duration-200">
+                          {formData.availability[day.key as keyof ProfessionalAvailability]?.map((slot: TimeSlot, index: number) => (
+                            <div key={index} className="flex items-center gap-2 group/slot">
+                              <div className="flex-1 flex gap-1">
+                                <input
+                                  type="time"
+                                  value={slot.start}
+                                  onChange={(e) => updateTimeSlot(day.key, index, 'start', e.target.value)}
+                                  className="flex-1 px-2 py-1.5 bg-gray-50 border-none rounded-lg text-xs font-semibold focus:ring-1 focus:ring-primary outline-none"
+                                />
+                                <span className="text-gray-300 self-center">-</span>
+                                <input
+                                  type="time"
+                                  value={slot.end}
+                                  onChange={(e) => updateTimeSlot(day.key, index, 'end', e.target.value)}
+                                  className="flex-1 px-2 py-1.5 bg-gray-50 border-none rounded-lg text-xs font-semibold focus:ring-1 focus:ring-primary outline-none"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeTimeSlot(day.key, index)}
+                                className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => addTimeSlot(day.key)}
+                            className="w-full py-1.5 border border-dashed border-gray-200 rounded-lg text-[10px] font-bold text-gray-400 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all mt-1"
+                          >
+                            + Bloque
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3">
+              <div className="flex justify-end gap-3 mt-10 pt-6 border-t border-gray-100 bg-white/50 sticky bottom-0">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                  className="px-6 py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-white bg-primary rounded-lg hover:bg-primary-dark flex items-center gap-2"
+                  className="px-8 py-2.5 text-sm font-bold text-white bg-primary hover:bg-primary-dark rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/30 transform hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center gap-2"
                 >
                   <Save size={18} />
-                  Guardar
+                  Guardar Cambios
                 </button>
               </div>
             </form>
