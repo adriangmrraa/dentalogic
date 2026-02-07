@@ -77,7 +77,12 @@ class ChatRequest(BaseModel):
 
     @property
     def final_phone(self) -> str:
-        return self.phone or self.from_number or ""
+        phone = self.phone or self.from_number or ""
+        # Normalización E.164 básica para consistencia en BD (con +)
+        clean = re.sub(r'\D', '', phone)
+        if clean and not phone.startswith('+'):
+            return '+' + clean
+        return phone # Si ya tiene + o está vacío
     
     @property
     def final_name(self) -> str:
@@ -416,43 +421,30 @@ async def book_appointment(date_time: str, treatment_reason: str,
         # 1. Parsear datetime
         apt_datetime = parse_datetime(date_time)
         
-        # 2. Verificar estado del paciente
+        # Limpiar vacíos para que COALESCE funcione correctamente en la BD
+        first_name = first_name if first_name and first_name.strip() else None
+        last_name = last_name if last_name and last_name.strip() else None
+        dni = dni if dni and dni.strip() else None
+        insurance_provider = insurance_provider if insurance_provider and insurance_provider.strip() else None
         # Primero buscamos si existe
         existing_patient = await db.pool.fetchrow("SELECT id, status, first_name, last_name FROM patients WHERE phone_number = $1", phone)
         
         if existing_patient:
-            if existing_patient['status'] == 'guest':
-                # ES UN LEAD -> REQUIERE VALIDACIÓN ESTRICTA
-                
-                # Auto-parse full name if provided as single string
-                if first_name and not last_name and ' ' in first_name:
-                    parts = first_name.strip().split(maxsplit=1)
-                    first_name = parts[0]
-                    last_name = parts[1] if len(parts) > 1 else None
-                    logger.info(f"📝 Auto-parsed full name: first='{first_name}', last='{last_name}'")
-                
-                missing_fields = []
-                if not first_name: missing_fields.append("Nombre")
-                if not last_name: missing_fields.append("Apellido")
-                if not dni: missing_fields.append("DNI")
-                if not insurance_provider: missing_fields.append("Obra Social")
-                
-                if missing_fields:
-                    return f"❌ Faltan datos para confirmar la reserva. Por favor pedile al paciente: {', '.join(missing_fields)}."
-                
-                # Actualizar a ACTIVE con los datos reales
-                await db.pool.execute("""
-                    UPDATE patients 
-                    SET first_name = $1, last_name = $2, dni = $3, insurance_provider = $4, status = 'active', updated_at = NOW()
-                    WHERE id = $5
-                """, first_name, last_name, dni, insurance_provider, existing_patient['id'])
-                
-                patient_id = existing_patient['id']
-                logger.info(f"✅ Lead {phone} convertido a PACIENTE (ID: {patient_id}) durante reserva.")
-                
-            else:
-                # YA ES PACIENTE ACTIVO -> Usar ID existente
-                patient_id = existing_patient['id']
+            # ACTUALIZAR SIEMPRE los datos (DNI, nombres, obra social) para asegurar integridad
+            # Esto garantiza que el paciente pase a 'active' y sea visible en el admin
+            await db.pool.execute("""
+                UPDATE patients 
+                SET first_name = COALESCE($1, first_name), 
+                    last_name = COALESCE($2, last_name), 
+                    dni = COALESCE($3, dni), 
+                    insurance_provider = COALESCE($4, insurance_provider), 
+                    status = 'active', 
+                    updated_at = NOW()
+                WHERE id = $5
+            """, first_name, last_name, dni, insurance_provider, existing_patient['id'])
+            
+            patient_id = existing_patient['id']
+            logger.info(f"✅ Paciente {phone} actualizado/promocionado (ID: {patient_id}) a ACTIVE durante reserva.")
         else:
             # Caso raro: No existe ni como lead (debería existir al entrar el chat).
             # Lo creamos como ACTIVE directamente si tenemos los datos, o rechazamos.

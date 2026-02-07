@@ -963,7 +963,7 @@ async def check_collisions(
     gcal_blocks = await db.pool.fetch("""
         SELECT id, title, start_datetime, end_datetime
         FROM google_calendar_blocks
-        WHERE professional_id = $1 OR professional_id IS NULL
+        WHERE (professional_id = $1 OR professional_id IS NULL)
         AND start_datetime < $3
         AND end_datetime > $2
     """, professional_id, target_datetime, target_end)
