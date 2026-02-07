@@ -188,10 +188,10 @@ def to_json_safe(data):
         return data.isoformat()
     return data
 
-def generate_free_slots(target_date: date, busy_times: List[tuple], 
+def generate_free_slots(target_date: date, busy_intervals_by_prof: Dict[int, set], 
                         start_time_str="09:00", end_time_str="18:00", interval_minutes=30, 
-                        limit=20, time_preference: Optional[str] = None) -> List[str]:
-    """Genera lista de horarios disponibles (30min intervals)."""
+                        duration_minutes=30, limit=20, time_preference: Optional[str] = None) -> List[str]:
+    """Genera lista de horarios disponibles (si al menos un profesional tiene el hueco completo)."""
     slots = []
     
     # Parse start and end times
@@ -207,22 +207,14 @@ def generate_free_slots(target_date: date, busy_times: List[tuple],
     
     now = get_now_arg()
     
-    # Pre-calculate busy intervals (30 min granularity)
-    busy_intervals = set()
-    for busy_start, duration in busy_times:
-        # Asegurar que el tiempo esté en zona horaria de Argentina antes de stringificar
-        if busy_start.tzinfo and busy_start.tzinfo != ARG_TZ:
-            busy_start = busy_start.astimezone(ARG_TZ)
-        
-        busy_end = busy_start + timedelta(minutes=duration)
-        it = busy_start
-        while it < busy_end:
-            busy_intervals.add(it.strftime("%H:%M"))
-            it += timedelta(minutes=30)
-    
+    # Un horario está libre si AL MENOS UN profesional está libre durante toda la duración solicitada
     while current < end_limit:
-        # 1. Filtro por preferencia de horario (mañana/tarde/todo)
-        # Mañana: < 13:00, Tarde: >= 13:00
+        # No ofrecer turnos en el pasado (si es hoy)
+        if target_date == now.date() and current <= now:
+            current += timedelta(minutes=interval_minutes)
+            continue
+
+        # Filtro por preferencia de horario
         if time_preference == 'mañana' and current.hour >= 13:
             current += timedelta(minutes=interval_minutes)
             continue
@@ -230,20 +222,34 @@ def generate_free_slots(target_date: date, busy_times: List[tuple],
             current += timedelta(minutes=interval_minutes)
             continue
 
-        # 2. Saltar almuerzo (opcional)
+        # Saltar almuerzo (opcional)
         if current.hour >= 13 and current.hour < 14 and not time_preference:
             current += timedelta(minutes=interval_minutes)
             continue
         
-        # 3. No ofrecer turnos en el pasado (si es hoy)
-        if target_date == now.date() and current <= now:
+        # Verificar si algún profesional tiene el hueco libre
+        time_needed = current + timedelta(minutes=duration_minutes)
+        if time_needed > end_limit: # No cabe al final del día
             current += timedelta(minutes=interval_minutes)
             continue
+
+        any_prof_free = False
+        for prof_id, busy_set in busy_intervals_by_prof.items():
+            slot_free = True
+            # Revisar cada intervalo de 30 min dentro de la duración
+            check_time = current
+            while check_time < time_needed:
+                if check_time.strftime("%H:%M") in busy_set:
+                    slot_free = False
+                    break
+                check_time += timedelta(minutes=30)
             
-        # 4. Verificar que no está ocupado
-        time_str = current.strftime("%H:%M")
-        if time_str not in busy_intervals:
-            slots.append(time_str)
+            if slot_free:
+                any_prof_free = True
+                break
+        
+        if any_prof_free:
+            slots.append(current.strftime("%H:%M"))
         
         if len(slots) >= limit:
             break
@@ -255,16 +261,18 @@ def generate_free_slots(target_date: date, busy_times: List[tuple],
 # --- TOOLS DENTALES ---
 
 @tool
-async def check_availability(date_query: str, professional_name: Optional[str] = None, time_preference: Optional[str] = None):
+async def check_availability(date_query: str, professional_name: Optional[str] = None, 
+                             treatment_name: Optional[str] = None, time_preference: Optional[str] = None):
     """
     Consulta la disponibilidad REAL de turnos en la BD para una fecha.
     date_query: Descripción de la fecha (ej: 'mañana', 'lunes', '2025-05-10')
     professional_name: (Opcional) Nombre del profesional específico.
-    time_preference: (Opcional) 'mañana', 'tarde' o 'todo'. Úsalo si el usuario pide un horario específico.
+    treatment_name: (Opcional) Nombre del tratamiento (limpieza, consulta, perno y corona, etc) para calcular la duración.
+    time_preference: (Opcional) 'mañana', 'tarde' o 'todo'.
     Devuelve: Horarios disponibles
     """
     try:
-        # 0. Obtener profesionales activos
+        # 0. A) Obtener profesionales activos
         query = "SELECT id, first_name, google_calendar_id FROM professionals WHERE is_active = true"
         params = []
         if professional_name:
@@ -272,48 +280,43 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
             params.append(f"%{professional_name}%")
         
         active_professionals = await db.pool.fetch(query, *params)
-        
         if not active_professionals:
-            if professional_name:
-                return f"❌ No encontré al profesional '{professional_name}' o no está activo en este momento."
-            return "❌ Actualmente no hay profesionales registrados o activos en la clínica para realizar reservas."
+            return f"❌ No encontré al profesional '{professional_name}' o no está activo."
 
         target_date = parse_date(date_query)
-
-        # 1. Verificar si es Domingo (Cerrado)
         if target_date.weekday() == 6:
-            return f"Lo siento, el {date_query} es domingo y la clínica está cerrada. Atendemos de Lunes a Sábados."
+            return f"Lo siento, el {date_query} es domingo y la clínica está cerrada. Atendemos Lunes a Sábados."
+
+        # 0. B) Obtener duración del tratamiento
+        duration = 30 # Default
+        if treatment_name:
+            # Búsqueda difusa de tratamiento por nombre
+            t_data = await db.pool.fetchrow("""
+                SELECT default_duration_minutes FROM treatment_types 
+                WHERE (name ILIKE $1 OR code ILIKE $1) AND is_available_for_booking = true
+                LIMIT 1
+            """, f"%{treatment_name}%")
+            if t_data:
+                duration = t_data['default_duration_minutes']
         
         # --- JIT VALIDATION: Fetch Real-Time Events from Google ---
-        # Fetch fresh events for the requested day and update local DB to ensure mirror accuracy.
         for prof in active_professionals:
             prof_id = prof['id']
             cal_id = prof['google_calendar_id']
             if not cal_id: continue
                 
             try:
-                # 1. Fetch from Google
                 g_events = gcal_service.get_events_for_day(calendar_id=cal_id, date_obj=target_date)
-                
-                # 2. Side-Effect Update: Refresh blocks for this day/prof in local DB
-                # Delete any block that overlaps with the requested day range
                 start_day = datetime.combine(target_date, datetime.min.time(), tzinfo=ARG_TZ)
                 end_day = datetime.combine(target_date, datetime.max.time(), tzinfo=ARG_TZ)
                 
                 await db.pool.execute("""
                     DELETE FROM google_calendar_blocks 
-                    WHERE (professional_id = $1 OR professional_id IS NULL)
-                    AND (start_datetime < $3 AND end_datetime > $2)
+                    WHERE professional_id = $1 AND (start_datetime < $3 AND end_datetime > $2)
                 """, prof_id, start_day, end_day)
                 
-                # Insert fresh blocks
                 for event in g_events:
                     g_id = event['id']
-                    # Skip if it's one of our own appointments (avoid double counting)
-                    # Ideally we check if g_id is in appointments table, but for blocks we can also just insert everything 
-                    # generic and filter downstream, OR we rely on generic "busy" blocks.
-                    # For simplicty in JIT, we blindly insert as blocks. The availability logic merges both.
-                    
                     summary = event.get('summary', 'Ocupado (GCal)')
                     description = event.get('description', '')
                     start = event['start'].get('dateTime') or event['start'].get('date')
@@ -323,59 +326,65 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
                     try:
                         dt_start = datetime.fromisoformat(start.replace('Z', '+00:00'))
                         dt_end = datetime.fromisoformat(end.replace('Z', '+00:00'))
-                        
                         await db.pool.execute("""
                             INSERT INTO google_calendar_blocks (
                                 tenant_id, google_event_id, title, description,
                                 start_datetime, end_datetime, all_day, professional_id, sync_status
                             ) VALUES (1, $1, $2, $3, $4, $5, $6, $7, 'synced')
                         """, g_id, summary, description, dt_start, dt_end, all_day, prof_id)
-                    except Exception as e:
-                         logger.warning(f"Error parsing GCal event {g_id}: {e}")
-
+                    except: pass
             except Exception as e:
-                logger.error(f"JIT Fetch failed for prof {prof_id}: {e}")
-                # Continue with whatever is in DB if JIT fails (Fallback)
+                logger.error(f"JIT Fetch error for prof {prof_id}: {e}")
 
-        # Query BD: obtener turnos confirmados para esa fecha para los profesionales seleccionados
+        # 2. Obtener ocupación agrupada por profesional
         prof_ids = [p['id'] for p in active_professionals]
-        # 2. Obtener ocupación (Rangos que se solapan con el día solicitado)
         start_day = datetime.combine(target_date, datetime.min.time(), tzinfo=ARG_TZ)
         end_day = datetime.combine(target_date, datetime.max.time(), tzinfo=ARG_TZ)
 
-        busy_appointments = await db.pool.fetch("""
-            SELECT appointment_datetime as start, duration_minutes
+        appointments = await db.pool.fetch("""
+            SELECT professional_id, appointment_datetime as start, duration_minutes
             FROM appointments
-            WHERE professional_id = ANY($1)
-            AND status IN ('scheduled', 'confirmed')
+            WHERE professional_id = ANY($1) AND status IN ('scheduled', 'confirmed')
             AND (appointment_datetime < $3 AND (appointment_datetime + interval '1 minute' * COALESCE(duration_minutes, 60)) > $2)
         """, prof_ids, start_day, end_day)
 
         gcal_blocks = await db.pool.fetch("""
-            SELECT start_datetime as start, end_datetime as end, professional_id
+            SELECT professional_id, start_datetime as start, end_datetime as end
             FROM google_calendar_blocks
             WHERE (professional_id = ANY($1) OR professional_id IS NULL)
             AND (start_datetime < $3 AND end_datetime > $2)
-            ORDER BY start_datetime ASC
         """, prof_ids, start_day, end_day)
 
-        # Extraer times ocupados (normalizando duraciones)
-        busy_times = []
-        for row in busy_appointments:
-            busy_times.append((row['start'], row['duration_minutes']))
+        # Mapear intervalos ocupados por profesional
+        busy_map = {pid: set() for pid in prof_ids}
+        # Agregar bloques globales a todos
+        global_busy = set()
+        for b in gcal_blocks:
+            it = b['start'].astimezone(ARG_TZ)
+            while it < b['end'].astimezone(ARG_TZ):
+                h_m = it.strftime("%H:%M")
+                if b['professional_id']:
+                    busy_map[b['professional_id']].add(h_m)
+                else:
+                    global_busy.add(h_m)
+                it += timedelta(minutes=30)
         
-        for row in gcal_blocks:
-            # Calcular duración en minutos para bloques
-            duration = int((row['end'] - row['start']).total_seconds() / 60)
-            busy_times.append((row['start'], duration))
+        for appt in appointments:
+            it = appt['start'].astimezone(ARG_TZ)
+            end_it = it + timedelta(minutes=appt['duration_minutes'])
+            while it < end_it:
+                busy_map[appt['professional_id']].add(it.strftime("%H:%M"))
+                it += timedelta(minutes=30)
+        
+        # Unir globales a todos
+        for pid in busy_map:
+            busy_map[pid].update(global_busy)
 
-        # Re-ordenar por inicio
-        busy_times.sort(key=lambda x: x[0])
-        
-        # Generar slots libres
+        # 3. Generar slots libres
         available_slots = generate_free_slots(
             target_date, 
-            busy_times, 
+            busy_map, 
+            duration_minutes=duration,
             start_time_str=CLINIC_HOURS_START, 
             end_time_str=CLINIC_HOURS_END,
             time_preference=time_preference,
@@ -384,80 +393,68 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         
         if available_slots:
             slots_str = ", ".join(available_slots)
-            resp = f"Tenemos disponibilidad para {date_query}"
+            resp = f"Para {date_query} ({duration} min), tenemos disponibilidad: {slots_str}. "
             if professional_name:
-                resp += f" con el/la Dr/a. {active_professionals[0]['first_name']}"
-            resp += f": {slots_str}. ¿Te queda bien alguno?"
+                resp += f"Consultando específicamente con Dr/a. {professional_name}."
             return resp
         else:
-            return f"No hay disponibilidad para {date_query} en ese horario o ya pasó la hora de atención. ¿Te interesa otro día?"
+            return f"No encontré huecos libres de {duration} min para {date_query}. ¿Probamos otro día o momento?"
             
     except Exception as e:
         logger.error(f"Error en check_availability: {e}")
-        return f"No pude consultar disponibilidad. Prueba diciendo 'Quiero agendar mañana'."
+        return "No pude consultar la disponibilidad. ¿Probamos una fecha diferente?"
 
 @tool
 async def book_appointment(date_time: str, treatment_reason: str, 
                          first_name: Optional[str] = None, last_name: Optional[str] = None, 
-                         dni: Optional[str] = None, insurance_provider: Optional[str] = None):
+                         dni: Optional[str] = None, insurance_provider: Optional[str] = None,
+                         professional_name: Optional[str] = None):
     """
     Registra un turno en la BD. 
     Para pacientes NUEVOS (status='guest'), OBLIGATORIAMENTE debes proveer first_name, last_name, dni e insurance_provider.
     Si faltan esos datos en un usuario nuevo, el turno será rechazado.
     
     date_time: Fecha y hora (ej: 'mañana 14:00')
-    treatment_reason: Motivo (checkup, cleaning, etc.)
-    first_name: Nombre del paciente (Obligatorio si es nuevo)
-    last_name: Apellido del paciente (Obligatorio si es nuevo)
-    dni: Documento de identidad (Obligatorio si es nuevo)
-    insurance_provider: Obra social o 'PARTICULAR' (Obligatorio si es nuevo)
+    treatment_reason: Motivo/Tratamiento (checkup, cleaning, extraction, root_canal, restoration, orthodontics, consultation)
+    professional_name: (Opcional) Nombre del profesional específico.
     """
     phone = current_customer_phone.get()
-    
     if not phone:
         return "❌ Error: No pude identificar tu teléfono. Reinicia la conversación."
     
     try:
-        # 1. Parsear datetime
+        # 1. Parsear datetime y obtener duración
         apt_datetime = parse_datetime(date_time)
+        first_name = first_name.strip() if first_name and first_name.strip() else None
+        last_name = last_name.strip() if last_name and last_name.strip() else None
+        dni = dni.strip() if dni and dni.strip() else None
+        insurance_provider = insurance_provider.strip() if insurance_provider and insurance_provider.strip() else None
+
+        # Búsqueda de duración por tratamiento
+        t_data = await db.pool.fetchrow("""
+            SELECT code, default_duration_minutes FROM treatment_types 
+            WHERE (name ILIKE $1 OR code ILIKE $1) AND is_available_for_booking = true
+            LIMIT 1
+        """, f"%{treatment_reason}%")
         
-        # Limpiar vacíos para que COALESCE funcione correctamente en la BD
-        first_name = first_name if first_name and first_name.strip() else None
-        last_name = last_name if last_name and last_name.strip() else None
-        dni = dni if dni and dni.strip() else None
-        insurance_provider = insurance_provider if insurance_provider and insurance_provider.strip() else None
-        # Primero buscamos si existe
-        existing_patient = await db.pool.fetchrow("SELECT id, status, first_name, last_name FROM patients WHERE phone_number = $1", phone)
-        
+        duration = t_data['default_duration_minutes'] if t_data else 30
+        treatment_code = t_data['code'] if t_data else treatment_reason
+        end_apt = apt_datetime + timedelta(minutes=duration)
+
+        # 2. Verificar/Crear paciente
+        existing_patient = await db.pool.fetchrow("SELECT id, status FROM patients WHERE phone_number = $1", phone)
         if existing_patient:
-            # ACTUALIZAR SIEMPRE los datos (DNI, nombres, obra social) para asegurar integridad
-            # Esto garantiza que el paciente pase a 'active' y sea visible en el admin
             await db.pool.execute("""
                 UPDATE patients 
-                SET first_name = COALESCE($1, first_name), 
-                    last_name = COALESCE($2, last_name), 
-                    dni = COALESCE($3, dni), 
-                    insurance_provider = COALESCE($4, insurance_provider), 
-                    status = 'active', 
-                    updated_at = NOW()
+                SET first_name = COALESCE($1, first_name), last_name = COALESCE($2, last_name), 
+                    dni = COALESCE($3, dni), insurance_provider = COALESCE($4, insurance_provider), 
+                    status = 'active', updated_at = NOW()
                 WHERE id = $5
             """, first_name, last_name, dni, insurance_provider, existing_patient['id'])
-            
             patient_id = existing_patient['id']
-            logger.info(f"✅ Paciente {phone} actualizado/promocionado (ID: {patient_id}) a ACTIVE durante reserva.")
         else:
-            # Caso raro: No existe ni como lead (debería existir al entrar el chat).
-            # Lo creamos como ACTIVE directamente si tenemos los datos, o rechazamos.
-            
-            # Auto-parse full name if provided as single string
-            if first_name and not last_name and ' ' in first_name:
-                parts = first_name.strip().split(maxsplit=1)
-                first_name = parts[0]
-                last_name = parts[1] if len(parts) > 1 else None
-                logger.info(f"📝 Auto-parsed full name for new patient: first='{first_name}', last='{last_name}'")
-            
             if not (first_name and last_name and dni and insurance_provider):
-                 return "❌ No tengo tus datos registrados. Necesito Nombre, Apellido, DNI y Obra Social para agendar."
+                 return "❌ Necesito Nombre, Apellido, DNI y Obra Social para agendar por primera vez."
             
             row = await db.pool.fetchrow("""
                 INSERT INTO patients (tenant_id, phone_number, first_name, last_name, dni, insurance_provider, status, created_at)
@@ -466,114 +463,89 @@ async def book_appointment(date_time: str, treatment_reason: str,
             """, phone, first_name, last_name, dni, insurance_provider)
             patient_id = row['id']
 
+        # 3. Encontrar profesional disponible
+        p_query = "SELECT id, first_name, google_calendar_id FROM professionals WHERE is_active = true"
+        p_params = []
+        if professional_name:
+            p_query += " AND (first_name ILIKE $1 OR last_name ILIKE $1)"
+            p_params.append(f"%{professional_name}%")
         
-        # 3. Obtener profesional activo (priorizando el que el usuario pida o el primero libre)
-        # Por ahora tomamos el primero activo. 
-        # En el futuro, el agente podría pasar un professional_id si el flujo lo permite.
-        professional = await db.pool.fetchrow(
-            "SELECT id, google_calendar_id FROM professionals WHERE is_active = true LIMIT 1"
-        )
-        
-        if not professional:
-            return "❌ No es posible agendar el turno porque no hay profesionales registrados o activos en el sistema en este momento. Por favor, contacta directamente a la clínica por otros medios."
-        
-        # 4. Verificar que no hay sobrelapamiento (Duración estándar 60 min)
-        duration = 60
-        end_apt = apt_datetime + timedelta(minutes=duration)
-        
-        # 4.a Colisiones en BD Local
-        db_overlap = await db.pool.fetchval("""
-            SELECT COUNT(*) FROM appointments
-            WHERE professional_id = $1
-            AND status IN ('scheduled', 'confirmed')
-            AND (appointment_datetime < $3 AND (appointment_datetime + interval '1 minute' * COALESCE(duration_minutes, 60)) > $2)
-        """, professional['id'], apt_datetime, end_apt)
-        
-        # 4.b Colisiones en Google Calendar Blocks (Caché local) - Incluye bloques globales (NULL)
-        gcal_overlap = await db.pool.fetchval("""
-            SELECT COUNT(*) FROM google_calendar_blocks
-            WHERE (professional_id = $1 OR professional_id IS NULL)
-            AND (start_datetime < $3 AND end_datetime > $2)
-        """, professional['id'], apt_datetime, end_apt)
-        
-        if db_overlap > 0:
-            # Fetch the conflicting appointment details for better logging/feedback
-            conflict = await db.pool.fetchrow("""
-                SELECT id, appointment_datetime FROM appointments
-                WHERE professional_id = $1 AND status IN ('scheduled', 'confirmed')
-                AND (appointment_datetime < $3 AND (appointment_datetime + interval '1 minute' * COALESCE(duration_minutes, 60)) > $2)
-                LIMIT 1
-            """, professional['id'], apt_datetime, end_apt)
-            return f"❌ Colisión local con el turno ID {str(conflict['id'])[:8]} a las {conflict['appointment_datetime'].strftime('%H:%M')}. ¿Probás con otro horario?"
-            
-        if gcal_overlap > 0:
-            # Fetch the conflicting block details
-            conflict = await db.pool.fetchrow("""
-                SELECT title, start_datetime, end_datetime FROM google_calendar_blocks
-                WHERE (professional_id = $1 OR professional_id IS NULL)
-                AND (start_datetime < $3 AND end_datetime > $2)
-                LIMIT 1
-            """, professional['id'], apt_datetime, end_apt)
-            return f"❌ Google Calendar bloqueado por '{conflict['title']}' ({conflict['start_datetime'].strftime('%H:%M')} - {conflict['end_datetime'].strftime('%H:%M')}). ¿Te interesa otro?"
-        
-        # 5. Insertar turno
-        apt_id = str(uuid.uuid4())
-        tenant_id = 1 # Por defecto en v1.0
-        await db.pool.execute("""
-            INSERT INTO appointments 
-            (id, tenant_id, patient_id, professional_id, appointment_datetime, duration_minutes, appointment_type, status, urgency_level, source, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'scheduled', 'normal', 'ai', NOW())
-        """, apt_id, tenant_id, patient_id, professional['id'], apt_datetime, duration, treatment_reason)
-        
-        logger.info(f"✅ Turno registrado: {apt_id} para {phone}")
-        current_patient_id.set(patient_id)
-        
-        # 6. Obtener datos completos del turno para emitir evento y sincronizar GCal
-        appointment_data = await db.pool.fetchrow("""
-            SELECT a.id, a.patient_id, a.professional_id, a.appointment_datetime, 
-                   a.appointment_type, a.status, a.urgency_level,
-                   (p.first_name || ' ' || COALESCE(p.last_name, '')) as patient_name, 
-                   p.phone_number as patient_phone,
-                   p.first_name, p.last_name, p.phone_number, -- Para GCal summary/desc
-                   prof.first_name as professional_name
-            FROM appointments a
-            JOIN patients p ON a.patient_id = p.id
-            JOIN professionals prof ON a.professional_id = prof.id
-            WHERE a.id = $1
-        """, apt_id)
+        candidates = await db.pool.fetch(p_query, *p_params)
+        if not candidates:
+            return f"❌ No encontré al profesional '{professional_name or ''}' disponible."
 
-        # 7. Sincronizar con Google Calendar
-        try:
-            summary = f"Cita Dental AI: {appointment_data['first_name']} {appointment_data['last_name'] or ''} - {treatment_reason}"
-            start_time = apt_datetime.isoformat()
-            end_time = (apt_datetime + timedelta(minutes=60)).isoformat()
-            
-            gcal_event = gcal_service.create_event(
-                calendar_id=professional['google_calendar_id'],
-                summary=summary,
-                start_time=start_time,
-                end_time=end_time,
-                description=f"Paciente: {appointment_data['first_name']}\nTel: {appointment_data['phone_number']}\nMotivo: {treatment_reason}\nCreado por Asistente IA"
-            )
-            
-            if gcal_event:
-                await db.pool.execute(
-                    "UPDATE appointments SET google_calendar_event_id = $1, google_calendar_sync_status = 'synced' WHERE id = $2",
-                    gcal_event['id'], apt_id
+        target_prof = None
+        for cand in candidates:
+            # JIT Sync GCal for this prof/day before checking
+            try:
+                g_events = gcal_service.get_events_for_day(calendar_id=cand['google_calendar_id'], date_obj=apt_datetime.date())
+                day_start = datetime.combine(apt_datetime.date(), datetime.min.time(), tzinfo=ARG_TZ)
+                day_end = datetime.combine(apt_datetime.date(), datetime.max.time(), tzinfo=ARG_TZ)
+                await db.pool.execute("DELETE FROM google_calendar_blocks WHERE professional_id = $1 AND start_datetime < $3 AND end_datetime > $2", cand['id'], day_start, day_end)
+                for event in g_events:
+                    await db.pool.execute("""
+                        INSERT INTO google_calendar_blocks (tenant_id, google_event_id, title, start_datetime, end_datetime, professional_id)
+                        VALUES (1, $1, $2, $3, $4, $5) ON CONFLICT DO NOTHING
+                    """, event['id'], event.get('summary','Ocupado'), 
+                       datetime.fromisoformat(event['start'].get('dateTime','').replace('Z','+00:00')),
+                       datetime.fromisoformat(event['end'].get('dateTime','').replace('Z','+00:00')), cand['id'])
+            except: pass
+
+            # Verificación de colisión
+            conflict = await db.pool.fetchval("""
+                SELECT EXISTS(
+                    SELECT 1 FROM appointments WHERE professional_id = $1 AND status IN ('scheduled', 'confirmed')
+                    AND (appointment_datetime < $3 AND (appointment_datetime + interval '1 minute' * COALESCE(duration_minutes, 60)) > $2)
+                    UNION ALL
+                    SELECT 1 FROM google_calendar_blocks WHERE (professional_id = $1 OR professional_id IS NULL)
+                    AND (start_datetime < $3 AND end_datetime > $2)
                 )
-        except Exception as ge:
-            logger.error(f"Error sincronizando con GCal (AI Tool): {ge}")
+            """, cand['id'], apt_datetime, end_apt)
+            
+            if not conflict:
+                target_prof = cand
+                break
+        
+        if not target_prof:
+            return f"❌ Lo siento, no hay disponibilidad a las {apt_datetime.strftime('%H:%M')} para el tratamiento de {duration} min. ¿Probamos otro horario?"
 
-        if appointment_data:
-            # Sanitizar para evitar errores de serialización de UUID/Datetime
-            safe_data = to_json_safe(dict(appointment_data))
+        # 4. Insertar turno
+        apt_id = str(uuid.uuid4())
+        await db.pool.execute("""
+            INSERT INTO appointments (id, tenant_id, patient_id, professional_id, appointment_datetime, duration_minutes, appointment_type, status, source, created_at)
+            VALUES ($1, 1, $2, $3, $4, $5, $6, 'scheduled', 'ai', NOW())
+        """, apt_id, patient_id, target_prof['id'], apt_datetime, duration, treatment_code)
+        
+        # 5. Sincronizar con GCal
+        try:
+            summary = f"Cita Dental AI: {first_name or 'Paciente'} - {treatment_code}"
+            gcal_service.create_event(
+                calendar_id=target_prof['google_calendar_id'],
+                summary=summary,
+                start_time=apt_datetime.isoformat(),
+                end_time=end_apt.isoformat(),
+                description=f"Paciente: {first_name} {last_name or ''}\nDNI: {dni}\nOS: {insurance_provider}\nMotivo: {treatment_reason}"
+            )
+        except Exception as ge: logger.error(f"GCal sync error: {ge}")
+
+        # 6. Notificar Socket.IO si está disponible
+        try:
+            from main import sio # Ensure we have sio
+            # Sanitizar para evitar errores de serialización
+            safe_data = to_json_safe({
+                "id": apt_id, 
+                "patient_name": f"{first_name} {last_name or ''}",
+                "appointment_datetime": apt_datetime.isoformat(),
+                "professional_name": target_prof['first_name']
+            })
             await sio.emit("NEW_APPOINTMENT", safe_data)
-        
-        return f"✅ ¡Turno confirmado para {apt_datetime.strftime('%d/%m/%Y a las %H:%M')}! Te esperamos en {CLINIC_NAME}. Confirmación: #{apt_id[:8]}"
-        
+        except: pass
+
+        return f"✅ ¡Turno confirmado con el/la Dr/a. {target_prof['first_name']}! Martes {apt_datetime.strftime('%d/%m')} a las {apt_datetime.strftime('%H:%M')} ({duration} min)."
+
     except Exception as e:
         logger.error(f"Error en book_appointment: {e}")
-        return f"❌ No pude registrar el turno: {str(e)}. Por favor, contacta directamente."
+        return "⚠️ Tuve un problema al procesar la reserva. Por favor, intenta de nuevo indicando fecha y hora."
 
 @tool
 async def triage_urgency(symptoms: str):
