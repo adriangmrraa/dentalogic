@@ -24,9 +24,11 @@ async def mi_nueva_herramienta(parametro1: str, parametro2: int = 10):
 
 Busca la lista `tools` y agrega la referencia.
 
-## 2. Manejo de Memoria
+## 2. Paginación y Carga Incremental de Mensajes
 
-El sistema carga los últimos **20 mensajes** de cada conversación por defecto. Para cambiarlo, ajusta el `LIMIT` en la consulta SQL de `chat_endpoint`.
+Para optimizar el rendimiento en conversaciones extensas, Dentalogic utiliza un sistema de carga bajo demanda en `ChatsView.tsx`:
+- **Backend (Admin API)**: Soporta parámetros `limit` (default 50) y `offset` para consultas SQL (`LIMIT $2 OFFSET $3`).
+- **Frontend**: Utiliza el estado `messageOffset` para gestionar qué bloque de mensajes solicitar. Los nuevos mensajes se concatenan al principio del array `messages` preservando la cronología.
 
 ## 3. Deduplicación de Mensajes
  

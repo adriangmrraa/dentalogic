@@ -45,6 +45,12 @@ Todas las respuestas de gestión manual desde el Dashboard deben enviarse vía:
 
 El orquestador se encarga de llamar al `ycloud_client.py` en el `whatsapp_service` para el envío final.
 
+## 5. Estándares de Interfaz para el Operador (UX)
+Para garantizar la eficiencia del operador humano en Dentalogic:
+- **Vista Rígida**: La cabecera del chat y el área de composición de mensajes deben permanecer fijos.
+- **Scroll de Mensajes**: El historial debe tener scroll propio e independiente (Caja de mensajes).
+- **Carga de Historial**: Usar el botón de "Cargar más" para acceder a mensajes antiguos sin perder el contexto de la conversación actual.
+
 ## 5. Checklist de Operación
 - [ ] ¿El `YCLOUD_WEBHOOK_SECRET` está configurado correctamente en el entorno?
 - [ ] ¿El triaje IA de "Gala" está activado en el orquestador?

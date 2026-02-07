@@ -77,6 +77,25 @@ AgendaView / Odontograma
   - Frontend escucha y renderiza sin refrescar.
 - **Multi-Tenancy:** Soporte para múltiples consultorios/clínicas.
 
+### D. Sistema de Layout y Scroll (SaaS-style)
+
+**Tecnología:** Flexbox + `min-h-0` + Overflow Isolation
+
+**Arquitectura de Visualización:**
+- **Layout Global Rígido:** El contenedor principal (`Layout.tsx`) utiliza `h-screen` y `overflow-hidden` para eliminar el scroll de la página completa.
+- **Aislamiento de Scroll:** Cada vista maestra (`Dashboard`, `Agenda`, `Pacientes`, `Profesionales`) gestiona su propio desplazamiento interno.
+- **ChatsView Rígido:** Implementa una jerarquía flex con `min-h-0` que fuerza el scroll únicamente en el área de mensajes, manteniendo fijos la cabecera, la lista de sesiones, el panel clínico y el área de input de mensajes.
+- **Versioning Histórico**: Los mensajes antiguos pueden recuperarse mediante el sistema de paginación integrado.
+
+## 6. Paginación y Carga Incremental
+
+Para optimizar el rendimiento en conversaciones extensas, Dentalogic utiliza un sistema de carga bajo demanda:
+- **Backend (Admin API)**: Soporta parámetros `limit` y `offset` para consultas SQL (`LIMIT $2 OFFSET $3`).
+- **Frontend (ChatsView)**:
+    - Carga inicial: Últimos 50 mensajes.
+    - Botón "Cargar más": Recupera bloques anteriores y los concatena al estado, manteniendo la posición visual.
+    - Estado `hasMoreMessages`: Controla la disponibilidad de historial en el servidor.
+
 ### C. Frontend React (Puerto 80) - **Centro de Operaciones**
 
 **Tecnología:** React + Vite + FullCalendar + Socket.IO
@@ -114,6 +133,10 @@ Dentalogic implementa una arquitectura de **Seguridad de Triple Capa**:
 1.  **Capa de Identidad (JWT)**: Gestión de sesiones de usuario con tokens firmados (HS256). Define el rol (`ceo`, `professional`, `secretary`) y el `tenant_id`.
 2.  **Capa de Infraestructura (X-Admin-Token)**: Las rutas administrativas críticas requieren un token estático (`INTERNAL_SECRET_KEY`) para prevenir accesos no autorizados incluso si la sesión del usuario es válida.
 3.  **Capa de Gatekeeper (Aprobación)**: Todo registro nuevo entra en estado `pending`. Solo un usuario con rol `ceo` puede activar cuentas desde el panel de control.
+
+## 5. Flujo de una Urgencia
+
+---
 
 ## 5. Flujo de una Urgencia
 

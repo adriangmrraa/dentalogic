@@ -62,7 +62,19 @@ patients = await db.pool.fetch("""
 """)
 ```
 
-### 4.1 Patrón de Subquery para Sorting (Recency)
+### 4.1 Paginación de Mensajes (Offset/Limit)
+Para endpoints de historial, usar siempre paginación para evitar sobrecarga:
+```python
+async def get_messages(phone: str, limit: int = 50, offset: int = 0):
+    return await db.pool.fetch("""
+        SELECT * FROM chat_messages 
+        WHERE from_number = $1 
+        ORDER BY created_at DESC 
+        LIMIT $2 OFFSET $3
+    """, phone, limit, offset)
+```
+
+### 4.2 Patrón de Subquery para Sorting (Recency)
 Cuando se usa `DISTINCT ON`, el `ORDER BY` inicial debe coincidir. Para ordenar por otros campos (ej: fecha de mensaje), usar subquery:
 ```sql
 SELECT * FROM (

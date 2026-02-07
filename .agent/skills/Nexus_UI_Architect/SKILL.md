@@ -54,8 +54,9 @@ Diseñamos pensando en pantallas verticales estrechas.
 1.  **Overflow Horizontal**: Verificar que nada rompa el ancho de la pantalla en mobile. (`overflow-x-hidden` en root).
 2.  **Alturas Fijas**: Evitar `h-screen` en mobile por las barras del navegador. Usar `dvh` o `min-h`.
 3.  **Legibilidad**: Contraste suficiente en textos sobre fondos oscuros/glass.
-4.  **Espaciado**: Márgenes laterales (`px-4` o `px-6`) para que el contenido no pegue al borde.
-5.  **Interacción**: Estados `:hover` solo en desktop. `:active` para feedback táctil en mobile.
+4.  **Espaciado**: Márgenes laterales (`px-4` o `px-6`) para que el contenido no pegue al borde. Se recomienda aplicar el padding a nivel de vista maestra, no en el Layout global.
+5.  **Aislamiento de Scroll**: Evitar el scroll global de la página (`body`). Usar `h-screen overflow-hidden` en el root Layout y habilitar `overflow-y-auto` + `min-h-0` solo en los paneles de contenido.
+6.  **Interacción**: Estados `:hover` solo en desktop. `:active` para feedback táctil en mobile.
 
 ## 💾 Snippets de Oro (Nexus Design System)
 

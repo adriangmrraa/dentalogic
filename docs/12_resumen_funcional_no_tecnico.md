@@ -22,6 +22,8 @@ Si un paciente agenda un turno por WhatsApp con la asistente, la IA envía una s
 2.  **Sincronización Híbrida (Google Calendar):** El sistema "espeja" tu calendario de Google. Si creás un evento personal en tu celular, el hueco desaparece de la agenda de la clínica al instante para que la IA no lo ofrezca.
 3.  **Anotar Turno:** Una vez que el paciente elige, la IA lo anota oficialmente y aparece al instante en el calendario de la clínica.
 4.  **Triaje de Urgencias:** Si un paciente dice "Me duele mucho", la IA detecta la gravedad y marca el chat con un aviso de "Urgencia" resaltado. Además, el sistema ordena las conversaciones automáticamente, poniendo los mensajes más recientes o urgentes arriba de todo.
+5.  **Historial Infinito (Carga Rápida):** En los chats con muchos mensajes, el sistema carga primero los más nuevos para ser veloz. Si necesitás ver mensajes de hace meses, solo tenés que tocar el botón "Cargar mensajes anteriores" y el sistema los traerá sin recargar la página.
+6.  **Panel de Control "Fijo":** No importa qué tan largo sea un chat, la información del paciente a la derecha y la zona para escribir abajo siempre se quedan en su lugar, permitiéndote scrollear los mensajes sin perder de vista los datos importantes.
 
 ## 4. El Trabajo en Equipo: Frontend, Base de Datos y la IA
 Todos los componentes trabajan juntos para que no se pierda ninguna información:

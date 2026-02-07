@@ -44,6 +44,12 @@ Usar `dvh` (Dynamic Viewport Height) para evitar que las barras de navegación d
 - **Desktop**: Modales centrados con `max-w-*`.
 - **Mobile**: Cambiar a `fixed inset-x-0 bottom-0 rounded-t-3xl` para una sensación de "Bottom Sheet".
 
+### D. Scroll Interno y min-h-0
+En vistas de chat o dashboards complejos, evitar el scroll global del `body`.
+- Usar `flex-1 min-h-0` en contenedores que necesiten scroll interno. Esto permite que Flexbox respete la altura del padre y habilite el overflow.
+- Aplicar `overflow-y-auto` solo al área específica de contenido.
+- Garantizar que los inputs y cabeceras sean `sticky` o vivan fuera del área de scroll.
+
 ## 3. Implementation Checklist
 
 - [ ] **Overflow Check**: Añadir `overflow-x-hidden` al contenedor raíz.

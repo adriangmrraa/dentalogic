@@ -131,6 +131,20 @@ def parse_datetime(datetime_query: str) -> datetime:
         tomorrow = datetime.now() + timedelta(days=1)
         return tomorrow.replace(hour=14, minute=0, second=0, microsecond=0)
 
+def to_json_safe(data):
+    """
+    Convierte recursivamente UUIDs y datetimes a tipos serializables por JSON.
+    """
+    if isinstance(data, dict):
+        return {k: to_json_safe(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [to_json_safe(i) for i in data]
+    elif isinstance(data, uuid.UUID):
+        return str(data)
+    elif isinstance(data, (datetime, date)):
+        return data.isoformat()
+    return data
+
 def generate_free_slots(target_date: date, busy_times: List[tuple], 
                        start_hour=9, end_hour=18, interval_minutes=30) -> List[str]:
     """Genera lista de horarios disponibles (30min intervals)."""
@@ -436,7 +450,9 @@ async def book_appointment(date_time: str, treatment_reason: str,
             logger.error(f"Error sincronizando con GCal (AI Tool): {ge}")
 
         if appointment_data:
-            await sio.emit("NEW_APPOINTMENT", dict(appointment_data))
+            # Sanitizar para evitar errores de serialización de UUID/Datetime
+            safe_data = to_json_safe(dict(appointment_data))
+            await sio.emit("NEW_APPOINTMENT", safe_data)
         
         return f"✅ ¡Turno confirmado para {apt_datetime.strftime('%d/%m/%Y a las %H:%M')}! Te esperamos en {CLINIC_NAME}. Confirmación: #{apt_id[:8]}"
         
@@ -477,11 +493,11 @@ async def triage_urgency(symptoms: str):
             """, urgency_level, symptoms, patient_row['id'])
             
             # Notificar al dashboard el cambio de prioridad
-            await sio.emit("PATIENT_UPDATED", {
+            await sio.emit("PATIENT_UPDATED", to_json_safe({
                 "phone_number": phone,
                 "urgency_level": urgency_level,
                 "urgency_reason": symptoms
-            })
+            }))
         except Exception as e:
             logger.error(f"Error persisting triage: {e}")
 
@@ -610,6 +626,21 @@ async def reschedule_appointment(original_date: str, new_date_time: str):
             WHERE id = $3
         """, new_dt, new_gcal['id'] if new_gcal else None, apt['id'])
         
+        # 5. Emitir evento Socket.IO (Actualizar UI)
+        try:
+            # Obtener datos actualizados para el frontend
+            updated_apt = await db.pool.fetchrow("""
+                SELECT a.*, p.first_name, p.last_name, p.phone_number, prof.first_name as professional_name
+                FROM appointments a
+                JOIN patients p ON a.patient_id = p.id
+                JOIN professionals prof ON a.professional_id = prof.id
+                WHERE a.id = $1
+            """, apt['id'])
+            if updated_apt:
+                await sio.emit("APPOINTMENT_UPDATED", to_json_safe(dict(updated_apt)))
+        except Exception as se:
+            logger.error(f"Error emitiendo APPOINTMENT_UPDATED via Socket: {se}")
+
         logger.info(f"🔄 Turno reprogramado por IA: {apt['id']} para {new_dt}")
         return f"¡Listo! Tu turno ha sido reprogramado para el {new_date_time}. Te esperamos."
 
@@ -669,9 +700,8 @@ async def derivhumano(reason: str):
         
         # 3. Notificar vía Socket (para que aparezca en el dashboard en tiempo real)
         # Import local to avoid circular import
-        # Import local to avoid circular import
         from main import sio
-        await sio.emit("HUMAN_HANDOFF", {"phone_number": phone, "reason": reason})
+        await sio.emit("HUMAN_HANDOFF", to_json_safe({"phone_number": phone, "reason": reason}))
 
         # 4. Enviar Email (Protocolo SMTP Global)
         # Recuperar datos del paciente
@@ -900,11 +930,11 @@ async def chat_endpoint(req: ChatRequest):
         )
         
         # --- Notificar al Frontend (Real-time) ---
-        await sio.emit('NEW_MESSAGE', {
+        await sio.emit('NEW_MESSAGE', to_json_safe({
             'phone_number': req.final_phone,
             'message': req.final_message,
             'role': 'user'
-        })
+        }))
         # -----------------------------------------
 
         # 0. B) Verificar si hay intervención humana activa
@@ -991,11 +1021,11 @@ async def chat_endpoint(req: ChatRequest):
         )
         
         # --- Notificar al Frontend (Real-time AI) ---
-        await sio.emit('NEW_MESSAGE', {
+        await sio.emit('NEW_MESSAGE', to_json_safe({
             'phone_number': req.final_phone,
             'message': assistant_response,
             'role': 'assistant'
-        })
+        }))
         # --------------------------------------------
         
         logger.info(f"✅ Chat procesado para {req.final_phone} (correlation_id={correlation_id})")
