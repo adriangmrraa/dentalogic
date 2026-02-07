@@ -9,7 +9,7 @@
 | **Integración Tools** | ⚠️ 80% | Lógica backend lista; Sincronización GCal simulada. |
 | **System Prompt** | ✅ 100% | Persona "Asistente Dental" activa en el Orchestrator. |
 
----
+--- 
 
 ## 📋 Resumen Ejecutivo
 
