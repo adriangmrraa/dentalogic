@@ -276,7 +276,13 @@ class Database:
         VALUES (1, $1, $2, $3, NOW())
         ON CONFLICT (tenant_id, phone_number) 
         DO UPDATE SET 
-            first_name = CASE WHEN patients.status = 'guest' THEN EXCLUDED.first_name ELSE patients.first_name END,
+            first_name = CASE 
+                WHEN patients.status = 'guest' 
+                     OR patients.first_name IS NULL 
+                     OR patients.first_name IN ('Visitante', 'Paciente', 'Visitante ', 'Paciente ')
+                THEN EXCLUDED.first_name 
+                ELSE patients.first_name 
+            END,
             status = CASE WHEN patients.status = 'guest' AND EXCLUDED.status = 'active' THEN 'active' ELSE patients.status END,
             updated_at = NOW() 
         RETURNING id, status
