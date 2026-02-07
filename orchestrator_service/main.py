@@ -46,6 +46,11 @@ CLINIC_NAME = os.getenv("CLINIC_NAME", "Consultorio Dental")
 CLINIC_LOCATION = os.getenv("CLINIC_LOCATION", "Buenos Aires, Argentina")
 CLINIC_HOURS_START = os.getenv("CLINIC_HOURS_START", "08:00")
 CLINIC_HOURS_END = os.getenv("CLINIC_HOURS_END", "19:00")
+ARG_TZ = timezone(timedelta(hours=-3))
+
+def get_now_arg():
+    """Obtiene la fecha y hora actual garantizando zona horaria de Argentina."""
+    return datetime.now(ARG_TZ)
 
 # ContextVars para rastrear el usuario en la sesión de LangChain
 current_customer_phone: ContextVar[Optional[str]] = ContextVar("current_customer_phone", default=None)
@@ -82,7 +87,7 @@ class ChatRequest(BaseModel):
 
 def get_next_weekday(target_weekday: int) -> date:
     """Obtiene el próximo día de la semana (0=lunes, 6=domingo)."""
-    today = datetime.now()
+    today = get_now_arg()
     days_ahead = target_weekday - today.weekday()
     if days_ahead <= 0:
         days_ahead += 7
@@ -94,10 +99,10 @@ def parse_date(date_query: str) -> date:
     
     # Palabras clave españolas/inglesas
     day_map = {
-        'mañana': lambda: (datetime.now() + timedelta(days=1)).date(),
-        'tomorrow': lambda: (datetime.now() + timedelta(days=1)).date(),
-        'hoy': lambda: datetime.now().date(),
-        'today': lambda: datetime.now().date(),
+        'mañana': lambda: (get_now_arg() + timedelta(days=1)).date(),
+        'tomorrow': lambda: (get_now_arg() + timedelta(days=1)).date(),
+        'hoy': lambda: get_now_arg().date(),
+        'today': lambda: get_now_arg().date(),
         'lunes': lambda: get_next_weekday(0),
         'monday': lambda: get_next_weekday(0),
         'martes': lambda: get_next_weekday(1),
@@ -130,7 +135,7 @@ def parse_datetime(datetime_query: str) -> datetime:
         return dt
     except:
         # Fallback: mañana a las 14:00
-        tomorrow = datetime.now() + timedelta(days=1)
+        tomorrow = get_now_arg() + timedelta(days=1)
         return tomorrow.replace(hour=14, minute=0, second=0, microsecond=0)
 
 def to_json_safe(data):
@@ -160,10 +165,10 @@ def generate_free_slots(target_date: date, busy_times: List[tuple],
         sh, sm = 9, 0
         eh, em = 18, 0
 
-    current = datetime.combine(target_date, datetime.min.time()).replace(hour=sh, minute=sm)
-    end_limit = datetime.combine(target_date, datetime.min.time()).replace(hour=eh, minute=em)
+    current = datetime.combine(target_date, datetime.min.time()).replace(hour=sh, minute=sm, tzinfo=ARG_TZ)
+    end_limit = datetime.combine(target_date, datetime.min.time()).replace(hour=eh, minute=em, tzinfo=ARG_TZ)
     
-    now = datetime.now()
+    now = get_now_arg()
     
     # Pre-calculate busy intervals (30 min granularity)
     busy_intervals = set()
@@ -794,7 +799,7 @@ POLÍTICAS DURAS:
 • NUNCA INVENTES: No inventes horarios ni disponibilidad. Siempre usá 'check_availability'.
 • NO DIAGNOSTICAR: Ante dudas clínicas, decí: "La Dra. Laura va a tener que evaluarte acá en el consultorio para darte un diagnóstico certero y ver bien qué necesitás".
 • ZONA HORARIA: America/Argentina/Buenos_Aires (GMT-3). 
-• TIEMPO ACTUAL: {datetime.now().strftime('%d/%m/%Y %H:%M')}.
+• TIEMPO ACTUAL: {{current_time}}
 • HORARIOS DE ATENCIÓN: Lunes a Sábados de {CLINIC_HOURS_START} a {CLINIC_HOURS_END} (Domingos cerrado).
 • REGLA ANTI-PASADO: No podés agendar turnos para horarios que ya pasaron. Si un paciente pide hoy a las 15:00 y son las 15:30, informale amablemente que ese horario ya pasó y ofrecele los siguientes disponibles.
 • DERIVACIÓN (Human Handoff): 
@@ -1045,7 +1050,8 @@ async def chat_endpoint(req: ChatRequest):
         # 3. Invocar agente
         response = await agent_executor.ainvoke({
             "input": req.final_message,
-            "chat_history": messages
+            "chat_history": messages,
+            "current_time": get_now_arg().strftime('%d/%m/%Y %H:%M')
         })
         
         assistant_response = response.get("output", "Error procesando respuesta")

@@ -20,6 +20,8 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-token")
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "internal-secret-token")
 WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://whatsapp:8002")
 
+ARG_TZ = timezone(timedelta(hours=-3))
+
 router = APIRouter(prefix="/admin", tags=["Dental Admin"])
 
 def normalize_phone(phone: str) -> str:
@@ -349,7 +351,10 @@ async def get_chat_sessions():
         
         is_window_open = False
         if last_user_msg:
-            is_window_open = (datetime.now(last_user_msg.tzinfo) - last_user_msg) < timedelta(hours=24)
+            # Normalize naive stored dates to ARG_TZ if they come back naive, 
+            # or just use aware now with original tz
+            now_localized = datetime.now(last_user_msg.tzinfo if last_user_msg.tzinfo else ARG_TZ)
+            is_window_open = (now_localized - last_user_msg) < timedelta(hours=24)
         
         sessions.append({
             "phone_number": row['phone_number'],
@@ -410,7 +415,7 @@ async def toggle_human_intervention(payload: HumanInterventionToggle, request: R
     """
     if payload.activate:
         # Activar intervención humana
-        override_until = datetime.now() + timedelta(milliseconds=payload.duration)
+        override_until = datetime.now(ARG_TZ) + timedelta(milliseconds=payload.duration)
         
         await db.pool.execute("""
             UPDATE patients 
@@ -518,7 +523,8 @@ async def send_chat_message(payload: ChatSendMessage, request: Request, backgrou
         if not last_user_msg:
              raise HTTPException(status_code=403, detail="No se puede enviar un mensaje si el usuario nunca ha escrito.")
              
-        diff = datetime.now(last_user_msg.tzinfo) - last_user_msg
+        now_localized = datetime.now(last_user_msg.tzinfo if last_user_msg.tzinfo else ARG_TZ)
+        diff = now_localized - last_user_msg
         if diff > timedelta(hours=24):
              raise HTTPException(status_code=403, detail="La ventana de 24hs de WhatsApp ha expirado. El paciente debe escribir primero.")
 
