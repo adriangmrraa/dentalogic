@@ -358,8 +358,8 @@ export default function ProfessionalsView() {
 
       {/* Modal - Enhanced Nexus UI */}
       {editingProfessional !== null && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto p-4 animate-in fade-in duration-300">
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl w-full max-w-3xl shadow-2xl border border-white/20 overflow-hidden transform animate-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 overflow-y-auto p-4 md:p-8 animate-in fade-in duration-300">
+          <div className="bg-white/90 backdrop-blur-md rounded-2xl w-full max-w-5xl shadow-2xl border border-white/20 overflow-hidden transform animate-in slide-in-from-bottom-4 duration-300 my-auto">
             <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-white/50">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary/10 rounded-lg text-primary">
@@ -380,194 +380,198 @@ export default function ProfessionalsView() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[70vh]">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                {/* Basic Info Section */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                    <ClipboardList size={16} /> Datos Principales
-                  </h3>
+            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[75vh]">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Information Sections Column */}
+                <div className="lg:col-span-7 space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Basic Info Section */}
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                        <ClipboardList size={16} /> Datos Principales
+                      </h3>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Nombre Completo <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
-                      placeholder="Ej: Juan Pérez"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Especialidad Principial
-                    </label>
-                    <select
-                      value={formData.specialty}
-                      onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
-                    >
-                      <option value="">Seleccionar especialidad...</option>
-                      {SPECIALTIES.map(spec => (
-                        <option key={spec} value={spec}>{spec}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Matrícula / Registro
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.license_number}
-                      onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
-                      placeholder="Ej: MN 12345"
-                    />
-                  </div>
-                </div>
-
-                {/* Contact Section */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                    <Mail size={16} /> Contacto & Estado
-                  </h3>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Correo Electrónico
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
-                      placeholder="doctor@clinica.com"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Teléfono Personal (WhatsApp)
-                    </label>
-                    <input
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
-                      placeholder="+54 9..."
-                    />
-                  </div>
-
-                  <div className="pt-4">
-                    <label className="relative flex items-center p-4 border border-gray-100 rounded-xl bg-gray-50/50 cursor-pointer hover:bg-white transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={formData.is_active}
-                        onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                        className="w-5 h-5 text-primary rounded-lg border-gray-300 focus:ring-primary/20"
-                      />
-                      <div className="ml-3">
-                        <span className="block text-sm font-bold text-gray-900">Estado Activo</span>
-                        <span className="block text-xs text-gray-500">Permite asignar turnos y recibir pacientes</span>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Nombre Completo <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-sm"
+                          placeholder="Ej: Juan Pérez"
+                        />
                       </div>
-                    </label>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Especialidad
+                        </label>
+                        <select
+                          value={formData.specialty}
+                          onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
+                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-sm"
+                        >
+                          <option value="">Seleccionar...</option>
+                          {SPECIALTIES.map(spec => (
+                            <option key={spec} value={spec}>{spec}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Matrícula
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.license_number}
+                          onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
+                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-sm"
+                          placeholder="MN 12345"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Contact Section */}
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                        <Mail size={16} /> Contacto & Estado
+                      </h3>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          E-mail
+                        </label>
+                        <input
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-sm"
+                          placeholder="doctor@clinica.com"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Teléfono
+                        </label>
+                        <input
+                          type="tel"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-sm"
+                          placeholder="+54 9..."
+                        />
+                      </div>
+
+                      <div className="pt-2">
+                        <label className="relative flex items-center p-3 border border-gray-100 rounded-xl bg-gray-50/50 cursor-pointer hover:bg-white transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={formData.is_active}
+                            onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                            className="w-4 h-4 text-primary rounded-lg border-gray-300 focus:ring-primary/20"
+                          />
+                          <div className="ml-2">
+                            <span className="block text-xs font-bold text-gray-900">Activo</span>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Availability Section Column */}
+                <div className="lg:col-span-5 h-full border-l lg:border-l border-gray-100 lg:pl-6">
+                  <div className="sticky top-0 bg-white/90 backdrop-blur-sm pb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                        <Clock size={16} /> Disponibilidad
+                      </h3>
+                    </div>
+                    <p className="text-[10px] text-gray-500 italic mb-4">
+                      Intervalos para el bot de IA por WhatsApp.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {DAYS.map(day => (
+                      <div key={day.key} className="group border border-gray-100 rounded-xl overflow-hidden hover:border-primary/30 transition-all bg-white">
+                        <button
+                          type="button"
+                          onClick={() => toggleDay(-1, day.key)}
+                          className={`w-full flex items-center justify-between p-2.5 transition-colors ${formData.availability[day.key as keyof ProfessionalAvailability]?.length > 0
+                            ? 'bg-primary/5' : 'bg-gray-50/50'
+                            }`}
+                        >
+                          <span className={`font-bold text-[11px] ${formData.availability[day.key as keyof ProfessionalAvailability]?.length > 0
+                            ? 'text-primary' : 'text-gray-600'
+                            }`}>{day.label}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-400 font-medium">
+                              {formData.availability[day.key as keyof ProfessionalAvailability]?.length || 0} slots
+                            </span>
+                            <ChevronDown size={12} className="text-gray-400 group-hover:text-primary" />
+                          </div>
+                        </button>
+
+                        {(expandedDays[-1] || []).includes(day.key) && (
+                          <div className="p-2 space-y-1.5 bg-white animate-in slide-in-from-top-1 duration-200">
+                            {formData.availability[day.key as keyof ProfessionalAvailability]?.map((slot: TimeSlot, index: number) => (
+                              <div key={index} className="flex items-center gap-1.5 group/slot">
+                                <div className="flex-1 flex gap-1">
+                                  <input
+                                    type="time"
+                                    value={slot.start}
+                                    onChange={(e) => updateTimeSlot(day.key, index, 'start', e.target.value)}
+                                    className="flex-1 px-1.5 py-1 bg-gray-50 border-none rounded-lg text-[10px] font-semibold focus:ring-1 focus:ring-primary outline-none"
+                                  />
+                                  <span className="text-gray-300 self-center text-[10px]">-</span>
+                                  <input
+                                    type="time"
+                                    value={slot.end}
+                                    onChange={(e) => updateTimeSlot(day.key, index, 'end', e.target.value)}
+                                    className="flex-1 px-1.5 py-1 bg-gray-50 border-none rounded-lg text-[10px] font-semibold focus:ring-1 focus:ring-primary outline-none"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeTimeSlot(day.key, index)}
+                                  className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => addTimeSlot(day.key)}
+                              className="w-full py-1 border border-dashed border-gray-200 rounded-lg text-[10px] font-bold text-gray-400 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all mt-1"
+                            >
+                              + Slot
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
 
-              {/* Availability Section - Enhanced */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                    <Clock size={16} /> Disponibilidad Semanal
-                  </h3>
-                  <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold">Bot IA Sincronizado</span>
-                </div>
-
-                <p className="text-xs text-gray-500 mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100 italic">
-                  "El bot de IA utiliza estos intervalos para proponer turnos automáticos por WhatsApp."
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {DAYS.map(day => (
-                    <div key={day.key} className="group border border-gray-100 rounded-xl overflow-hidden hover:border-primary/30 transition-all bg-white">
-                      <button
-                        type="button"
-                        onClick={() => toggleDay(-1, day.key)}
-                        className={`w-full flex items-center justify-between p-3 transition-colors ${formData.availability[day.key as keyof ProfessionalAvailability]?.length > 0
-                          ? 'bg-primary/5' : 'bg-gray-50/50'
-                          }`}
-                      >
-                        <span className={`font-bold text-xs ${formData.availability[day.key as keyof ProfessionalAvailability]?.length > 0
-                          ? 'text-primary' : 'text-gray-600'
-                          }`}>{day.label}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-gray-400 font-medium">
-                            {formData.availability[day.key as keyof ProfessionalAvailability]?.length || 0} bloques
-                          </span>
-                          <ChevronDown size={14} className="text-gray-400 group-hover:text-primary" />
-                        </div>
-                      </button>
-
-                      {(expandedDays[-1] || []).includes(day.key) && (
-                        <div className="p-3 space-y-2 bg-white animate-in slide-in-from-top-2 duration-200">
-                          {formData.availability[day.key as keyof ProfessionalAvailability]?.map((slot: TimeSlot, index: number) => (
-                            <div key={index} className="flex items-center gap-2 group/slot">
-                              <div className="flex-1 flex gap-1">
-                                <input
-                                  type="time"
-                                  value={slot.start}
-                                  onChange={(e) => updateTimeSlot(day.key, index, 'start', e.target.value)}
-                                  className="flex-1 px-2 py-1.5 bg-gray-50 border-none rounded-lg text-xs font-semibold focus:ring-1 focus:ring-primary outline-none"
-                                />
-                                <span className="text-gray-300 self-center">-</span>
-                                <input
-                                  type="time"
-                                  value={slot.end}
-                                  onChange={(e) => updateTimeSlot(day.key, index, 'end', e.target.value)}
-                                  className="flex-1 px-2 py-1.5 bg-gray-50 border-none rounded-lg text-xs font-semibold focus:ring-1 focus:ring-primary outline-none"
-                                />
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => removeTimeSlot(day.key, index)}
-                                className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                              >
-                                <X size={14} />
-                              </button>
-                            </div>
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => addTimeSlot(day.key)}
-                            className="w-full py-1.5 border border-dashed border-gray-200 rounded-lg text-[10px] font-bold text-gray-400 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all mt-1"
-                          >
-                            + Bloque
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 mt-10 pt-6 border-t border-gray-100 bg-white/50 sticky bottom-0">
+              <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-gray-100 bg-white/50 sticky bottom-0">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="px-6 py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all"
+                  className="px-6 py-2 text-sm font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-8 py-2.5 text-sm font-bold text-white bg-primary hover:bg-primary-dark rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/30 transform hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center gap-2"
+                  className="px-8 py-2 text-sm font-bold text-white bg-primary hover:bg-primary-dark rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/30 transform hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center gap-2"
                 >
                   <Save size={18} />
                   Guardar Cambios
