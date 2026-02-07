@@ -1245,7 +1245,8 @@ async def trigger_sync():
         total_updated = 0
         total_processed = 0
         
-        time_min = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+        # Sync from yesterday to ensure we catch today's earlier events
+        time_min = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat().replace('+00:00', 'Z')
         time_max = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat().replace('+00:00', 'Z')
 
         for prof in professionals:
@@ -1253,8 +1254,10 @@ async def trigger_sync():
             cal_id = prof['google_calendar_id']
             
             logger.info(f"🔄 Syncing GCal for {prof['first_name']} (ID: {prof_id}) on {cal_id}")
+            logger.info(f"   Time Range: {time_min} to {time_max}")
             
             events = gcal_service.list_events(calendar_id=cal_id, time_min=time_min, time_max=time_max)
+            logger.info(f"   Found {len(events)} events in GCal.")
             total_processed += len(events)
             
             # Obtener IDs ya existentes para este profesional
@@ -1263,12 +1266,13 @@ async def trigger_sync():
 
             for event in events:
                 g_id = event['id']
+                summary = event.get('summary', 'Sin Título')
                 
                 # Ignorar si es un turno ya registrado
                 if g_id in apt_ids_set:
+                    logger.info(f"   Skipping event {g_id} ({summary}) - Already linked to appointment")
                     continue
                     
-                summary = event.get('summary', 'Bloqueo GCal')
                 description = event.get('description', '')
                 start = event['start'].get('dateTime') or event['start'].get('date')
                 end = event['end'].get('dateTime') or event['end'].get('date')
@@ -1279,7 +1283,7 @@ async def trigger_sync():
                     dt_start = datetime.fromisoformat(start.replace('Z', '+00:00'))
                     dt_end = datetime.fromisoformat(end.replace('Z', '+00:00'))
                 except Exception as de:
-                    logger.warning(f"Error parsing date {start}/{end}: {de}")
+                    logger.warning(f"   Error parsing date {start}/{end} for event {g_id}: {de}")
                     continue
 
                 if g_id in existing_ids_set:
