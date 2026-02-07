@@ -779,12 +779,19 @@ export default function AgendaView() {
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-            initialView="timeGridWeek"
+            initialView="rollingWeek"
+            views={{
+              rollingWeek: {
+                type: 'timeGrid',
+                duration: { days: 7 },
+                buttonText: 'week'
+              }
+            }}
             initialDate={new Date()}
             headerToolbar={{
               left: 'prev,next today',
               center: 'title',
-              right: 'timeGridWeek,timeGridDay,dayGridMonth',
+              right: 'rollingWeek,timeGridDay,dayGridMonth',
             }}
             selectAllow={(selectInfo) => {
               // Bloquear selección de fechas/horas pasadas
@@ -794,13 +801,6 @@ export default function AgendaView() {
             events={calendarEvents}
             dateClick={handleDateClick}
             eventClick={handleEventClick}
-            slotMinTime="08:00:00"
-            slotMaxTime="20:00:00"
-            allDaySlot={false}
-            height="auto"
-            slotDuration="00:30:00"
-            slotLabelInterval="01:00"
-            expandRows={true}
             slotEventOverlap={false}
             eventTimeFormat={{
               hour: '2-digit',
