@@ -319,7 +319,10 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         target_date = parse_date(date_query)
         
         # 0. B) Validar contra Working Hours antes de GCal (Primer Filtro)
-        day_name_en = target_date.strftime("%A").lower()
+        # Usamos número de día (0=Monday, 6=Sunday) para evitar problemas de locale
+        day_idx = target_date.weekday()
+        days_en = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        day_name_en = days_en[day_idx]
         
         # Si se pidió un profesional específico, verificar si atiende ese día
         if clean_name and active_professionals:
@@ -330,7 +333,7 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
             if not day_config.get("enabled"):
                 return f"Lo siento, el/la Dr/a. {prof['first_name']} no atiende los {target_date.strftime('%A')}. ¿Querés que busquemos disponibilidad con otros profesionales?"
 
-        if target_date.weekday() == 6:
+        if day_idx == 6:
             return f"Lo siento, el {date_query} es domingo y la clínica está cerrada. Atendemos Lunes a Sábados."
 
         # 0. B) Obtener duración del tratamiento
@@ -384,8 +387,10 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
                                 tenant_id, google_event_id, title, description,
                                 start_datetime, end_datetime, all_day, professional_id, sync_status
                             ) VALUES (1, $1, $2, $3, $4, $5, $6, $7, 'synced')
+                            ON CONFLICT (google_event_id) DO NOTHING
                         """, g_id, summary, description, dt_start, dt_end, all_day, prof_id)
-                    except: pass
+                    except Exception as ins_err:
+                        logger.error(f"Error inserting GCal block {g_id}: {ins_err}")
             except Exception as e:
                 logger.error(f"JIT Fetch error for prof {prof_id}: {e}")
 
@@ -412,6 +417,7 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         busy_map = {pid: set() for pid in prof_ids}
         
         # --- Pre-llenar busy_map con horarios NO LABORALES del profesional ---
+        # Usamos el mismo day_name_en calculado arriba (basado en weekday())
         for prof in active_professionals:
             wh = prof.get('working_hours') or {}
             day_config = wh.get(day_name_en, {"enabled": False, "slots": []})
@@ -554,11 +560,13 @@ async def book_appointment(date_time: str, treatment_reason: str,
         apt_gids_set = {row['google_calendar_event_id'] for row in existing_apt_gids}
 
         target_prof = None
-        day_name_en = apt_datetime.strftime("%A").lower()
         
         for cand in candidates:
             # --- Nuevo Filtro: Working Hours ---
             wh = cand.get('working_hours') or {}
+            day_idx = apt_datetime.weekday()
+            days_en = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+            day_name_en = days_en[day_idx]
             day_config = wh.get(day_name_en, {"enabled": False, "slots": []})
             apt_time_str = apt_datetime.strftime("%H:%M")
             
@@ -587,9 +595,11 @@ async def book_appointment(date_time: str, treatment_reason: str,
 
                     await db.pool.execute("""
                         INSERT INTO google_calendar_blocks (tenant_id, google_event_id, title, start_datetime, end_datetime, professional_id, sync_status)
-                        VALUES (1, $1, $2, $3, $4, $5, 'synced') ON CONFLICT DO NOTHING
+                        VALUES (1, $1, $2, $3, $4, $5, 'synced') 
+                        ON CONFLICT (google_event_id) DO NOTHING
                     """, g_id, event.get('summary','Ocupado'), dt_start, dt_end, cand['id'])
-            except: pass
+                except Exception as jit_err:
+                    logger.error(f"JIT GCal error in booking: {jit_err}")
 
             # Verificación de colisión
             conflict = await db.pool.fetchval("""
@@ -967,37 +977,24 @@ PRESENTACIÓN DE SERVICIOS (ENFOQUE EN VALOR):
   - Ejemplo: "Hacemos limpiezas profundas que no solo te dejan los dientes blancos, sino que te aseguran que tus encías estén sanas para evitar problemas a futuro".
 • Sé simple y claro. Menos tecnicismos, más beneficios reales.
 
-FLUJO DE AGENDAMIENTO:
-1. Disponibilidad: Siempre usá 'check_availability'. Ofrecé 3 opciones claras.
+FLUJO DE AGENDAMIENTO (PROTOCOLO OBLIGATORIO):
+1. INDAGACIÓN DE SERVICIO (ETAPA 1):
+   - Tras saludar, DEBÉS preguntar qué tratamiento busca el paciente antes de pedir sus datos personales.
+   - Si el usuario dice "quiero un turno", preguntá: "¿Qué te gustaría hacerte? Hacemos limpiezas, controles generales, ortodoncia, entre otros. Contame un poco qué necesitás?".
+   - SIEMPRE debés tener claro el tratamiento para que 'check_availability' use la duración correcta (ej: limpieza 30m, endodoncia 60m).
 
-2. CUALIFICACIÓN Y DATOS (CRÍTICO - ORDEN OBLIGATORIO):
-   **PARA PACIENTES NUEVOS, DEBÉS RECOLECTAR ESTOS 4 DATOS EN ORDEN**:
-   
-   a) Nombre completo (Nombre + Apellido)
-      - Preguntá: "¿Me decís tu nombre completo?"
-      - Ejemplo esperado: "Juan Pérez" o "María González"
-   
-   b) DNI (Documento)
-      - Preguntá: "¿Cuál es tu número de DNI?"
-      - Ejemplo esperado: "12345678" o "40123456"
-   
-   c) Obra Social o PARTICULAR
-      - Preguntá: "¿Tenés obra social o sos particular?"
-      - Si dice "no tengo", registrá como "PARTICULAR"
-      - Ejemplo esperado: "OSDE", "Swiss Medical", "PARTICULAR"
-   
-   **NO PROCEDAS A RESERVAR HASTA TENER LOS 4 DATOS CONFIRMADOS**
-   
-   ### CHECKLIST INTERNO ANTES DE LLAMAR A book_appointment:
-   - ✅ Tengo first_name (nombre)
-   - ✅ Tengo last_name (apellido)  
-   - ✅ Tengo dni (documento)
-   - ✅ Tengo insurance_provider (obra social o PARTICULAR)
-   
-   Si te falta CUALQUIERA de estos datos, NO llames a book_appointment todavía. 
-   Primero pedile al paciente lo que falta.
+2. CONSULTA DE DISPONIBILIDAD (ETAPA 2):
+   - Una vez definido el tratamiento, usá 'check_availability'. 
+   - Ofrecé 3 opciones de horarios claros.
 
-3. CONFIRMACIÓN Y RESERVA:
+3. CUALIFICACIÓN Y DATOS (ETAPA 3):
+   - SOLO cuando el paciente haya elegido un horario o esté decidido a agendar, pedí los datos en este orden:
+     a) Nombre completo (Nombre + Apellido)
+     b) DNI
+     c) Obra Social o PARTICULAR
+
+4. CONFIRMACIÓN Y RESERVA (ETAPA 4):
+   - No llames a 'book_appointment' hasta tener los 4 datos y el horario confirmado.
    - **SOLO** cuando tengas fecha, hora, motivo **Y LOS 4 DATOS PERSONALES COMPLETOS**, ejecutá 'book_appointment'.
    - Pasale a la tool: first_name, last_name, dni, insurance_provider.
    - Si la tool te devuelve "❌ Faltan datos...", NO digas que hubo un problema genérico. 
