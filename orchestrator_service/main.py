@@ -598,8 +598,8 @@ async def book_appointment(date_time: str, treatment_reason: str,
                         VALUES (1, $1, $2, $3, $4, $5, 'synced') 
                         ON CONFLICT (google_event_id) DO NOTHING
                     """, g_id, event.get('summary','Ocupado'), dt_start, dt_end, cand['id'])
-                except Exception as jit_err:
-                    logger.error(f"JIT GCal error in booking: {jit_err}")
+            except Exception as jit_err:
+                logger.error(f"JIT GCal error in booking: {jit_err}")
 
             # Verificación de colisión
             conflict = await db.pool.fetchval("""
