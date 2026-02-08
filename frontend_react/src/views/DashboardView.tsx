@@ -81,6 +81,7 @@ const UrgencyBadge = ({ level }: { level: UrgencyRecord['urgency_level'] }) => {
 // ============================================
 
 export default function DashboardView() {
+  console.log('--- DashboardView Rendering ---');
   const [stats, setStats] = useState<AnalyticsStats | null>(null);
   const [urgencies, setUrgencies] = useState<UrgencyRecord[]>([]);
   const [loading, setLoading] = useState(true);

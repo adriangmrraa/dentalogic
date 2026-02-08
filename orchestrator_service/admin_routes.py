@@ -605,30 +605,100 @@ async def send_chat_message(payload: ChatSendMessage, request: Request, backgrou
 
 @router.get("/stats/summary", dependencies=[Depends(verify_admin_token)])
 async def get_dashboard_stats():
-    """Devuelve métricas clave para el dashboard principal."""
-    today = date.today()
-    
-    # 1. Turnos de hoy
-    appointments_today = await db.pool.fetchval("""
-        SELECT COUNT(*) FROM appointments 
-        WHERE DATE(appointment_datetime) = $1 AND status != 'cancelled'
-    """, today)
+    """Devuelve métricas avanzadas para el dashboard soberano."""
+    try:
+        # 1. IA Conversations (Total de mensajes promediado por actividad)
+        ia_conversations = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages") or 0
+        
+        # 2. IA Appointments (Turnos originados por la IA)
+        ia_appointments = await db.pool.fetchval("SELECT COUNT(*) FROM appointments WHERE source = 'ai'") or 0
+        
+        # 3. Urgencias activas
+        active_urgencies = await db.pool.fetchval("""
+            SELECT COUNT(*) FROM appointments 
+            WHERE urgency_level IN ('high', 'emergency') AND status NOT IN ('cancelled', 'completed')
+        """) or 0
+        
+        # 4. Ingresos Totales (Solo CEOs)
+        total_revenue = await db.pool.fetchval("""
+            SELECT COALESCE(SUM(amount), 0) FROM accounting_transactions 
+            WHERE transaction_type = 'payment' AND status = 'completed'
+        """) or 0
 
-    # 2. Urgencias pendientes (detectadas por IA)
-    urgencies = await db.pool.fetchval("""
-        SELECT COUNT(*) FROM appointments 
-        WHERE urgency_level IN ('high', 'emergency') AND status = 'scheduled'
-    """)
+        # 5. Datos de crecimiento (Últimos 7 días)
+        growth_rows = await db.pool.fetch("""
+            SELECT 
+                DATE(appointment_datetime) as date,
+                COUNT(*) FILTER (WHERE source = 'ai') as ia_referrals,
+                COUNT(*) FILTER (WHERE status IN ('confirmed', 'completed', 'attended')) as completed_appointments
+            FROM appointments
+            WHERE appointment_datetime >= CURRENT_DATE - INTERVAL '7 days'
+            GROUP BY DATE(appointment_datetime)
+            ORDER BY DATE(appointment_datetime) ASC
+        """)
+        
+        growth_data = [
+            {
+                "date": row['date'].strftime('%Y-%m-%d') if hasattr(row['date'], 'strftime') else str(row['date']),
+                "ia_referrals": row['ia_referrals'],
+                "completed_appointments": row['completed_appointments']
+            } for row in growth_rows
+        ]
 
-    # 3. Pacientes totales
-    total_patients = await db.pool.fetchval("SELECT COUNT(*) FROM patients")
+        # Rellenar si no hay datos para evitar que Recharts falle
+        if not growth_data:
+            growth_data = [{"date": date.today().isoformat(), "ia_referrals": 0, "completed_appointments": 0}]
 
-    return {
-        "appointments_today": appointments_today,
-        "active_urgencies": urgencies,
-        "total_patients": total_patients,
-        "system_status": "online"
-    }
+        return {
+            "ia_conversations": ia_conversations,
+            "ia_appointments": ia_appointments,
+            "active_urgencies": active_urgencies,
+            "total_revenue": float(total_revenue),
+            "growth_data": growth_data
+        }
+    except Exception as e:
+        logger.error(f"Error generating dashboard stats: {e}")
+        # Retornar objeto vacío compatible para evitar crash en frontend
+        return {
+            "ia_conversations": 0,
+            "ia_appointments": 0,
+            "active_urgencies": 0,
+            "total_revenue": 0,
+            "growth_data": []
+        }
+
+@router.get("/chat/urgencies", dependencies=[Depends(verify_admin_token)])
+async def get_recent_urgencies(limit: int = 10):
+    """Retorna los últimos casos de urgencia detectados para la tabla del dashboard."""
+    try:
+        rows = await db.pool.fetch("""
+            SELECT 
+                a.id,
+                p.first_name || ' ' || COALESCE(p.last_name, '') as patient_name,
+                p.phone_number as phone,
+                UPPER(a.urgency_level) as urgency_level,
+                COALESCE(a.urgency_reason, 'Consulta IA detectada') as reason,
+                a.appointment_datetime as timestamp
+            FROM appointments a
+            JOIN patients p ON a.patient_id = p.id
+            WHERE a.urgency_level IN ('high', 'emergency')
+            ORDER BY a.created_at DESC
+            LIMIT $1
+        """, limit)
+        
+        return [
+            {
+                "id": str(row['id']),
+                "patient_name": row['patient_name'],
+                "phone": row['phone'],
+                "urgency_level": "CRITICAL" if row['urgency_level'] == "EMERGENCY" else row['urgency_level'],
+                "reason": row['reason'],
+                "timestamp": row['timestamp'].strftime('%d/%m %H:%M') if hasattr(row['timestamp'], 'strftime') else str(row['timestamp'])
+            } for row in rows
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching urgencies: {e}")
+        return []
 
 @router.get("/config/deployment", dependencies=[Depends(verify_admin_token)])
 async def get_deployment_config(request: Request):
