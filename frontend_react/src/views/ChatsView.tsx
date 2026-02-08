@@ -40,14 +40,16 @@ interface PatientContext {
   patient_name?: string;
   urgency_level?: 'normal' | 'high' | 'emergency' | 'low';
   urgency_reason?: string;
-  last_appointment?: {
-    date: string;
-    type: string;
-    professional_name: string;
-  };
   upcoming_appointment?: {
     date: string;
     type: string;
+    duration_minutes?: number;
+    professional_name: string;
+  };
+  last_appointment?: {
+    date: string;
+    type: string;
+    duration_minutes?: number;
     professional_name: string;
   };
   treatment_plan?: any;
@@ -883,13 +885,16 @@ export default function ChatsView() {
                   <Calendar size={12} /> ÚLTIMA CITA
                 </h4>
                 {patientContext?.last_appointment ? (
-                  <div>
-                    <p className="text-sm">{patientContext.last_appointment.type}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(patientContext.last_appointment.date).toLocaleDateString()}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      Dr. {patientContext.last_appointment.professional_name}
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">{patientContext.last_appointment.type}</p>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>{new Date(patientContext.last_appointment.date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                      {patientContext.last_appointment.duration_minutes && (
+                        <span className="bg-gray-200 px-1.5 rounded-sm">{patientContext.last_appointment.duration_minutes} min</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-400">
+                      Profesional: {patientContext.last_appointment.professional_name}
                     </p>
                   </div>
                 ) : (
@@ -903,13 +908,16 @@ export default function ChatsView() {
                   <Clock size={12} /> PRÓXIMA CITA
                 </h4>
                 {patientContext?.upcoming_appointment ? (
-                  <div>
-                    <p className="text-sm">{patientContext.upcoming_appointment.type}</p>
-                    <p className="text-xs text-primary">
-                      {new Date(patientContext.upcoming_appointment.date).toLocaleDateString()}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      Dr. {patientContext.upcoming_appointment.professional_name}
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">{patientContext.upcoming_appointment.type}</p>
+                    <div className="flex items-center gap-2 text-xs text-primary font-medium">
+                      <span>{new Date(patientContext.upcoming_appointment.date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                      {patientContext.upcoming_appointment.duration_minutes && (
+                        <span className="bg-medical-100 px-1.5 rounded-sm">{patientContext.upcoming_appointment.duration_minutes} min</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-400">
+                      Profesional: {patientContext.upcoming_appointment.professional_name}
                     </p>
                   </div>
                 ) : (
@@ -921,13 +929,13 @@ export default function ChatsView() {
               <div className="p-3 bg-gray-50 rounded-lg">
                 <h4 className="text-xs font-medium text-gray-500 mb-2">TRATAMIENTO ACTUAL</h4>
                 {patientContext?.treatment_plan ? (
-                  <div className="text-sm">
+                  <div className="text-sm bg-medical-50 p-2 rounded border border-medical-100 text-medical-800 italic">
                     {typeof patientContext.treatment_plan === 'string'
                       ? patientContext.treatment_plan
                       : JSON.stringify(patientContext.treatment_plan, null, 2)}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400">Sin plan de tratamiento</p>
+                  <p className="text-sm text-gray-400 italic">Sin plan de tratamiento</p>
                 )}
               </div>
             </div>

@@ -107,15 +107,17 @@ async def get_patient_clinical_context(
     """
     Retorna el contexto clínico completo de un paciente por su teléfono:
     Basic info, última cita, próxima cita y plan de tratamiento.
+    Aislado por tenant_id del usuario logueado.
     """
     normalized_phone = normalize_phone(phone)
+    tenant_id = user_data.tenant_id
     
-    # 1. Buscar paciente
+    # 1. Buscar paciente con isolation
     patient = await db.pool.fetchrow("""
         SELECT id, first_name, last_name, phone_number, status, urgency_level, urgency_reason, preferred_schedule
         FROM patients 
-        WHERE phone_number = $1 OR phone_number = $2
-    """, normalized_phone, phone)
+        WHERE tenant_id = $1 AND (phone_number = $2 OR phone_number = $3)
+    """, tenant_id, normalized_phone, phone)
     
     if not patient:
         # Si no existe, es un lead puro sin registro previo
@@ -127,34 +129,34 @@ async def get_patient_clinical_context(
             "is_guest": True
         }
 
-    # 2. Última cita (pasada)
+    # 2. Última cita (pasada) - Mapeo a 'date' para el frontend
     last_apt = await db.pool.fetchrow("""
-        SELECT a.id, a.appointment_datetime, a.appointment_type, a.status, 
-               p.first_name as professional_name
+        SELECT a.id, a.appointment_datetime AS date, a.appointment_type AS type, a.status, 
+               a.duration_minutes, p.first_name as professional_name
         FROM appointments a
         LEFT JOIN professionals p ON a.professional_id = p.id
-        WHERE a.patient_id = $1 AND a.appointment_datetime < NOW()
+        WHERE a.tenant_id = $1 AND a.patient_id = $2 AND a.appointment_datetime < NOW()
         ORDER BY a.appointment_datetime DESC LIMIT 1
-    """, patient['id'])
+    """, tenant_id, patient['id'])
 
-    # 3. Próxima cita (futura)
+    # 3. Próxima cita (futura) - Mapeo a 'date' para el frontend
     upcoming_apt = await db.pool.fetchrow("""
-        SELECT a.id, a.appointment_datetime, a.appointment_type, a.status,
-               p.first_name as professional_name
+        SELECT a.id, a.appointment_datetime AS date, a.appointment_type AS type, a.status,
+               a.duration_minutes, p.first_name as professional_name
         FROM appointments a
         LEFT JOIN professionals p ON a.professional_id = p.id
-        WHERE a.patient_id = $1 AND a.appointment_datetime >= NOW()
+        WHERE a.tenant_id = $1 AND a.patient_id = $2 AND a.appointment_datetime >= NOW()
         AND a.status IN ('scheduled', 'confirmed')
         ORDER BY a.appointment_datetime ASC LIMIT 1
-    """, patient['id'])
+    """, tenant_id, patient['id'])
 
     # 4. Plan de tratamiento (del último registro clínico)
     clinical_record = await db.pool.fetchrow("""
         SELECT treatment_plan, diagnosis, record_date
         FROM clinical_records
-        WHERE patient_id = $1
+        WHERE tenant_id = $1 AND patient_id = $2
         ORDER BY created_at DESC LIMIT 1
-    """, patient['id'])
+    """, tenant_id, patient['id'])
 
     return {
         "patient": dict(patient),
