@@ -49,7 +49,7 @@ function App() {
               </Layout>
             </ProtectedRoute>
           } />
-          泛        </Routes>
+        </Routes>
       </AuthProvider>
     </Router>
   );
