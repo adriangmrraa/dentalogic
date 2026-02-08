@@ -401,7 +401,7 @@ A diferencia de los sistemas contables tradicionales, el dashboard de Dentalogic
 - **Propósito**: Evitar inflar métricas con turnos agendados que nunca se concretaron.
 
 ### 2. Métricas de IA y Eficiencia
-- **IA Conversaciones**: Conteo real de mensajes en `chat_messages` dentro del rango temporal.
+- **IA Conversaciones**: Hilos únicos identificados por `from_number` (pacientes distintos) que interactuaron en el rango. No confundir con volumen de mensajes.
 - **IA Citas**: Turnos en `appointments` donde `source = 'ai'`, permitiendo medir el ROI del asistente virtual.
 - **Triage Monitoring**: Seguimiento de `urgency_level` en tiempo real para optimización de agenda.
 

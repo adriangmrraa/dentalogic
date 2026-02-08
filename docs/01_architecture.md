@@ -94,6 +94,7 @@ AgendaView / Odontograma
 - **Sovereign Analytics Engine (v1 2026-02-08):**
   - **Propósito**: Consolidar métricas operativas y financieras en un dashboard centralizado.
   - **Lógica de Ingresos**: Basada estrictamente en asistencia confirmada (`attended` o `completed`).
+  - **Eficiencia de IA**: Las "Conversaciones IA" se calculan como hilos únicos por paciente (`COUNT(DISTINCT from_number)`), no por volumen de mensajes individuales.
   - **Filtrado Dinámico**: Soporte nativo para rangos `weekly` (7 días) y `monthly` (30 días).
   - **Triage Monitoring**: Integración directa con el flujo de detección de urgencias IA.
 

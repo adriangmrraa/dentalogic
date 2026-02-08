@@ -107,5 +107,8 @@ Para garantizar el alineamiento con el flujo de caja real, los ingresos en el Da
 *No se deben sumar ingresos de turnos `scheduled` o `confirmed` hasta que se valide la presencia del paciente.*
 
 ### 21.2 Filtrado de Rangos (Query Params)
-El endpoint `/admin/stats/summary` requiere el parámetro `range` (`weekly` | `monthly`) para calcular los intervalos SQL dinámicamente. Esto evita cargar data masiva innecesaria en el frontend.
+El endpoint `/admin/stats/summary` requiere el parámetro `range` (`weekly` | `monthly`) para calcular los intervalos SQL dinámicamente. 
+
+### 21.3 Conteo de Conversaciones (Threads vs Messages)
+Para evitar inflación de métricas, el conteo de conversaciones **debe** usar `DISTINCT from_number`. Un paciente puede intercambiar 200 mensajes, pero el Dashboard lo reportará como **1 conversación** para medir alcance real, no volumen de tokens.
 泛
