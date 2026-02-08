@@ -200,9 +200,11 @@ export default function AgendaView() {
         error: null,
       });
 
-      // Refresh calendar data after sync
-      fetchData(true); // Background refresh
+      // Only refresh on manual sync (not silent auto-sync)
       if (!silent) {
+        // Small delay to ensure backend DB write completes
+        await new Promise(resolve => setTimeout(resolve, 500));
+        fetchData(true); // Background refresh
         alert(response.data.message || 'Sincronización completada');
       }
     } catch (error: any) {
@@ -218,9 +220,8 @@ export default function AgendaView() {
     }
   };
 
-  // Auto-sync on mount & Mobile Detection
+  // Mobile Detection only
   useEffect(() => {
-    // 1. Mobile Adaptation
     const handleResize = () => {
       if (calendarRef.current) {
         const calendarApi = calendarRef.current.getApi();
@@ -239,18 +240,6 @@ export default function AgendaView() {
     // Initial check
     handleResize();
     window.addEventListener('resize', handleResize);
-
-    // 2. Silent Auto-sync
-    const autoSync = async () => {
-      if (user?.role === 'ceo' || user?.role === 'secretary' || user?.role === 'professional') {
-        console.log('🔄 Triggering auto-sync for Google Calendar...');
-        // Silent sync: true (no UI blocking, discrete spinner via syncStatus)
-        // We need to ensure fetchData doesn't clear the screen
-        await handleSyncNow(true);
-      }
-    };
-
-    autoSync();
 
     return () => window.removeEventListener('resize', handleResize);
   }, []); // Run once on mount
@@ -411,8 +400,26 @@ export default function AgendaView() {
 
   // Setup WebSocket connection and listeners
   useEffect(() => {
-    // Fetch initial data
-    fetchData();
+    const initializeAgenda = async () => {
+      // 1. First, run auto-sync if user has permissions
+      if (user?.role === 'ceo' || user?.role === 'secretary' || user?.role === 'professional') {
+        console.log('🔄 Auto-sync: Sincronizando con GCal...');
+        try {
+          await api.post('/admin/calendar/sync');
+          // Delay to ensure backend DB write completes
+          await new Promise(resolve => setTimeout(resolve, 800));
+          console.log('✅ Auto-sync completado, cargando datos...');
+        } catch (error) {
+          console.error('⚠️ Auto-sync failed:', error);
+          // Continue with data fetch even if sync fails
+        }
+      }
+
+      // 2. Now fetch all data (includes synced GCal blocks)
+      await fetchData();
+    };
+
+    initializeAgenda();
 
     // Setup WebSocket connection
     socketRef.current = io(BACKEND_URL, {
