@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { Dashboard } from './views/Dashboard';
+import DashboardView from './views/DashboardView';
 import AgendaView from './views/AgendaView';
 import PatientsView from './views/PatientsView';
 import PatientDetail from './views/PatientDetail';
@@ -25,7 +25,7 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <Routes>
-                  <Route index element={<Dashboard />} />
+                  <Route index element={<DashboardView />} />
                   <Route path="agenda" element={<AgendaView />} />
                   <Route path="pacientes" element={<PatientsView />} />
                   <Route path="pacientes/:id" element={<PatientDetail />} />
