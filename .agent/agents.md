@@ -39,7 +39,13 @@ Este archivo actúa como el índice maestro de capacidades para los Agentes Aut�
 
 Cada clínica posee sus propias credenciales de IA encriptadas en la base de datos y su propia integración con Google Calendar.
 
-**Regla de Oro:** NUNCA usar `os.getenv("OPENAI_API_KEY")` para lógica de agentes en producción. Siempre usar la credencial correspondiente de la base de datos.
+**Regla de Oro (Datos):** NUNCA usar `os.getenv("OPENAI_API_KEY")` para lógica de agentes en producción. Siempre usar la credencial correspondiente de la base de datos.
+
+> [!IMPORTANT]
+> **REGLA DE SOBERANÍA (BACKEND)**: Es obligatorio incluir el filtro `tenant_id` en todas las consultas (SELECT/INSERT/UPDATE/DELETE). El aislamiento de datos es la barrera legal y técnica inviolable del sistema.
+
+> [!IMPORTANT]
+> **REGLA DE SOBERANÍA (FRONTEND)**: Implementar siempre "Aislamiento de Scroll" (`h-screen`, `overflow-hidden` global y `overflow-y-auto` interno) para garantizar que los datos densos no rompan la experiencia de usuario ni se fuguen visualmente fuera de sus contenedores.
 
 ## 2. Tech Stack & Standards
 
@@ -98,25 +104,28 @@ Cada clínica posee sus propias credenciales de IA encriptadas en la base de dat
 
 | Skill Name | Trigger | Descripción |
 | :--- | :--- | :--- |
-| **[AI Behavior Architect](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Prompt_Architect/SKILL.md)** | `system prompts`, `IA Gala`, `Mercedes` | Ingeniería de prompts y tono argentino Mercedes. |
-| **[Agent Configuration Architect](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Agent_Configuration_Architect/SKILL.md)** | `agents`, `prompts`, `wizard` | Configuración de agentes: templates, tools y models. |
-| **[Business Forge Engineer](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Business_Forge_Engineer/SKILL.md)** | `forge`, `canvas`, `visuals` | Gestión de assets generados y Fusion Engine. |
-| **[Credential Vault Specialist](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Credential_Vault_Specialist/SKILL.md)** | `vault`, `keys`, `encryption` | Gestión segura de credenciales multi-tenant. |
-| **[DB Schema Surgeon](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/DB_Evolution/SKILL.md)** | `sql`, `schema`, `migration` | Gestión del esquema PostgreSQL y Auto-Healing. |
-| **[Deep Researcher](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Deep_Research/SKILL.md)** | `investigate`, `docs`, `search` | Investiga y valida soluciones técnicas externas. |
-| **[EasyPanel DevOps](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/DevOps_EasyPanel/SKILL.md)** | `deployment`, `docker`, `vars` | Dockerización y despliegue en EasyPanel. |
-| **[Magic Onboarding Orchestrator](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Magic_Onboarding_Orchestrator/SKILL.md)** | `magic`, `wizard`, `branding` | Orquestación del proceso "Hacer Magia". |
-| **[Maintenance Robot Architect](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Maintenance_Robot_Architect/SKILL.md)** | `auto-migration`, `seed data` | Sistema de auto-migración y inicialización de BD. |
-| **[Meta Integration Diplomat](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Meta_Integration_Diplomat/SKILL.md)** | `meta`, `facebook`, `instagram` | OAuth Meta y gestión de activos de negocio. |
-| **[Nexus QA Engineer](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Testing_Quality/SKILL.md)** | `tests`, `pytest`, `vitest` | Especialista en calidad y testing asíncrono. |
-| **[Nexus UI Architect](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Nexus_UI_Architect/SKILL.md)** | `responsive`, `mobile`, `ux` | Diseño responsivo y estándar visual Nexus. |
-| **[Nexus UI Developer](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Frontend_Nexus/SKILL.md)** | `frontend`, `react`, `ui-nexus` | Desarrollo Frontend con React y API multi-tenant. |
-| **[Omnichannel Chat Operator](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Omnichannel_Chat_Operator/SKILL.md)** | `chats`, `whatsapp`, `handoff` | Gestión de conversaciones y alertas de triaje. |
-| **[Skill Synchronizer](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Skill_Sync/SKILL.md)** | `sync skills`, `agents.md` | Actualiza el índice vivo de capacidades. |
-| **[Skill_Forge_Master](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Skill_Forge_Master/SKILL.md)** | `new skill`, `capability` | Arquitecto y generador de nuevas habilidades. |
-| **[Smart Doc Keeper](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Doc_Keeper/SKILL.md)** | `update doc`, `fusion` | Actualización de documentación (Smart Fusion). |
-| **[Sovereign Backend Engineer](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Backend_Sovereign/SKILL.md)** | `backend`, `fastapi`, `api-nexus` | Arquitectura Backend y gestión de soberanía. |
-| **[Sovereign Code Auditor](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Sovereign_Auditor/SKILL.md)** | `audit`, `security`, `tenant_id` | Auditoría de ciberseguridad y aislamiento. |
-| **[Spec Architect](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Spec_Architect/SKILL.md)** | `specify`, `plan`, `sdd` | Generador de especificaciones SDD v2.0. |
-| **[Template Transplant Specialist](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/Template_Transplant_Specialist/SKILL.md)** | `legacy prompt`, `transplant` | Trasplante de prompts en arquitectura multi-capa. |
-| **[TiendaNube Commerce Bridge](file:///c:/Users/Asus/Downloads/Clinica%20Dental/.agent/skills/TiendaNube_Commerce_Bridge/SKILL.md)** | `tiendanube`, `catalogue`, `ecommerce` | Integración con Tienda Nube (OAuth y Catálogo). |
+| **[AI Behavior Architect](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Prompt_Architect/SKILL.md)** | `Cuando edite system prompts, plantillas de agentes o lógica de RAG.` | Ingeniería de prompts para los Agentes de Ventas, Soporte y Business Forge. |
+| **[Agent Configuration Architect](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Agent_Configuration_Architect/SKILL.md)** | `agents, agentes, AI, tools, templates, models, prompts, system prompt, wizard` | Especialista en configuración de agentes de IA: templates, tools, models, prompts y seed data. |
+| **[Business Forge Engineer](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Business_Forge_Engineer/SKILL.md)** | `forge, business forge, assets, fusion, canvas, catalog, visuals, images` | Especialista en Business Forge: gestión de assets post-magia, Fusion Engine y generación de visuales. |
+| **[Credential Vault Specialist](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Credential_Vault_Specialist/SKILL.md)** | `credentials, credenciales, vault, api keys, tokens, encriptación, settings, sovereign` | Especialista en gestión segura de credenciales multi-tenant: encriptación, scope, categorías y The Vault. |
+| **[DB Schema Surgeon](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/DB_Evolution/SKILL.md)** | `v8.0, sql, idempotent, schema, migration, database` | v8.0: Database & Persistence Master. Gestión de evolución segura, parches idempotentes y JSONB clínico. |
+| **[Deep Researcher](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Deep_Research/SKILL.md)** | `Antes de usar una librería nueva, al enfrentar un error desconocido, o cuando el usuario diga 'investiga esto'.` | Investiga documentación oficial y valida soluciones en internet antes de implementar. |
+| **[EasyPanel DevOps](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/DevOps_EasyPanel/SKILL.md)** | `Cuando toque Dockerfile, docker-compose.yml o variables de entorno.` | Experto en Dockerización, Docker Compose y despliegue en EasyPanel. |
+| **[Magic Onboarding Orchestrator](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Magic_Onboarding_Orchestrator/SKILL.md)** | `magia, magic, onboarding, hacer magia, wizard, sse, stream, assets, branding` | Especialista en el proceso 'Hacer Magia': orquestación de agentes IA, SSE streaming y generación de assets de negocio. |
+| **[Maintenance Robot Architect](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Maintenance_Robot_Architect/SKILL.md)** | `N/A` | Especialista en la actualización del sistema de auto-migración "Maintenance Robot" en orchestrator_service/db.py. |
+| **[Meta Integration Diplomat](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Meta_Integration_Diplomat/SKILL.md)** | `meta, facebook, instagram, whatsapp, oauth, integration, waba, pages` | Especialista en OAuth Meta (Facebook, Instagram, WhatsApp Business) y gestión de activos de negocio. |
+| **[Mobile_Adaptation_Architect](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Mobile_Adaptation_Architect/SKILL.md)** | `v8.0, mobile, responsive, isolation, DKG, adaptive` | v8.0: Senior UI/UX Architect. Especialista en Blueprint Universal, DKG y Scroll Isolation. |
+| **[Nexus QA Engineer](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Testing_Quality/SKILL.md)** | `Cuando pida crear tests, probar una feature o corregir bugs.` | Especialista en Pytest Asyncio y Vitest para arquitecturas aisladas. |
+| **[Nexus UI Architect](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Nexus_UI_Architect/SKILL.md)** | `N/A` | Especialista en Diseño Responsivo (Mobile First / Desktop Adaptive) y UX para Dentalogic. Define el estándar visual y estructural. |
+| **[Nexus UI Developer](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Frontend_Nexus/SKILL.md)** | `frontend, react, tsx, componentes, UI, vistas, hooks` | Especialista en React 18, TypeScript, Tailwind CSS y conexión con API multi-tenant. |
+| **[Omnichannel Chat Operator](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Omnichannel_Chat_Operator/SKILL.md)** | `chats, conversaciones, mensajes, whatsapp, human override, handoff` | Especialista en gestión de conversaciones vía WhatsApp (YCloud) para Dentalogic. |
+| **[Skill Synchronizer](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Skill_Sync/SKILL.md)** | `Después de crear o modificar una skill, o cuando el usuario diga 'sincronizar skills'.` | Lee los metadatos de todas las skills y actualiza el índice en AGENTS.md. |
+| **[Skill_Forge_Master](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Skill_Forge_Master/SKILL.md)** | `crear skill, nueva habilidad, skill architect, forge skill, capability, nueva skill` | Arquitecto y generador de Skills. Define, estructura y registra nuevas capacidades para el agente Antigravity. |
+| **[Smart Doc Keeper](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Doc_Keeper/SKILL.md)** | `Cuando el usuario diga 'actualiza la doc', 'documenta este cambio' o tras editar código importante.` | Actualiza documentación y skills usando el protocolo 'Non-Destructive Fusion'. Garantiza que el contenido previo se preserve. |
+| **[Sovereign Backend Engineer](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Backend_Sovereign/SKILL.md)** | `v8.0, backend, JIT, tenancy, idempotencia, tools` | v8.0: Senior Backend Architect & Python Expert. Lógica JIT v2, multi-tenancy y evolución idempotente. |
+| **[Sovereign Code Auditor](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Sovereign_Auditor/SKILL.md)** | `Antes de hacer commit, o cuando pida revisar seguridad o aislamiento.` | Experto en ciberseguridad y cumplimiento del Protocolo de Soberanía Nexus. |
+| **[Spec Architect](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Spec_Architect/SKILL.md)** | `Cuando el usuario diga 'crea una especificación', 'planifica esta feature' o use el comando '/specify'.` | Genera y valida archivos de especificación (.spec.md) siguiendo el estándar SDD v2.0. |
+| **[Template Transplant Specialist](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/Template_Transplant_Specialist/SKILL.md)** | `N/A` | Extrae y distribuye instrucciones de un system prompt legacy en las capas correctas (Wizard, Tool Config, Sistema Interno). |
+| **[TiendaNube Commerce Bridge](file:///C:/Users/Asus/Downloads/Clinica Dental/.agent/skills/TiendaNube_Commerce_Bridge/SKILL.md)** | `tiendanube, tienda nube, e-commerce, products, orders, oauth, catalog, store` | Especialista en integración con Tienda Nube: OAuth, sincronización de catálogo, órdenes y gestión de productos. |
+
+---

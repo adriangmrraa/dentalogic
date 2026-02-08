@@ -1,7 +1,7 @@
 ---
 name: "Sovereign Backend Engineer"
-description: "Experto en FastAPI y gestión segura de credenciales multi-tenant para Dentalogic."
-trigger: "python, backend, endpoints, base de datos, credenciales, agents, tools"
+description: "v8.0: Senior Backend Architect & Python Expert. Lógica JIT v2, multi-tenancy y evolución idempotente."
+trigger: "v8.0, backend, JIT, tenancy, idempotencia, tools"
 scope: "BACKEND"
 auto-invoke: true
 ---
@@ -10,107 +10,46 @@ auto-invoke: true
 
 # Sovereign Backend Engineer - Dentalogic
 
-## 1. Arquitectura y Estructura (Flat Pattern)
-El proyecto utiliza una estructura plana en `orchestrator_service/` para máxima agilidad:
-- `main.py`: Punto de entrada, agents y tools (Dental Tools).
-- `admin_routes.py`: Endpoints administrativos (Pacientes, Profesionales, Dashboard).
-- `gcal_service.py`: Gestión real con Google Calendar (Service Account).
-- `db.py`: Conexiones asíncronas vía `asyncpg`.
+# Sovereign Backend Engineer - Dentalogic v8.0
 
-## 2. Integración con Google Calendar (Sovereign Sync)
-**REGLA DE ORO**: Toda cita creada en la plataforma o por la IA **DEBE** sincronizarse con Google Calendar.
+## 1. Evolución de Datos & Idempotencia (Maintenance Robot)
+**REGLA DE ORO**: Nunca proporciones o ejecutes SQL directo fuera del pipeline de migración.
+- **Evolution Pipeline**: Todo cambio estructural debe implementarse como un parche en `orchestrator_service/db.py`.
+- **Bloques DO $$**: Usar siempre bloques `DO $$` para garantizar que la migración sea idempotente (ej: `IF NOT EXISTS (SELECT 1 FROM information_schema.columns...)`).
+- **Foundation**: Si el parche es crítico para nuevos tenants, debe replicarse en `db/init/00x_schema.sql`.
 
-### Sincronización en Tools (main.py):
-```python
-# gcal_service.create_event devuelve el event_id de Google
-gcal_event = gcal_service.create_event(
-    summary=f"Cita Dental: {patient_name}",
-    start_time=start_iso,
-    end_time=end_iso,
-    description=f"Paciente: {phone}\nMotivo: {reason}"
-)
+## 2. Multi-tenancy & Esquema Dental
+Es obligatorio el aislamiento estricto de datos:
+- **Tablas Core**: `patients`, `professionals`, `appointments`, `clinical_records`, `accounting_transactions`, `daily_cash_flow`.
+- **Filtro tenant_id**: Todas las queries SQL **DEBEN** incluir el filtro `tenant_id`. No asumas nunca contexto global.
+- **Tipado JSONB**: Dominio de la estructura de `medical_history` y de `working_hours` (0-6 days) en PostgreSQL.
 
-# Persistir en la base de datos
-await db.pool.execute(
-    "UPDATE appointments SET google_calendar_event_id = $1, google_calendar_sync_status = 'synced' WHERE id = $2",
-    gcal_event['id'], apt_id
-)
-```
+## 3. Sincronización JIT v2 (Google Calendar)
+La lógica de sincronización híbrida debe ser robusta:
+- **Mirroring en Vivo**: Consultar Google Calendar en tiempo real durante el `check_availability`.
+- **Normalización**: Limpiar nombres (quitar "Dr.", "Dra.") para matching exacto con calendarios externos.
+- **Deduping**: Filtrar eventos de GCal que ya existen localmente como `appointments` mediante el `google_calendar_event_id`.
 
-## 3. Seguridad y Autenticación (Admin Protocol)
-El acceso a endpoints administrativos está protegido por un `ADMIN_TOKEN`:
+## 4. Protocolo Clínico de la IA (Tools)
+Las herramientas del agente deben actuar como gatekeepers:
+1. **check_availability**: Valida primero los `working_hours` (BD) y luego GCal.
+2. **Lead-to-Patient Conversion**: `book_appointment` debe denegar la reserva si un usuario `guest` no ha proporcionado: **Nombre Completo, DNI, Obra Social y Teléfono**.
+3. **Triaje y Derivación**: Clasificación NLP obligatoria antes de ofrecer turnos de urgencia.
 
-### Header Requerido:
-`X-Admin-Token: <tu-token-aqui>`
+## 5. Seguridad & Infraestructura
+- **Auth Layer**: Manejo de JWT (HS256) diferenciando roles: `ceo`, `professional`, `secretary`.
+- **INTERNAL_API_TOKEN**: Uso mandatorio para la comunicación entre `whatsapp_service` y `orchestrator_service`.
+- **Gatekeeper Flow**: Usuarios nuevos nacen `pending`. La activación (`active`) es responsabilidad única del rol `ceo`.
+- **Protocolo Omega**: Logs de emergencia para links de activación si el SMTP no está disponible.
 
-### Validación en FastAPI:
-```python
-def verify_admin_token(x_admin_token: str = Header(...)):
-    if x_admin_token != ADMIN_TOKEN:
-        raise HTTPException(status_code=401, detail="Invalid token")
-```
+## 6. Sincronización Real-Time (WebSockets)
+Garantizar que el Frontend esté siempre al día:
+- **Emitir Eventos**: Emitir `NEW_APPOINTMENT` o `APPOINTMENT_UPDATED` vía Socket.IO tras cualquier mutación exitosa en la base de datos de turnos.
 
-## 4. Patrones de Base de Datos (SQL Puro / asyncpg)
-No usamos ORM pesado. Preferimos queries directas para mayor performance:
+## 7. WhatsApp Service (Pipeline)
+- **Transcripción**: Integración Whisper para audios.
+- **Deduplicación**: Cache de 2 minutos en Redis para evitar procesar webhooks duplicados.
+- **Buffering**: Agrupar mensajes en ráfaga para mejorar el contexto del LLM.
 
-```python
-# Ejemplo de fetch de pacientes
-patients = await db.pool.fetch("""
-    SELECT id, first_name, last_name, phone_number 
-    FROM patients 
-    WHERE status = 'active'
-""")
-```
-
-### 4.1 Paginación de Mensajes (Offset/Limit)
-Para endpoints de historial, usar siempre paginación para evitar sobrecarga:
-```python
-async def get_messages(phone: str, limit: int = 50, offset: int = 0):
-    return await db.pool.fetch("""
-        SELECT * FROM chat_messages 
-        WHERE from_number = $1 
-        ORDER BY created_at DESC 
-        LIMIT $2 OFFSET $3
-    """, phone, limit, offset)
-```
-
-### 4.2 Patrón de Subquery para Sorting (Recency)
-Cuando se usa `DISTINCT ON`, el `ORDER BY` inicial debe coincidir. Para ordenar por otros campos (ej: fecha de mensaje), usar subquery:
-```sql
-SELECT * FROM (
-    SELECT DISTINCT ON (phone_number) * 
-    FROM sessions 
-    ORDER BY phone_number, last_message_time DESC
-) sub
-ORDER BY last_message_time DESC;
-```
-
-## 5. Dental IA Tools (main.py)
-Las herramientas de la IA deben seguir protocolos estrictos de triaje y agenda:
-- `check_availability`: Siempre consulta GCal antes de proponer horarios.
-- `book_appointment`: Valida datos del paciente antes de confirmar.
-- `triage_urgency`: Clasifica el dolor y deriva a humano si es `critical`.
-
-## 7. Normalización de Payloads (Compatibility Layer)
-Para asegurar compatibilidad entre microservicios (especialmente WhatsApp -> Orquestador), los modelos Pydantic deben ser flexibles:
-- **Regla**: Aceptar múltiples nombres para el mismo dato (ej: `phone` y `from_number`).
-- **WhatsApp 24h Window**: Implementar chequeo de ventana en envíos manuales:
-  - Validar que `last_user_msg_time` sea `< 24h`.
-  - Retornar `403 Forbidden` si la ventana está cerrada.
-- **Implementación**: Usar `@property` o `Field(alias=...)` en los modelos de request para normalizar el acceso a los datos.
-
-```python
-class ChatRequest(BaseModel):
-    message: Optional[str] = None
-    text: Optional[str] = None  # Alias para compatibilidad
-    
-    @property
-    def final_message(self) -> str:
-        return self.message or self.text or ""
-```
-
-## 8. Checklist de Desarrollo
-- [ ] ¿El nuevo endpoint usa `verify_admin_token`?
-- [ ] ¿Las operaciones de citas disparan un `gcal_service` sync?
-- [ ] ¿Se emiten eventos vía Socket.IO para actualización del Dashboard?
-- [ ] ¿El log de errores incluye contexto del paciente/turno?
+---
+*Nexus v8.0 - Senior Backend Architect & Python Expert Protocol*

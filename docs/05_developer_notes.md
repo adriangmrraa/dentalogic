@@ -46,6 +46,21 @@ Si necesitas cambiar la base de datos:
 1.  Agrega el cambio en `db/init/dentalogic_schema.sql` (Foundation).
 2.  Agrega un parche en `orchestrator_service/db.py` (Evolution). Usa bloques `DO $$` para que sea idempotente.
 
+**Ejemplo: Patch working_hours (Feb 2026)**
+```python
+# En orchestrator_service/db.py
+patch_sql = """
+    DO $$ 
+    BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='professionals' AND column_name='working_hours') THEN
+            ALTER TABLE professionals ADD COLUMN working_hours JSONB;
+            -- Inicializar con default si es necesario
+            UPDATE professionals SET working_hours = '{"1":{"enabled":true,"slots":[{"start":"08:00","end":"20:00"}]}}'::jsonb;
+        END IF;
+    END $$;
+"""
+```
+
 ## 12. Gestión de Usuarios y Seguridad (Auth Layer)
 
 ### 12.1 Ciclo de Vida del Usuario

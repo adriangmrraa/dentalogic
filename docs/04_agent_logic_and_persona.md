@@ -28,12 +28,15 @@ El bot actúa como la primera línea de atención de la clínica de la Dra. Laur
 - Utiliza la tool `triage_urgency()`.
 - Si el nivel es `emergency` o `high`, se debe ofrecer el hueco más próximo disponible, incluso si requiere intervención humana para forzar la agenda.
 
-### 2.2 Gestión de Agenda (Anti-Colisiones)
-**Regla:** Ningún turno puede ser confirmado sin verificar disponibilidad real.
+### 2.2 Gestión de Agenda (Horarios Sagrados)
+**Regla:** Ningún turno puede ser confirmado sin verificar disponibilidad real, respetando los horarios individuales de cada profesional.
 
 **Implementación:**
-- El agente DEBE ejecutar `check_availability()` antes de proponer un horario.
-- Si el paciente confirma, se usa `book_appointment()`.
+- **Filtro de Seguridad:** El agente DEBE ejecutar `check_availability()` para el profesional solicitado. Esta herramienta actúa como el primer filtro, validando el campo `working_hours` de la base de datos antes de consultar Google Calendar.
+- **Comunicación Proactiva:** Si el profesional no atiende el día solicitado (según su configuración individual), la IA debe informar al paciente claramente (ej: "Mirá, el Dr. Juan no atiende los Miércoles") y ofrecer alternativas inmediatas:
+  a) Buscar disponibilidad en otro día con el mismo profesional.
+  b) Ofrecer otros profesionales disponibles para el día solicitado.
+- **Confirmación:** Solo si el horario cae dentro de los "Horarios Sagrados" del profesional y no hay colisiones externas, se procede con `book_appointment()`.
 
 ### 2.3 Diferenciación Lead vs Paciente
 **Regla:** Un usuario nuevo ("Lead") NO es un paciente hasta que agenda su primer turno.
@@ -48,8 +51,8 @@ El bot actúa como la primera línea de atención de la clínica de la Dra. Laur
 
 | Tool | Parámetros | Función |
 | :--- | :--- | :--- |
-| `check_availability` | `date` | Consulta huecos libres en la BD de la clínica. |
-| `book_appointment` | `datetime, reason, [first_name, last_name, dni, insurance]` | Registra el turno. **Requiere datos personales extra si es paciente nuevo.** |
+| `check_availability` | `date, [professional_name]` | Consulta huecos libres. Valida primero contra los `working_hours` del profesional en la BD (Filtro 1) y luego contra Google Calendar (Filtro 2). |
+| `book_appointment` | `datetime, professional_name, [first_name, last_name, dni, insurance]` | Registra el turno. Realiza una validación final de horario profesional antes de insertar. |
 | `triage_urgency` | `symptoms` | Analiza el texto/audio para determinar la gravedad. |
 | `derivhumano` | `reason` | Pasa la conversación a un operador y activa el silencio de 24h. |
 

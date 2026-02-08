@@ -85,8 +85,12 @@ AgendaView / Odontograma
 **Arquitectura de Visualización:**
 - **Layout Global Rígido:** El contenedor principal (`Layout.tsx`) utiliza `h-screen` y `overflow-hidden` para eliminar el scroll de la página completa.
 - **Aislamiento de Scroll:** Cada vista maestra (`Dashboard`, `Agenda`, `Pacientes`, `Profesionales`) gestiona su propio desplazamiento interno.
-- **ChatsView Rígido:** Implementa una jerarquía flex con `min-h-0` que fuerza el scroll únicamente en el área de mensajes, manteniendo fijos la cabecera, la lista de sesiones, el panel clínico y el área de input de mensajes.
-- **Versioning Histórico**: Los mensajes antiguos pueden recuperarse mediante el sistema de paginación integrado.
+- **ProfessionalsView (Vista Maestra):** Implementa un sistema de **Overflow Isolation** donde el grid de profesionales fluye de forma independiente, manteniendo fijos los elementos de navegación.
+- **Diseño Adaptativo de 3 Capas:**
+    - **Desktop (>1024px):** Grid denso de 3 columnas para visualización rápida de staff.
+    - **Tablet (768px-1024px):** Grid adaptativo de 2 columnas con preservación de alineación.
+    - **Mobile (<768px):** Refactorizado a **Lista Apilada Vertical** (columna única) con formato de atributos (Label/Valor) para facilitar la lectura y evitar scrolls horizontales.
+- **ChatsView Rígido:** Implementa una jerarquía flex con `min-h-0` que fuerza el scroll únicamente en el área de mensajes.
 
 ## 6. Paginación y Carga Incremental
 
@@ -107,6 +111,7 @@ Para optimizar el rendimiento en conversaciones extensas, Dentalogic utiliza un 
 - **Agenda Inteligente:** Calendario interactivo con sincronización de Google Calendar.
 - **Perfil 360° del Paciente:** Acceso a historias clínicas, antecedentes y notas de evolución.
 - **Monitor de Triaje:** Alertas inmediatas cuando la IA detecta una urgencia grave.
+- **Modales IA-Aware:** Los modales de edición (especialmente en `Profesionales`) están sincronizados con la lógica de la IA, permitiendo configurar `working_hours` que el agente respeta estrictamente durante la reserva de turnos.
 
 ## 3. Base de Datos (PostgreSQL)
 

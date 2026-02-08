@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 # ==================== CONFIGURATION ====================
 # The credentials can be a path to a file or a JSON string in environment variable
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")
-# GOOGLE_CALENDAR_ID removed - now dynamic per professional
+# GOOGLE_CALENDAR_ID REMOVED - STRICT MULTI-TENANCY ENFORCED
 
 class GCalService:
     def __init__(self):
@@ -38,18 +38,18 @@ class GCalService:
             logger.error(f"Error authenticating with Google Calendar: {e}")
             return None
 
-    def list_events(self, calendar_id, time_min=None, time_max=None):
+    def list_events(self, calendar_id: str, time_min=None, time_max=None):
         """
         Lists events from the specified calendar.
         calendar_id: REQUIRED. The ID of the calendar to list events from.
         """
         if not self.service or not calendar_id:
+            logger.warning("GCal List skipped: No service or calendar_id provided.")
             return []
 
-        cal_id = calendar_id
         try:
             events_result = self.service.events().list(
-                calendarId=cal_id,
+                calendarId=calendar_id,
                 timeMin=time_min,
                 timeMax=time_max,
                 singleEvents=True,
@@ -57,21 +57,17 @@ class GCalService:
             ).execute()
             return events_result.get('items', [])
         except HttpError as error:
-            logger.error(f"An error occurred: {error}")
+            logger.error(f"An error occurred listing events for {calendar_id}: {error}")
             return []
 
-    def create_event(self, calendar_id, summary, start_time, end_time, description=None):
+    def create_event(self, calendar_id: str, summary, start_time, end_time, description=None):
         """
         Creates a new event in the specified calendar.
         calendar_id: REQUIRED.
-        summary: Title of the event
-        start_time: ISO format string (e.g., '2025-05-28T09:00:00Z')
-        end_time: ISO format string
         """
         if not self.service or not calendar_id:
             return None
 
-        cal_id = calendar_id
         event = {
             'summary': summary,
             'description': description,
@@ -86,14 +82,14 @@ class GCalService:
         }
 
         try:
-            event = self.service.events().insert(calendarId=cal_id, body=event).execute()
-            logger.info(f"Event created: {event.get('htmlLink')}")
+            event = self.service.events().insert(calendarId=calendar_id, body=event).execute()
+            logger.info(f"Event created in {calendar_id}: {event.get('htmlLink')}")
             return event
         except HttpError as error:
-            logger.error(f"An error occurred while creating event: {error}")
+            logger.error(f"An error occurred while creating event in {calendar_id}: {error}")
             return None
 
-    def delete_event(self, calendar_id, event_id):
+    def delete_event(self, calendar_id: str, event_id: str):
         """
         Deletes an event from the specified calendar.
         calendar_id: REQUIRED.
@@ -101,22 +97,20 @@ class GCalService:
         if not self.service or not calendar_id:
             return False
 
-        cal_id = calendar_id
         try:
-            self.service.events().delete(calendarId=cal_id, eventId=event_id).execute()
-            logger.info(f"Event deleted: {event_id}")
+            self.service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+            logger.info(f"Event {event_id} deleted from {calendar_id}")
             return True
         except HttpError as error:
-            logger.error(f"An error occurred while deleting event: {error}")
+            logger.error(f"An error occurred while deleting event {event_id} from {calendar_id}: {error}")
             return False
 
-    def get_events_for_day(self, calendar_id, date_obj):
+    def get_events_for_day(self, calendar_id: str, date_obj):
         """
         Fetches events for a specific day from Google Calendar API.
-        This provides REAL-TIME data, bypassing local cache.
-        date_obj: datetime.date or datetime object
+        calendar_id: REQUIRED.
         """
-        if not self.service:
+        if not self.service or not calendar_id:
             return []
             
         try:
@@ -125,13 +119,12 @@ class GCalService:
             end_dt = datetime.combine(date_obj, datetime.max.time()).replace(tzinfo=None)
             
             # Format to RFC3339 timestamp with Argentina offset (-03:00)
-            # GCal expects ISO format. We append the offset for clarity and reliability.
             time_min = start_dt.isoformat() + '-03:00'
             time_max = end_dt.isoformat() + '-03:00'
             
             return self.list_events(calendar_id=calendar_id, time_min=time_min, time_max=time_max)
         except Exception as e:
-            logger.error(f"Error fetching daily events: {e}")
+            logger.error(f"Error fetching daily events for {calendar_id}: {e}")
             return []
 
 # Singleton instance

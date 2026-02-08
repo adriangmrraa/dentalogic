@@ -18,7 +18,7 @@ Se han creado **6 nuevas tablas PostgreSQL** que transforman el backend de Tiend
 | Tabla | Propósito | Relaciones Clave |
 |-------|-----------|------------------|
 | `patients` | Almacenar datos de pacientes con anamnesis | tenant_id (multi-tenant) |
-| `professionals` | Odontólogos disponibles | tenant_id (multi-tenant) |
+| `professionals` | Odontólogos disponibles con horarios configurables | tenant_id (multi-tenant), working_hours (JSONB) |
 | `appointments` | Turnos sincronizados con Google Calendar | patient_id, professional_id, tenant_id |
 | `clinical_records` | Historias clínicas con odontogramas JSONB | patient_id, professional_id, tenant_id |
 | `accounting_transactions` | Pagos, OSDE, gastos | patient_id, appointment_id, tenant_id |
@@ -62,6 +62,28 @@ FOREIGN KEY: tenant_id → tenants(id)
 - `(tenant_id, phone_number)` → Búsqueda rápida por WhatsApp
 - `(tenant_id, dni)` → Validación de identidad
 - `status` → Filtrado de pacientes activos
+
+### `professionals` Table Extension
+```sql
+ALTER TABLE professionals ADD COLUMN working_hours JSONB;
+```
+
+**Estructura del JSON de Disponibilidad:**
+El campo `working_hours` almacena la agenda semanal. Se inicializa por defecto con los valores de la clínica (`CLINIC_HOURS_START/END`).
+
+```json
+{
+  "0": { "enabled": true, "slots": [{"start": "09:00", "end": "18:00"}] }, // Domingo (ejemplo: cerrado)
+  "1": { "enabled": true, "slots": [{"start": "08:00", "end": "20:00"}] }, // Lunes
+  "2": { "enabled": true, "slots": [{"start": "08:00", "end": "20:00"}] }, // Martes
+  "3": { "enabled": true, "slots": [{"start": "08:00", "end": "20:00"}] }, // Miércoles
+  "4": { "enabled": true, "slots": [{"start": "08:00", "end": "20:00"}] }, // Jueves
+  "5": { "enabled": true, "slots": [{"start": "08:00", "end": "20:00"}] }, // Viernes
+  "6": { "enabled": true, "slots": [{"start": "08:00", "end": "13:00"}] }  // Sábado
+}
+```
+> [!NOTE]
+> Las keys `0-6` corresponden a `dayOfWeek` de JavaScript (`0` = Domingo).
 
 ---
 

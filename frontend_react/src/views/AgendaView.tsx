@@ -201,7 +201,7 @@ export default function AgendaView() {
       });
 
       // Refresh calendar data after sync
-      fetchData();
+      fetchData(true); // Background refresh
       if (!silent) {
         alert(response.data.message || 'Sincronización completada');
       }
@@ -218,20 +218,44 @@ export default function AgendaView() {
     }
   };
 
-  // Auto-sync on mount
+  // Auto-sync on mount & Mobile Detection
   useEffect(() => {
+    // 1. Mobile Adaptation
+    const handleResize = () => {
+      if (calendarRef.current) {
+        const calendarApi = calendarRef.current.getApi();
+        if (window.innerWidth < 768) {
+          if (calendarApi.view.type !== 'listDay') {
+            calendarApi.changeView('listDay');
+          }
+        } else {
+          if (calendarApi.view.type === 'listDay') {
+            calendarApi.changeView('timeGridWeek');
+          }
+        }
+      }
+    };
+
+    // Initial check
+    handleResize();
+    window.addEventListener('resize', handleResize);
+
+    // 2. Silent Auto-sync
     const autoSync = async () => {
-      // Only auto-sync if user has rights
       if (user?.role === 'ceo' || user?.role === 'secretary' || user?.role === 'professional') {
         console.log('🔄 Triggering auto-sync for Google Calendar...');
+        // Silent sync: true (no UI blocking, discrete spinner via syncStatus)
+        // We need to ensure fetchData doesn't clear the screen
         await handleSyncNow(true);
       }
     };
 
     autoSync();
+
+    return () => window.removeEventListener('resize', handleResize);
   }, []); // Run once on mount
 
-  // Check for collisions before creating appointment
+
   const checkCollisions = useCallback(async (professionalId: string, datetimeStr: string): Promise<boolean> => {
     if (!professionalId || !datetimeStr) return false;
 
@@ -296,9 +320,9 @@ export default function AgendaView() {
   }, []);
 
   // Fetch all data
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isBackground: boolean = false) => {
     try {
-      setLoading(true);
+      if (!isBackground) setLoading(true);
 
       // Fetch settings first if needed or concurrently
       fetchClinicSettings();

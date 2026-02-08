@@ -11,6 +11,7 @@ Este documento detalla el estado actual de la plataforma frente a los requerimie
 | **Triaje Automatizado** | ✅ Implementado | Tool `triage_urgency()` funcional con lógica NLP básica. |
 | **Procesamiento de Audio** | ✅ Implementado | Integración con OpenAI Whisper en `whatsapp_service/main.py`. |
 | **Mecanismo de Silencio (Lockout)** | ✅ Implementado | Funcionalidad `human_override_until` de 24h activa. |
+| **Gestión de Profesionales** | ✅ Completado | Columna `working_hours` (JSONB) integrada y lógica de IA sincronizada. |
 | **Relay de Mensajería** | ⚠️ Pendiente | El `Universal Delivery Relay` para envíos masivos no se detectó en la búsqueda. |
 
 ---
@@ -23,6 +24,7 @@ Este documento detalla el estado actual de la plataforma frente a los requerimie
 | **Agenda Inteligente** | ⚠️ Parcial | `AgendaView.tsx` usa FullCalendar, pero el **Drag & Drop** no está habilitado comercialmente. |
 | **Odontograma Interactivo** | ❌ Faltante | No se encontró la interfaz gráfica de odontograma en `frontend_react`. |
 | **Perfil 360° del Paciente** | ✅ Implementado | `PatientDetail.tsx` incluye historial clínico, anamnesis y alertas médicas. |
+| **Gestión de Profesionales (UI)** | ✅ Completado | Vista `ProfessionalsView.tsx` 100% responsiva con configuración de horarios IA-Aware. |
 | **Módulo Contable** | ⚠️ Parcial | Existe `accounting_transactions` en DB, pero no la interfaz de usuario completa. |
 
 ---

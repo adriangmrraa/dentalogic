@@ -12,6 +12,12 @@ El cerebro central. Gestiona el agente LangChain, la memoria y la base de datos.
 - **Maintenance Robot (db.py):** Sistema de auto-curación de base de datos. Los parches PL/pgSQL se ejecutan en cada arranque para asegurar el esquema.
 - **WebSocket / Socket.IO:** Sincronización en tiempo real de la agenda.
 
+> [!IMPORTANT]
+> **REGLA DE SOBERANÍA (BACKEND)**: Es obligatorio incluir el filtro `tenant_id` en todas las consultas (SELECT/INSERT/UPDATE/DELETE). El aislamiento de datos es la barrera legal y técnica inviolable del sistema.
+
+> [!IMPORTANT]
+> **REGLA DE SOBERANÍA (FRONTEND)**: Implementar siempre "Aislamiento de Scroll" (`h-screen`, `overflow-hidden` global y `overflow-y-auto` interno) para garantizar que los datos densos no rompan la experiencia de usuario ni se fuguen visualmente fuera de sus contenedores.
+
 ### 📱 Percepción y Transmisión (WhatsApp Service) - `whatsapp_service`
 Maneja la integración con YCloud y la IA de audio (Whisper).
 
@@ -60,12 +66,12 @@ Maneja la integración con YCloud y la IA de audio (Whisper).
 
 | Skill Name | Trigger | Descripción |
 | :--- | :--- | :--- |
-| **Sovereign Backend Engineer** | *FastAPI, Backend* | Experto en lógica de negocio, seguridad, 24h window y API multi-tenant. |
+| **Sovereign Backend Engineer** | *v8.0, JIT, API* | v8.0: Senior Backend Architect. Experto en lógica de negocio, JIT v2 y multi-tenancy. |
 | **Nexus UI Developer** | *React, Frontend* | Especialista en interfaces dinámicas, reordering en tiempo real y Socket.IO. |
 | **Prompt Architect** | *Identity, Persona* | Mantenimiento de la identidad (Dra. Laura Delgado) y tono rioplatense. |
-| **DB Schema Surgeon** | *Postgres, SQL* | Gestión avanzada de modelos, índices y parches SQL. |
+| **DB Schema Surgeon** | *v8.0, Idempotent* | v8.0: Database & Persistence Master. Gestión de evolución segura y JSONB clínico. |
 | **Maintenance Robot Architect**| *db.py, miguel* | Arquitecto de evolución de base de datos segura y self-healing. |
-| **Mobile Adaptation Architect**| *responsivo, mobile* | Especialista en transformación de UI desktop a mobile sin regresiones. |
+| **Mobile Adaptation Architect**| *v8.0, DKG* | v8.0: Senior UI/UX Architect. Especialista en Blueprint Universal y Scroll Isolation. |
 
 ---
 *Actualizado: 2026-02-06 - Protocolo Platinum Resilience v7.6*
