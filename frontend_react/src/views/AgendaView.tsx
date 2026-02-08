@@ -142,7 +142,6 @@ export default function AgendaView() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isInitializing, setIsInitializing] = useState(true);  // Loading state for initial sync
   const [showModal, setShowModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Appointment | null>(null);
@@ -403,8 +402,6 @@ export default function AgendaView() {
   // Setup WebSocket connection and listeners
   useEffect(() => {
     const initializeAgenda = async () => {
-      setIsInitializing(true);  // Activate loading UI
-
       // 1. First, run auto-sync if user has permissions
       if (user?.role === 'ceo' || user?.role === 'secretary' || user?.role === 'professional') {
         console.log('🔄 Auto-sync: Sincronizando con GCal...');
@@ -421,8 +418,6 @@ export default function AgendaView() {
 
       // 2. Now fetch all data (includes synced GCal blocks)
       await fetchData();
-
-      setIsInitializing(false);  // Deactivate loading UI
     };
 
     initializeAgenda();
@@ -701,18 +696,6 @@ export default function AgendaView() {
     } catch (error) {
     }
   };
-
-  // Show loading spinner during initial sync+fetch
-  if (isInitializing) {
-    return (
-      <div className="flex items-center justify-center h-full bg-gray-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-medical-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 text-sm">Cargando agenda...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="p-4 lg:p-6 h-full overflow-y-auto bg-gray-100">
