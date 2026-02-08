@@ -59,17 +59,47 @@ Modifica las propiedades de un tratamiento existente.
 
 ## Profesionales
 
-### Sincronización Manual GCal
-`POST /admin/sync/calendar`
+### Listar Profesionales
+`GET /admin/professionals`
 
-**DEPRECATED (v2.0)**: La sincronización ahora es automática (JIT). Este endpoint fuerza una actualización masiva pero no es necesario para la operación normal.
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "name": "Dr. Smith",
+    "specialty": "Ortodoncia",
+    "is_active": true,
+    "working_hours": {
+      "monday": { "enabled": true, "slots": [{ "start": "09:00", "end": "18:00" }] },
+      "sunday": { "enabled": false, "slots": [] }
+    }
+  }
+]
+```
+
+### Crear/Actualizar Profesional
+`POST /admin/professionals` | `PUT /admin/professionals/{id}`
+
+Permite gestionar el staff y su disponibilidad horaria (JSONB).
+
+### Sincronización Automática JIT
+`POST /admin/calendar/sync`
+
+Fuerza el mirroring entre Google Calendar y la base de datos local.
+- **Lógica**: Identifica bloqueos externos y los persiste como `google_calendar_blocks`.
+- **Automatización**: Invocado silenciosamente al montar la Agenda en el frontend.
+
+### Bóveda de Credenciales (Internal)
+`POST /admin/internal/credentials`
+Almacena tokens de OAuth para cada tenant de forma segura.
 
 ## Pacientes
 
 ### Alta de Paciente
 `POST /admin/patients`
 
-Crea una ficha médica administrativamente.
+Crea una ficha médica administrativamente. Incluye triaje inicial.
 
 **Payload:**
 ```json
@@ -78,6 +108,13 @@ Crea una ficha médica administrativamente.
   "last_name": "Perez",
   "dni": "12345678",
   "phone_number": "+54911...",
-  "insurance_provider": "OSDE"
+  "insurance_provider": "OSDE",
+  "urgency_level": "medium"
 }
 ```
+
+## Parámetros Globales (Paginación)
+Todos los endpoints `GET` que retornan listas de recursos soportan:
+- `limit`: Cantidad de registros (default: 50).
+- `offset`: Desplazamiento para paginación incremental.
+- `search`: Filtro por texto (nombre, DNI, etc).

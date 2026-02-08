@@ -82,8 +82,11 @@ AgendaView / Odontograma
     - Elimina riesgo de duplicados o estados desincronizados del método manual anterior (`addEvent()`, `setProp()`)
   - **Auto-Sync Silencioso**: 
     - La sincronización con Google Calendar ocurre automáticamente al cargar `AgendaView`
-    - No requiere intervención manual del usuario (botón "Sync" removido en v3)
+    - No requiere intervención manual del usuario (botón "Sync" removido en v3 hito 2026-02-08)
     - Delay de 800ms post-sync garantiza que los writes en DB se completen antes del fetch
+- **Urgencia y Triaje (Clinical Triage v1):**
+  - Los pacientes ahora poseen un `urgency_level` (`low`, `medium`, `high`, `emergency`).
+  - La UI de la agenda resalta automáticamente los turnos con urgencia `high` o superior mediante bordes y efectos pulsantes.
 - **UUID Serialization Fix (Backend):**
   - Endpoints de actualización de estado (`PUT /admin/appointments/{id}/status`) ahora convierten UUID a string antes de JSON response
   - Eliminado error `TypeError: Object of type UUID is not JSON serializable`
@@ -94,13 +97,13 @@ AgendaView / Odontograma
 **Tecnología:** Flexbox + `min-h-0` + Overflow Isolation
 
 **Arquitectura de Visualización:**
-- **Layout Global Rígido:** El contenedor principal (`Layout.tsx`) utiliza `h-screen` y `overflow-hidden` para eliminar el scroll de la página completa.
-- **Aislamiento de Scroll:** Cada vista maestra (`Dashboard`, `Agenda`, `Pacientes`, `Profesionales`) gestiona su propio desplazamiento interno.
-- **ProfessionalsView (Vista Maestra):** Implementa un sistema de **Overflow Isolation** donde el grid de profesionales fluye de forma independiente, manteniendo fijos los elementos de navegación.
-- **Diseño Adaptativo de 3 Capas:**
-    - **Desktop (>1024px):** Grid denso de 3 columnas para visualización rápida de staff.
-    - **Tablet (768px-1024px):** Grid adaptativo de 2 columnas con preservación de alineación.
-    - **Mobile (<768px):** Refactorizado a **Lista Apilada Vertical** (columna única) con formato de atributos (Label/Valor) para facilitar la lectura y evitar scrolls horizontales.
+- **Layout Global Rígido:** El contenedor principal (`Layout.tsx`) utiliza `h-screen` y `overflow-hidden` para eliminar el scroll de la página completa, siguiendo el estándar **Sovereign Glass**.
+- **Aislamiento de Scroll:** Cada vista maestra gestiona su propio desplazamiento interno mediante `flex-1 min-h-0 overflow-auto`.
+- **ProfessionalsView (Vista Maestra):** Implementa un sistema de **Overflow Isolation** donde el grid fluye de forma independiente.
+- **Mobile-First Evolution (Hito Agenda 2.0):**
+    - **`MobileAgenda`**: Nueva capa de visualización vertical optimizada para pantallas pequeñas, activada automáticamente vía `@media` queries o JS detection.
+    - **`DateStrip`**: Navegador de fechas horizontal táctil que permite cambiar el foco del calendario sin recargar la página.
+- **Odontograma y Pantallas de Alta Densidad:** Utilizan el patrón de **Sub-Scrolling**, permitiendo que herramientas complejas mantengan sus controles visibles mientras los diagramas scrollean.
 - **ChatsView Rígido:** Implementa una jerarquía flex con `min-h-0` que fuerza el scroll únicamente en el área de mensajes.
 
 ## 6. Paginación y Carga Incremental

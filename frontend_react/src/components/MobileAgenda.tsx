@@ -1,6 +1,7 @@
 import DateStrip from './DateStrip';
 import type { Appointment, Professional } from '../views/AgendaView';
 import { Clock, User, Phone } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 
 interface MobileAgendaProps {
     appointments: Appointment[];
@@ -18,10 +19,11 @@ export default function MobileAgenda({
     professionals
 }: MobileAgendaProps) {
 
-    // Filter appointments for the selected date
+    // Filter appointments for the selected date - FIX 4: Normalización robusta
     const dailyAppointments = appointments.filter(apt => {
-        const aptDate = new Date(apt.appointment_datetime);
-        return aptDate.toDateString() === selectedDate.toDateString();
+        const aptDateString = format(parseISO(apt.appointment_datetime), 'yyyy-MM-dd');
+        const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
+        return aptDateString === selectedDateString;
     }).sort((a, b) => new Date(a.appointment_datetime).getTime() - new Date(b.appointment_datetime).getTime());
 
     const formatTime = (dateStr: string) => {
@@ -45,7 +47,7 @@ export default function MobileAgenda({
             <DateStrip selectedDate={selectedDate} onDateSelect={onDateChange} />
 
             {/* Appointment List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+            <div className="flex-1 overflow-y-auto p-4 pb-24 space-y-3 min-h-0">
                 {dailyAppointments.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-48 text-gray-400">
                         <Clock size={48} className="mb-2 opacity-20" />

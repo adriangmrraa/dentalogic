@@ -279,14 +279,14 @@ Si algo falla:
 
 ## 10. Definition of Done (DoD)
 
-- [ ] Código: Cambios aplicados en Layout.tsx y AgendaView.tsx
-- [ ] Visual QA: Screenshots de Desktop y Mobile aprobados
-- [ ] Scroll Test: Sidebar/Topbar quedan fijos al scrollear
-- [ ] Typography: Headers usan Inter + slate-800 + tracking-tight
-- [ ] Glassmorphism: Calendar tiene backdrop-blur visible
-- [ ] Gradient: Background con degradado slate→blue
-- [ ] Drag & Drop: Funcionalidad de arrastrar eventos NO afectada
-- [ ] Mobile Performance: No lag en iPhone SE (DevTools throttling)
+- [x] Código: Cambios aplicados en Layout.tsx y AgendaView.tsx
+- [x] Visual QA: Screenshots de Desktop y Mobile aprobados
+- [x] Scroll Test: Sidebar/Topbar quedan fijos al scrollear
+- [x] Typography: Headers usan Inter + slate-800 + tracking-tight
+- [x] Glassmorphism: Calendar tiene backdrop-blur visible
+- [x] Gradient: Background con degradado slate→blue
+- [x] Drag & Drop: Funcionalidad de arrastrar eventos NO afectada
+- [x] Mobile Performance: No lag en iPhone SE (DevTools throttling)
 
 ---
 

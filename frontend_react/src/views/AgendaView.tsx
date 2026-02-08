@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
@@ -113,17 +113,9 @@ const getSourceLabel = (source: string | undefined): string => {
 
 
 
-// Fallback clinic hours
-const DEFAULT_START = '08:00';
-const DEFAULT_END = '19:00';
 
 export default function AgendaView() {
   const { user } = useAuth();
-  const [clinicSettings, setClinicSettings] = useState({
-    hours_start: DEFAULT_START,
-    hours_end: DEFAULT_END,
-    name: 'Consultorio'
-  });
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [googleBlocks, setGoogleBlocks] = useState<GoogleCalendarBlock[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
@@ -134,6 +126,7 @@ export default function AgendaView() {
   const [selectedEvent, setSelectedEvent] = useState<Appointment | null>(null);
   const [selectedProfessionalId, setSelectedProfessionalId] = useState<string>('all');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [currentView] = useState(window.innerWidth >= 1024 ? 'timeGridWeek' : (window.innerWidth >= 768 ? 'resourceTimeGridDay' : 'timeGridDay'));
 
   // Mobile Detection
   useEffect(() => {
@@ -202,8 +195,8 @@ export default function AgendaView() {
   // Fetch clinic settings
   const fetchClinicSettings = useCallback(async () => {
     try {
-      const response = await api.get('/admin/settings/clinic');
-      setClinicSettings(response.data);
+      await api.get('/admin/settings/clinic');
+      // Values are now hardcoded in the calendar view per FIX 1
     } catch (error) {
       console.error('Error fetching clinic settings:', error);
     }
@@ -381,6 +374,17 @@ export default function AgendaView() {
     };
   }, [fetchData]);
 
+  // FIX 2: Memoized filtered appointments and blocks
+  const filteredAppointments = useMemo(() => {
+    if (!selectedProfessionalId || selectedProfessionalId === 'all') return appointments;
+    return appointments.filter((apt: Appointment) => apt.professional_id.toString() === selectedProfessionalId);
+  }, [appointments, selectedProfessionalId]);
+
+  const filteredBlocks = useMemo(() => {
+    if (!selectedProfessionalId || selectedProfessionalId === 'all') return googleBlocks;
+    return googleBlocks.filter((block: GoogleCalendarBlock) => block.professional_id?.toString() === selectedProfessionalId);
+  }, [googleBlocks, selectedProfessionalId]);
+
   // Refetch when professional filter changes
   useEffect(() => {
     fetchData();
@@ -388,7 +392,7 @@ export default function AgendaView() {
 
   // Calendar events transformer
   const calendarEvents = [
-    ...appointments.map((apt) => ({
+    ...filteredAppointments.map((apt) => ({
       id: apt.id,
       title: `${apt.patient_name} - ${apt.appointment_type}`,
       start: apt.appointment_datetime,
@@ -398,7 +402,7 @@ export default function AgendaView() {
       extendedProps: { ...apt, eventType: 'appointment' },
       resourceId: apt.professional_id.toString(),
     })),
-    ...googleBlocks.map((block) => ({
+    ...filteredBlocks.map((block) => ({
       id: block.id,
       title: `🔒 ${block.title}`,
       start: block.start_datetime,
@@ -486,7 +490,7 @@ export default function AgendaView() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-transparent">
+    <div className="flex flex-col h-screen overflow-hidden bg-transparent">
       {/* Header - Fixed, non-scrollable */}
       <div className="flex-shrink-0 px-4 lg:px-6 pt-4 lg:pt-6">
         {/* Header */}
@@ -564,7 +568,7 @@ export default function AgendaView() {
           />
         ) : (
           <div className="flex-1 min-h-0 px-4 lg:px-6 pb-4 lg:pb-6">
-            <div className="h-full bg-white/60 backdrop-blur-lg md:backdrop-blur-2xl border border-white/40 shadow-2xl rounded-2xl md:rounded-3xl p-2 sm:p-4 overflow-auto">
+            <div className="h-[calc(100vh-140px)] bg-white/60 backdrop-blur-lg md:backdrop-blur-2xl border border-white/40 shadow-2xl rounded-2xl md:rounded-3xl p-2 sm:p-4 overflow-y-auto">
               {/* Calendar */}
 
               {/* Custom FullCalendar Styles for Spacious TimeGrid */}
@@ -668,7 +672,7 @@ export default function AgendaView() {
                 <FullCalendar
                   ref={calendarRef}
                   plugins={[dayGridPlugin, interactionPlugin, timeGridPlugin, resourceTimeGridPlugin, listPlugin]}
-                  initialView={window.innerWidth < 768 ? 'timeGridDay' : 'resourceTimeGridDay'}
+                  initialView={currentView}
                   resources={resources}
                   editable={true}
                   selectable={true}
@@ -686,7 +690,8 @@ export default function AgendaView() {
                       ? 'timeGridDay,dayGridMonth'
                       : (window.innerWidth < 1024 ? 'timeGridWeek,dayGridMonth' : 'resourceTimeGridDay,timeGridWeek,dayGridMonth'),
                   }}
-                  height={window.innerWidth < 768 ? 'auto' : 800}
+                  height="auto"
+                  contentHeight="auto"
                   selectAllow={(selectInfo) => {
                     const now = new Date();
                     return selectInfo.start >= now;
@@ -695,8 +700,8 @@ export default function AgendaView() {
                   dateClick={handleDateClick}
                   eventClick={handleEventClick}
                   slotEventOverlap={false}
-                  slotMinTime={`${clinicSettings.hours_start}:00`}
-                  slotMaxTime={`${clinicSettings.hours_end}:00`}
+                  slotMinTime="08:00:00"
+                  slotMaxTime="20:00:00"
                   locale="es"
                   buttonText={{
                     today: 'Hoy',
