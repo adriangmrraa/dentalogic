@@ -79,7 +79,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100 relative">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 to-blue-50 relative">
       {/* Mobile Backdrop */}
       {isMobileMenuOpen && (
         <div
@@ -146,7 +146,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 min-h-0 bg-gray-100 overflow-hidden">
+        <div className="flex-1 min-h-0 bg-transparent overflow-hidden">
           {children}
         </div>
       </main>

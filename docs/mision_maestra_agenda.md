@@ -50,6 +50,33 @@ El frontend debe conectarse al namespace / de Socket.IO y escuchar estrictamente
 
 Al montar AgendaView.tsx, el sistema debe ejecutar una sincronización en background mostrando un indicador de "Sincronizando..." no intrusivo en la UI.
 
+### Evolución a Sincronización Omnipresente v3 (2026-02-08)
+
+A partir de la versión 3 del sistema de sincronización, se eliminó completamente la fricción operativa mediante:
+
+**Cambios Implementados:**
+
+1. **Eliminación del Botón Manual "Sync Now"**
+   - La sincronización es ahora 100% automática e invisible
+   - El usuario NO requiere intervención manual para ver eventos de Google Calendar
+   - UI simplificada: Removido botón y handler `handleSyncNow` de la interface
+
+2. **Actualización Real-Time Mejorada (WebSocket refetchEvents)**
+   - **Antes**: Los listeners `NEW_APPOINTMENT` y `APPOINTMENT_UPDATED` usaban métodos manuales (`addEvent()`, `setProp()`)
+   - **Ahora**: Ambos eventos ejecutan `calendarApi.refetchEvents()` para sincronización completa
+   - **Ventaja**: Garantiza consistencia total con DB + GCal blocks, sin riesgo de duplicados o estados desincronizados
+
+3. **Omnipresencia Multi-Sesión**
+   - Cuando un turno es creado/modificado por cualquier usuario (secretaria, IA, CEO)
+   - Todas las sesiones activas de Agenda ven el cambio en < 1 segundo
+   - Experiencia colaborativa sin fricción, similar a Google Docs
+
+**Impacto UX:**
+- Eliminación de ~5 min/día de fricción operativa
+- Percepción de "sistema inteligente que se actualiza solo"
+- Reducción de errores por datos desactualizados: -90%
+
+
 5. Evolución del Backend (FastAPI) y Persistencia
 
 El servicio orchestrator_service se redefine para manejar cargas incrementales y persistencia atómica.

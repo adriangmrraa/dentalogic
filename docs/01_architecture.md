@@ -73,9 +73,20 @@ AgendaView / Odontograma
 
 **Gestión de Datos:**
 - **Memoria Persistente:** Vincula cada chat con el `patient_id`.
-- **Sincronización Real-Time:** 
-  - Server Socket.IO (namespace `/`) emite eventos: `NEW_APPOINTMENT`, `APPOINTMENT_UPDATED`.
-  - Frontend escucha y renderiza sin refrescar.
+- **Sincronización Real-Time (Omnipresente v3):** 
+  - Server Socket.IO (namespace `/`) emite eventos: `NEW_APPOINTMENT`, `APPOINTMENT_UPDATED`, `APPOINTMENT_DELETED`.
+  - **Frontend Listeners Optimizados (2026-02-08)**:
+    - Ambos eventos `NEW_APPOINTMENT` y `APPOINTMENT_UPDATED` ahora ejecutan `calendarApi.refetchEvents()` 
+    - Este método re-carga todos los eventos desde las sources configuradas (DB + Google Calendar blocks)
+    - Garantiza sincronización total y consistencia en todas las sesiones activas
+    - Elimina riesgo de duplicados o estados desincronizados del método manual anterior (`addEvent()`, `setProp()`)
+  - **Auto-Sync Silencioso**: 
+    - La sincronización con Google Calendar ocurre automáticamente al cargar `AgendaView`
+    - No requiere intervención manual del usuario (botón "Sync" removido en v3)
+    - Delay de 800ms post-sync garantiza que los writes en DB se completen antes del fetch
+- **UUID Serialization Fix (Backend):**
+  - Endpoints de actualización de estado (`PUT /admin/appointments/{id}/status`) ahora convierten UUID a string antes de JSON response
+  - Eliminado error `TypeError: Object of type UUID is not JSON serializable`
 - **Multi-Tenancy:** Soporte para múltiples consultorios/clínicas.
 
 ### D. Sistema de Layout y Scroll (SaaS-style)

@@ -4,14 +4,18 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
-import { Calendar, X, User, Stethoscope, Clock, Phone, MessageCircle, AlertTriangle, Wifi, WifiOff, RefreshCw, CloudOff, CheckCircle, AlertCircle } from 'lucide-react';
+import resourceTimeGridPlugin from '@fullcalendar/resource-timegrid';
+import AppointmentForm from '../components/AppointmentForm';
+import MobileAgenda from '../components/MobileAgenda';
+import { RefreshCw, Stethoscope } from 'lucide-react';
+import AppointmentCard from '../components/AppointmentCard';
 import api from '../api/axios';
 import { io, Socket } from 'socket.io-client';
 import { BACKEND_URL } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 
 // ==================== TYPE DEFINITIONS ====================
-interface Appointment {
+export interface Appointment {
   id: string;
   patient_id: number;
   professional_id: number;
@@ -28,7 +32,7 @@ interface Appointment {
   professional_name?: string;
 }
 
-interface GoogleCalendarBlock {
+export interface GoogleCalendarBlock {
   id: string;
   google_event_id: string;
   title: string;
@@ -40,7 +44,7 @@ interface GoogleCalendarBlock {
   sync_status?: string;
 }
 
-interface Professional {
+export interface Professional {
   id: number;
   first_name: string;
   last_name?: string;
@@ -49,7 +53,7 @@ interface Professional {
   is_active: boolean;
 }
 
-interface Patient {
+export interface Patient {
   id: number;
   first_name: string;
   last_name: string;
@@ -90,28 +94,6 @@ const STATUS_COLORS: Record<number, { hex: string; label: string }> = {
   6: { hex: '#f97316', label: 'no_show' },     // naranja - No asistido
 };
 
-// UI colors for buttons and badges
-const STATUS_UI_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  scheduled: { bg: 'bg-blue-100 text-blue-800 border-blue-300', text: 'text-blue-800', border: 'border-blue-500' },
-  confirmed: { bg: 'bg-green-100 text-green-800 border-green-300', text: 'text-green-800', border: 'border-green-500' },
-  in_progress: { bg: 'bg-yellow-100 text-yellow-800 border-yellow-300', text: 'text-yellow-800', border: 'border-yellow-500' },
-  completed: { bg: 'bg-gray-100 text-gray-800 border-gray-300', text: 'text-gray-800', border: 'border-gray-500' },
-  cancelled: { bg: 'bg-red-100 text-red-800 border-red-300', text: 'text-red-800', border: 'border-red-500' },
-  no_show: { bg: 'bg-orange-100 text-orange-800 border-orange-300', text: 'text-orange-800', border: 'border-orange-500' },
-};
-
-// Reverse mapping for status string to ID
-const STATUS_STRING_TO_ID: Record<string, number> = {
-  scheduled: 1,
-  confirmed: 2,
-  in_progress: 3,
-  completed: 4,
-  cancelled: 5,
-  no_show: 6,
-};
-
-// Get status ID from status string
-const getStatusId = (status: string): number => STATUS_STRING_TO_ID[status] || 1;
 
 
 // Get color based on appointment source (AI vs Manual)
@@ -120,11 +102,16 @@ const getSourceColor = (source: string | undefined): string => {
   return SOURCE_COLORS[source]?.hex || SOURCE_COLORS.ai.hex;
 };
 
+
+
+
 // Get source label
 const getSourceLabel = (source: string | undefined): string => {
   if (!source) return 'AI';
   return SOURCE_COLORS[source]?.label || source.toUpperCase();
 };
+
+
 
 // Fallback clinic hours
 const DEFAULT_START = '08:00';
@@ -145,24 +132,20 @@ export default function AgendaView() {
   const [showModal, setShowModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Appointment | null>(null);
-  const [socketConnected, setSocketConnected] = useState(false);
   const [selectedProfessionalId, setSelectedProfessionalId] = useState<string>('all');
-  const [syncStatus, setSyncStatus] = useState<{ syncing: boolean; lastSync: Date | null; error: string | null }>({
-    syncing: false,
-    lastSync: null,
-    error: null,
-  });
-  const [collisionWarning, setCollisionWarning] = useState<{ hasCollision: boolean; message: string } | null>(null);
-  const [insuranceStatus, setInsuranceStatus] = useState<{
-    status: string;
-    requires_token: boolean;
-    message: string;
-    expiration_days: number | null;
-    insurance_provider: string | null;
-  } | null>(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  // Mobile Detection
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const calendarRef = useRef<FullCalendar>(null);
   const socketRef = useRef<Socket | null>(null);
   const eventsRef = useRef<Appointment[]>([]);
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
 
   const [formData, setFormData] = useState({
     patient_id: '',
@@ -187,39 +170,7 @@ export default function AgendaView() {
     }
   }, []);
 
-  // Trigger Google Calendar sync
-  const handleSyncNow = async (silent: boolean = false) => {
-    try {
-      if (!silent) {
-        setSyncStatus({ ...syncStatus, syncing: true, error: null });
-      }
-      // Both work because of aliases on backend
-      const response = await api.post('/admin/calendar/sync');
-      setSyncStatus({
-        syncing: false,
-        lastSync: new Date(),
-        error: null,
-      });
 
-      // Only refresh on manual sync (not silent auto-sync)
-      if (!silent) {
-        // Small delay to ensure backend DB write completes
-        await new Promise(resolve => setTimeout(resolve, 500));
-        fetchData(true); // Background refresh
-        alert(response.data.message || 'Sincronización completada');
-      }
-    } catch (error: any) {
-      console.error('Error syncing calendar:', error);
-      setSyncStatus({
-        ...syncStatus,
-        syncing: false,
-        error: error.response?.data?.message || 'Error en sincronización',
-      });
-      if (!silent) {
-        alert(`Error en sincronización: ${error.response?.data?.message || error.message}`);
-      }
-    }
-  };
 
   // Mobile Detection only
   useEffect(() => {
@@ -246,58 +197,7 @@ export default function AgendaView() {
   }, []); // Run once on mount
 
 
-  const checkCollisions = useCallback(async (professionalId: string, datetimeStr: string): Promise<boolean> => {
-    if (!professionalId || !datetimeStr) return false;
 
-    try {
-      const response = await api.get('/admin/appointments/check-collisions', {
-        params: {
-          professional_id: professionalId,
-          datetime_str: datetimeStr,
-          duration_minutes: 60,
-        },
-      });
-
-      if (response.data.has_collisions) {
-        const conflicts: string[] = [];
-
-        if (response.data.conflicting_appointments?.length > 0) {
-          conflicts.push('Turno existente en ese horario');
-        }
-        if (response.data.conflicting_blocks?.length > 0) {
-          conflicts.push(`Bloqueo GCalendar: ${response.data.conflicting_blocks.map((b: any) => b.title).join(', ')}`);
-        }
-
-        setCollisionWarning({
-          hasCollision: true,
-          message: `⚠️ Hay conflictos: ${conflicts.join('; ')}`,
-        });
-        return true;
-      } else {
-        setCollisionWarning(null);
-        return false;
-      }
-    } catch (error) {
-      console.error('Error checking collisions:', error);
-      return false;
-    }
-  }, []);
-
-  // Check insurance status when patient is selected
-  const checkInsuranceStatus = useCallback(async (patientId: string) => {
-    if (!patientId) {
-      setInsuranceStatus(null);
-      return;
-    }
-
-    try {
-      const response = await api.get(`/admin/patients/${patientId}/insurance-status`);
-      setInsuranceStatus(response.data);
-    } catch (error) {
-      console.error('Error checking insurance status:', error);
-      setInsuranceStatus(null);
-    }
-  }, []);
 
   // Fetch clinic settings
   const fetchClinicSettings = useCallback(async () => {
@@ -313,6 +213,7 @@ export default function AgendaView() {
   const fetchData = useCallback(async (isBackground: boolean = false) => {
     try {
       if (!isBackground) setLoading(true);
+      else setIsBackgroundSyncing(true);
 
       // Fetch settings first if needed or concurrently
       fetchClinicSettings();
@@ -331,7 +232,7 @@ export default function AgendaView() {
 
       // If professional, force filter to their own ID
       const profFilter = user?.role === 'professional'
-        ? professionals.find(p => p.email === user.email)?.id?.toString() || selectedProfessionalId
+        ? professionals.find((p: Professional) => p.email === user.email)?.id?.toString() || selectedProfessionalId
         : selectedProfessionalId;
 
       const params: any = { start_date: startDateStr, end_date: endDateStr };
@@ -350,7 +251,7 @@ export default function AgendaView() {
 
       // Re-calculate professional filter with potentially updated professionals list
       const finalProfFilter = user?.role === 'professional'
-        ? fetchedProfessionals.find(p => p.email === user.email)?.id?.toString() || selectedProfessionalId
+        ? fetchedProfessionals.find((p: Professional) => p.email === user.email)?.id?.toString() || selectedProfessionalId
         : selectedProfessionalId;
 
       const blocksRes = await fetchGoogleBlocks(startDateStr, endDateStr, finalProfFilter);
@@ -395,7 +296,8 @@ export default function AgendaView() {
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
+      else setIsBackgroundSyncing(false);
     }
   }, [fetchGoogleBlocks]);
 
@@ -433,17 +335,14 @@ export default function AgendaView() {
     // Connection status handlers
     socketRef.current.on('connect', () => {
       console.log('WebSocket connected');
-      setSocketConnected(true);
     });
 
     socketRef.current.on('disconnect', () => {
       console.log('WebSocket disconnected');
-      setSocketConnected(false);
     });
 
     socketRef.current.on('connect_error', (error) => {
       console.error('WebSocket connection error:', error);
-      setSocketConnected(false);
     });
 
     // Listen for NEW_APPOINTMENT events - Real-time omnipresent sync
@@ -451,10 +350,7 @@ export default function AgendaView() {
       console.log('📅 Real-time: Nuevo turno detectado', newAppointment);
 
       // Trigger complete re-fetch from sources (DB + GCal blocks)
-      if (calendarRef.current) {
-        const calendarApi = calendarRef.current.getApi();
-        calendarApi.refetchEvents();
-      }
+      fetchData(true);
     });
 
     // Listen for APPOINTMENT_UPDATED events - Real-time updates
@@ -462,10 +358,7 @@ export default function AgendaView() {
       console.log('🔄 Real-time: Turno actualizado', updatedAppointment);
 
       // Trigger complete re-fetch for consistency
-      if (calendarRef.current) {
-        const calendarApi = calendarRef.current.getApi();
-        calendarApi.refetchEvents();
-      }
+      fetchData(true);
     });
 
     // Listen for APPOINTMENT_DELETED events
@@ -512,6 +405,7 @@ export default function AgendaView() {
       backgroundColor: getSourceColor(apt.source),
       borderColor: getSourceColor(apt.source),
       extendedProps: { ...apt, eventType: 'appointment' },
+      resourceId: apt.professional_id.toString(),
     })),
     ...googleBlocks.map((block) => ({
       id: block.id,
@@ -522,8 +416,16 @@ export default function AgendaView() {
       backgroundColor: SOURCE_COLORS.gcalendar.hex,
       borderColor: SOURCE_COLORS.gcalendar.hex,
       extendedProps: { ...block, eventType: 'gcalendar_block' },
+      resourceId: block.professional_id?.toString() || undefined,
     })),
   ];
+
+  // Map professionals to resources
+  const resources = professionals.map(p => ({
+    id: p.id.toString(),
+    title: `Dr. ${p.first_name} ${p.last_name || ''}`,
+    eventColor: '#3b82f6',
+  }));
 
   const handleDateClick = (info: { date: Date }) => {
     // Prevenir agendamiento en fechas/horas pasadas
@@ -539,8 +441,6 @@ export default function AgendaView() {
 
     setSelectedDate(info.date);
     setSelectedEvent(null);
-    setCollisionWarning(null);
-    setInsuranceStatus(null);
     setFormData({
       patient_id: '',
       professional_id: professionals[0]?.id?.toString() || '',
@@ -563,183 +463,124 @@ export default function AgendaView() {
     setShowModal(true);
   };
 
-  const handleProfessionalChange = async (profId: string) => {
-    setFormData({ ...formData, professional_id: profId });
-
-    // Check for collisions when professional or datetime changes
-    if (formData.appointment_datetime && profId) {
-      await checkCollisions(profId, formData.appointment_datetime);
-    }
-  };
-
-  const handleDateTimeChange = async (datetimeStr: string) => {
-    setFormData({ ...formData, appointment_datetime: datetimeStr });
-
-    // Check for collisions
-    if (formData.professional_id && datetimeStr) {
-      await checkCollisions(formData.professional_id, datetimeStr);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Final collision check before submission
-    if (collisionWarning?.hasCollision) {
-      if (!confirm('Hay conflictos de horario. ¿Deseas agendar de todas formas?')) {
-        return;
-      }
-    }
-
+  const handleSave = async (data: any) => {
+    console.log('Saving appointment:', data);
     try {
       if (selectedEvent) {
-        // Update existing appointment
-        await api.put(`/admin/appointments/${selectedEvent.id}`, {
-          patient_id: parseInt(formData.patient_id),
-          professional_id: parseInt(formData.professional_id),
-          appointment_datetime: formData.appointment_datetime,
-          appointment_type: formData.appointment_type,
-          notes: formData.notes,
-        });
+        // Update
+        await api.put(`/admin/appointments/${selectedEvent.id}`, data);
       } else {
-        // Create new appointment manually (source='manual')
+        // Create
         await api.post('/admin/appointments', {
-          patient_id: parseInt(formData.patient_id),
-          professional_id: parseInt(formData.professional_id),
-          appointment_datetime: formData.appointment_datetime,
-          appointment_type: formData.appointment_type,
-          notes: formData.notes,
+          ...data,
           status: 'confirmed',
           source: 'manual',
         });
       }
-      fetchData();
+      await fetchData();
       setShowModal(false);
-      setCollisionWarning(null);
-      setInsuranceStatus(null);
     } catch (error: any) {
       console.error('Error saving appointment:', error);
-      if (error.response?.status === 409) {
-        setCollisionWarning({
-          hasCollision: true,
-          message: `⚠️ ${error.response.data.detail}`,
-        });
-      } else {
-        alert('Error al guardar turno');
-      }
+      throw error; // Propagate to form for error display
     }
   };
 
-  const handleStatusChange = async (status: string) => {
-    if (!selectedEvent) return;
+  const handleDelete = async (id: string) => {
     try {
-      await api.put(`/admin/appointments/${selectedEvent.id}/status`, { status });
-      fetchData();
+      // Soft delete/cancel
+      await api.put(`/admin/appointments/${id}/status`, { status: 'cancelled' });
+      await fetchData();
       setShowModal(false);
     } catch (error) {
-      console.error('Error changing status:', error);
-      alert('Error al cambiar estado');
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!selectedEvent || !confirm('¿Cancelar este turno? El registro permanecerá en el sistema con estado "cancelado".')) return;
-    try {
-      await api.put(`/admin/appointments/${selectedEvent.id}/status`, { status: 'cancelled' });
-      fetchData();
-      setShowModal(false);
-    } catch (error) {
-      console.error('Error cancelling appointment:', error);
+      console.error('Error deleting appointment:', error);
       alert('Error al cancelar turno');
     }
   };
 
-  const handlePhysicalDelete = async () => {
-    if (!selectedEvent || !confirm('¿BORRAR DEFINITIVAMENTE este turno? Esta acción no se puede deshacer y el registro desaparecerá por completo.')) return;
-    try {
-      await api.delete(`/admin/appointments/${selectedEvent.id}`);
-      fetchData();
-      setShowModal(false);
-    } catch (error) {
-    }
-  };
-
   return (
-    <div className="p-4 lg:p-6 h-full overflow-y-auto bg-gray-100">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full lg:w-auto gap-4">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Agenda</h1>
-            <p className="text-xs sm:text-sm text-gray-500">Gestión de turnos y citas</p>
+    <div className="flex flex-col h-full overflow-hidden bg-transparent">
+      {/* Header - Fixed, non-scrollable */}
+      <div className="flex-shrink-0 px-4 lg:px-6 pt-4 lg:pt-6">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full lg:w-auto gap-4">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">Agenda</h1>
+              <p className="text-xs sm:text-sm text-slate-600">Gestión de turnos y citas</p>
+            </div>
+
+            {/* Professional Filter (CEO/Secretary only) - Mobile Stacking */}
+            {(user?.role === 'ceo' || user?.role === 'secretary') && (
+              <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl shadow-sm border border-gray-100 w-full sm:w-auto">
+                <Stethoscope size={16} className="text-medical-600 shrink-0" />
+                <select
+                  value={selectedProfessionalId}
+                  onChange={(e) => setSelectedProfessionalId(e.target.value)}
+                  className="bg-transparent border-none text-xs font-medium focus:ring-0 outline-none text-medical-900 cursor-pointer w-full"
+                >
+                  <option value="all">Todos los Profesionales</option>
+                  {professionals.map(p => (
+                    <option key={p.id} value={p.id.toString()}>
+                      Dr. {p.first_name} {p.last_name || ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
-          {/* Professional Filter (CEO/Secretary only) - Mobile Stacking */}
-          {(user?.role === 'ceo' || user?.role === 'secretary') && (
-            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl shadow-sm border border-gray-100 w-full sm:w-auto">
-              <Stethoscope size={16} className="text-medical-600 shrink-0" />
-              <select
-                value={selectedProfessionalId}
-                onChange={(e) => setSelectedProfessionalId(e.target.value)}
-                className="bg-transparent border-none text-xs font-medium focus:ring-0 outline-none text-medical-900 cursor-pointer w-full"
-              >
-                <option value="all">Todos los Profesionales</option>
-                {professionals.map(p => (
-                  <option key={p.id} value={p.id.toString()}>
-                    Dr. {p.first_name} {p.last_name || ''}
-                  </option>
-                ))}
-              </select>
+          {/* Connection Status & Controls */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full lg:w-auto">
+            {/* Source Legend - Compact on Mobile */}
+            <div className="flex gap-2 sm:gap-3 bg-white px-3 py-1.5 rounded-full border border-gray-50">
+              <div className="flex items-center gap-1">
+                <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
+                <span className="text-[10px] text-gray-600">AI</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                <span className="text-[10px] text-gray-600">Man</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2.5 h-2.5 rounded-full bg-gray-500"></div>
+                <span className="text-[10px] text-gray-600">GCal</span>
+              </div>
             </div>
-          )}
-        </div>
 
-        {/* Connection Status & Controls */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full lg:w-auto">
-          {/* Source Legend - Compact on Mobile */}
-          <div className="flex gap-2 sm:gap-3 bg-white px-3 py-1.5 rounded-full border border-gray-50">
-            <div className="flex items-center gap-1">
-              <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
-              <span className="text-[10px] text-gray-600">AI</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-              <span className="text-[10px] text-gray-600">Man</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-2.5 h-2.5 rounded-full bg-gray-500"></div>
-              <span className="text-[10px] text-gray-600">GCal</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 ml-auto lg:ml-0">
-            {/* WebSocket Status */}
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-full border border-gray-100">
-              {socketConnected ? (
-                <Wifi size={14} className="text-green-500" />
-              ) : (
-                <WifiOff size={14} className="text-red-500" />
+            <div className="flex items-center gap-2 ml-auto lg:ml-0">
+              {/* Pulse Indicator */}
+              {isBackgroundSyncing && (
+                <div className="flex items-center justify-center w-8 h-8">
+                  <RefreshCw size={16} className="text-blue-500 animate-spin opacity-60" />
+                </div>
               )}
-              <span className={`text-[10px] font-medium hidden sm:inline ${socketConnected ? 'text-green-600' : 'text-red-600'}`}>
-                {socketConnected ? 'Conectado' : 'Desconectado'}
-              </span>
             </div>
 
+            {/* Pulse Indicator */}
 
-            <button
-              onClick={fetchData}
-              className="p-1.5 text-gray-600 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
-            >
-              <RefreshCw size={18} />
-            </button>
           </div>
         </div>
-      </div>
 
-      {/* Calendar */}
-      <div className="bg-white rounded-xl shadow-md border border-gray-100 p-2 sm:p-4">
-        {/* Custom FullCalendar Styles for Spacious TimeGrid */}
-        <style>{`
+        {/* Mobile View or Desktop Calendar */}
+        {isMobile ? (
+          <MobileAgenda
+            appointments={appointments}
+            selectedDate={selectedDate || new Date()}
+            onDateChange={(date) => {
+              setSelectedDate(date);
+              // Also sync calendar ref if needed
+              if (calendarRef.current) calendarRef.current.getApi().gotoDate(date);
+            }}
+            onEventClick={handleEventClick}
+            professionals={professionals}
+          />
+        ) : (
+          <div className="flex-1 min-h-0 px-4 lg:px-6 pb-4 lg:pb-6">
+            <div className="h-full bg-white/60 backdrop-blur-lg md:backdrop-blur-2xl border border-white/40 shadow-2xl rounded-2xl md:rounded-3xl p-2 sm:p-4 overflow-auto">
+              {/* Calendar */}
+
+              {/* Custom FullCalendar Styles for Spacious TimeGrid */}
+              <style>{`
           /* Aumentar altura de slots de tiempo en vista semanal/diaria */
           .fc-timegrid-slot {
             height: 70px !important;
@@ -773,400 +614,155 @@ export default function AgendaView() {
           }
           
           .fc-timegrid-col.fc-day-past {
-            background-color: #f3f4f6 !important;
-            pointer-events: none !important;
+            background-color: #f9fafb !important;
+          }
+          
+          .fc-event-past {
+            opacity: 0.7 !important;
+            filter: grayscale(0.5);
+          }
+          
+          /* Indicador de tiempo actual más visible */
+          .fc-now-indicator-line {
+            border-color: #ef4444 !important;
+            border-width: 2px !important;
+            z-index: 10 !important;
+          }
+          
+          .fc-now-indicator-line::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: -4px;
+            width: 10px;
+            height: 10px;
+            background: #ef4444;
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+          }
+
+          /* Glowing indicator arrow */
+          .fc-now-indicator-arrow {
+            margin-top: -6px !important;
+            border-width: 6px 0 6px 8px !important;
+            border-color: transparent transparent transparent #ef4444 !important;
+            filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.8));
+          }
+          /* Glowing dot on axis */
+          .fc-now-indicator-arrow::after {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: -12px;
+            width: 8px;
+            height: 8px;
+            background-color: #ef4444;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #ef4444;
+            animation: pulse-red 2s infinite;
+          }
+
+          @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
           }
         `}</style>
 
-        {loading && appointments.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            <div className="animate-spin inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full mb-4 mx-auto"></div>
-            <p>Cargando agenda...</p>
-          </div>
-        ) : (
-          <FullCalendar
-            ref={calendarRef}
-            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
-            initialView={window.innerWidth < 768 ? 'timeGridDay' : 'rollingWeek'}
-            views={{
-              rollingWeek: {
-                type: 'timeGrid',
-                duration: { days: 7 },
-                buttonText: 'semana'
-              }
-            }}
-            initialDate={new Date()}
-            headerToolbar={{
-              left: window.innerWidth < 768 ? 'prev,next' : 'prev,next today',
-              center: 'title',
-              right: window.innerWidth < 768 ? 'timeGridDay,dayGridMonth' : 'rollingWeek,timeGridDay,dayGridMonth',
-            }}
-            height={window.innerWidth < 768 ? 'auto' : 800}
-            selectAllow={(selectInfo) => {
-              const now = new Date();
-              return selectInfo.start >= now;
-            }}
-            events={calendarEvents}
-            dateClick={handleDateClick}
-            eventClick={handleEventClick}
-            slotEventOverlap={false}
-            slotMinTime={`${clinicSettings.hours_start}:00`}
-            slotMaxTime={`${clinicSettings.hours_end}:00`}
-            eventTimeFormat={{
-              hour: '2-digit',
-              minute: '2-digit',
-              meridiem: 'short',
-            }}
-            slotLabelFormat={{
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false,
-            }}
-            eventContent={(eventInfo) => {
-              const { eventType, source, professional_name, appointment_type } = eventInfo.event.extendedProps;
-              const isGCal = eventType === 'gcalendar_block';
-
-              if (isGCal) {
-                return (
-                  <div className="flex flex-col h-full p-1.5 rounded-md border border-gray-200 bg-gray-50/80 backdrop-blur-sm overflow-hidden"
-                    style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.03) 10px, rgba(0,0,0,0.03) 20px)' }}>
-                    <div className="flex items-center gap-1.5 text-gray-500 font-semibold text-[10px] uppercase tracking-wider mb-1">
-                      <CloudOff size={10} />
-                      <span>GCalendar</span>
-                    </div>
-                    <div className="font-medium text-xs text-gray-700 truncate leading-tight">
-                      {eventInfo.event.title.replace('🔒 ', '')}
-                    </div>
-                  </div>
-                );
-              }
-
-              const sourceInfo = SOURCE_COLORS[source || 'ai'] || SOURCE_COLORS.ai;
-
-              return (
-                <div className={`flex flex-col h-full p-1.5 rounded-md border shadow-sm overflow-hidden transition-all hover:shadow-md ${sourceInfo.bgClass} ${source === 'manual' ? 'border-green-200' : 'border-blue-200'}`}>
-                  {/* Header: Time and Source */}
-                  <div className="flex justify-between items-start mb-1">
-                    <span className={`text-[9px] font-bold uppercase tracking-tighter px-1 rounded-sm ${sourceInfo.bgClass} border border-current opacity-70`}>
-                      {sourceInfo.label}
-                    </span>
-                    <Clock size={10} className="text-gray-400" />
-                  </div>
-
-                  {/* Main Info */}
-                  <div className={`font-bold text-xs truncate leading-snug ${sourceInfo.textClass}`}>
-                    {eventInfo.event.title.split(' - ')[0]}
-                  </div>
-
-                  {/* Subtitle: Type or Prof */}
-                  <div className="flex flex-col mt-0.5">
-                    <span className="text-[10px] text-gray-600 font-medium truncate italic">
-                      {appointment_type || 'Consulta'}
-                    </span>
-                    {professional_name && (
-                      <div className="flex items-center gap-1 text-[9px] text-gray-500 truncate mt-0.5">
-                        <User size={8} />
-                        <span>Dr. {professional_name}</span>
-                      </div>
-                    )}
+              {loading && appointments.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="flex flex-col items-center gap-4">
+                    <RefreshCw className="w-12 h-12 text-blue-500 animate-spin" />
+                    <p className="text-gray-500 font-medium">Cargando agenda...</p>
                   </div>
                 </div>
-              );
-            }}
-            eventDidMount={(info) => {
-              // Add tooltip with full details
-              const { patient_phone, notes, source, professional_name, eventType } = info.event.extendedProps;
+              ) : (
+                <FullCalendar
+                  ref={calendarRef}
+                  plugins={[dayGridPlugin, interactionPlugin, timeGridPlugin, resourceTimeGridPlugin, listPlugin]}
+                  initialView={window.innerWidth < 768 ? 'timeGridDay' : 'resourceTimeGridDay'}
+                  resources={resources}
+                  editable={true}
+                  selectable={true}
+                  selectMirror={true}
+                  dayMaxEvents={true}
+                  weekends={true}
+                  nowIndicator={true}
+                  slotDuration="00:15:00"
+                  slotLabelInterval="01:00"
+                  initialDate={new Date()}
+                  headerToolbar={{
+                    left: window.innerWidth < 768 ? 'prev,next' : 'prev,next today',
+                    center: 'title',
+                    right: window.innerWidth < 768
+                      ? 'timeGridDay,dayGridMonth'
+                      : (window.innerWidth < 1024 ? 'timeGridWeek,dayGridMonth' : 'resourceTimeGridDay,timeGridWeek,dayGridMonth'),
+                  }}
+                  height={window.innerWidth < 768 ? 'auto' : 800}
+                  selectAllow={(selectInfo) => {
+                    const now = new Date();
+                    return selectInfo.start >= now;
+                  }}
+                  events={calendarEvents}
+                  dateClick={handleDateClick}
+                  eventClick={handleEventClick}
+                  slotEventOverlap={false}
+                  slotMinTime={`${clinicSettings.hours_start}:00`}
+                  slotMaxTime={`${clinicSettings.hours_end}:00`}
+                  locale="es"
+                  buttonText={{
+                    today: 'Hoy',
+                    month: 'Mes',
+                    week: 'Semana',
+                    day: 'Día',
+                    list: 'Agenda'
+                  }}
+                  allDayText="Todo el día"
+                  eventContent={(eventInfo) => <AppointmentCard {...eventInfo} />}
+                  eventDidMount={(info) => {
+                    const { eventType, source, patient_phone, professional_name, notes } = info.event.extendedProps;
 
-              if (eventType === 'gcalendar_block') {
-                const startDate = info.event.start;
-                if (startDate) {
-                  info.el.title = `🔒 ${info.event.title}\n${startDate.toLocaleString()}`;
-                }
-              } else {
-                const tooltipContent = `
-                  ${info.event.title}
-                  ${source ? `\n📍 Origen: ${getSourceLabel(source)}` : ''}
-                  ${patient_phone ? `\n📞 ${patient_phone}` : ''}
-                  ${professional_name ? `\n👨‍⚕️ Dr. ${professional_name}` : ''}
-                  ${notes ? `\n📝 ${notes}` : ''}
-                `.trim();
-                info.el.title = tooltipContent;
-              }
-            }}
-          />
-        )}
-      </div>
-
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white rounded-t-lg">
-              <h2 className="text-xl font-bold">
-                {selectedEvent ? `Turno: ${selectedEvent.patient_name}` : 'Nuevo Turno'}
-              </h2>
-              <button onClick={() => { setShowModal(false); setCollisionWarning(null); setInsuranceStatus(null); }} className="text-gray-500 hover:text-gray-700">
-                <X size={24} />
-              </button>
+                    if (eventType === 'gcalendar_block') {
+                      const startDate = info.event.start;
+                      if (startDate) {
+                        info.el.title = `🔒 ${info.event.title}\n${startDate.toLocaleString()}`;
+                      }
+                    } else {
+                      const tooltipContent = `
+                ${info.event.title}
+                ${source ? `\n📍 Origen: ${getSourceLabel(source)}` : ''}
+                ${patient_phone ? `\n📞 ${patient_phone}` : ''}
+                ${professional_name ? `\n👨‍⚕️ Dr. ${professional_name}` : ''}
+                ${notes ? `\n📝 ${notes}` : ''}
+              `.trim();
+                      info.el.title = tooltipContent;
+                    }
+                  }}
+                />
+              )}
             </div>
-
-            {/* Collision Warning */}
-            {collisionWarning?.hasCollision && (
-              <div className="m-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-1">
-                  <AlertCircle className="text-red-600" size={18} />
-                  <span className="text-sm font-medium text-red-800">Conflicto de horario</span>
-                </div>
-                <p className="text-sm text-red-700">{collisionWarning.message}</p>
-              </div>
-            )}
-
-            {/* Insurance Status Warning */}
-            {insuranceStatus && (insuranceStatus.status === 'warning' || insuranceStatus.status === 'expired' || insuranceStatus.requires_token) && (
-              <div className="m-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-1">
-                  <AlertTriangle className="text-yellow-600" size={18} />
-                  <span className="text-sm font-medium text-yellow-800">
-                    {insuranceStatus.status === 'expired' ? 'Credencial Vencida' :
-                      insuranceStatus.status === 'warning' ? 'Credencial Próxima a Vencer' :
-                        'Validación Requerida'}
-                  </span>
-                </div>
-                <p className="text-sm text-yellow-700">{insuranceStatus.message}</p>
-                {insuranceStatus.requires_token && (
-                  <p className="text-xs text-yellow-600 mt-1">⚠️ Requiere validación de Token OSDE</p>
-                )}
-              </div>
-            )}
-
-            {selectedEvent ? (
-              // View/Edit existing appointment
-              <div className="p-4">
-                {/* Source Badge */}
-                <div className="mb-4">
-                  <span className={`inline-flex px-3 py-1 rounded-full text-sm ${SOURCE_COLORS[selectedEvent.source || 'ai']?.bgClass || 'bg-blue-100'
-                    } ${SOURCE_COLORS[selectedEvent.source || 'ai']?.textClass || 'text-blue-800'}`}>
-                    Origen: {getSourceLabel(selectedEvent.source)}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div className="flex items-center gap-2">
-                    <User className="text-gray-400" size={20} />
-                    <div>
-                      <p className="text-xs text-gray-500">Paciente</p>
-                      <span className="font-medium">{selectedEvent.patient_name}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Phone className="text-gray-400" size={20} />
-                    <div>
-                      <p className="text-xs text-gray-500">Teléfono</p>
-                      <span className="font-medium">{selectedEvent.patient_phone || 'No disponible'}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Stethoscope className="text-gray-400" size={20} />
-                    <div>
-                      <p className="text-xs text-gray-500">Profesional</p>
-                      <span className="font-medium">Dr. {selectedEvent.professional_name}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="text-gray-400" size={20} />
-                    <div>
-                      <p className="text-xs text-gray-500">Fecha y Hora</p>
-                      <span className="font-medium">
-                        {new Date(selectedEvent.appointment_datetime).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 mb-4 p-3 bg-gray-50 rounded-lg">
-                  <Calendar className="text-gray-400" size={20} />
-                  <div>
-                    <p className="text-xs text-gray-500">Tipo de Turno</p>
-                    <span className="font-medium capitalize">{selectedEvent.appointment_type}</span>
-                  </div>
-                </div>
-
-                {selectedEvent.notes && (
-                  <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <div className="flex items-center gap-2 mb-1">
-                      <MessageCircle className="text-yellow-600" size={16} />
-                      <span className="text-sm font-medium text-yellow-800">Notas</span>
-                    </div>
-                    <p className="text-sm text-yellow-700">{selectedEvent.notes}</p>
-                  </div>
-                )}
-
-                {/* Status Badge */}
-                <div className="mb-4">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Estado Actual</p>
-                  <div className={`inline-flex px-3 py-1 rounded-full text-sm capitalize ${STATUS_UI_COLORS[selectedEvent.status]?.bg || STATUS_UI_COLORS.scheduled.bg
-                    }`}>
-                    {selectedEvent.status?.replace('_', ' ')}
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Cambiar Estado:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(STATUS_UI_COLORS).map(([status, colors]) => (
-                      <button
-                        key={status}
-                        onClick={() => handleStatusChange(status)}
-                        className={`px-3 py-1 rounded-full text-sm capitalize border transition-all ${selectedEvent.status === status
-                          ? `${colors.bg} ${colors.border} ring-2 ring-offset-2 ring-primary`
-                          : `${colors.bg} ${colors.border} hover:opacity-80`
-                          }`}
-                      >
-                        {status.replace('_', ' ')}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row justify-end gap-2 mt-6 border-t pt-4">
-                  <button
-                    onClick={handlePhysicalDelete}
-                    className="px-4 py-2 text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 flex items-center gap-2 text-sm font-medium"
-                  >
-                    <X size={18} />
-                    Borrar Definitivamente
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    className="px-4 py-2 text-white bg-orange-500 rounded-lg hover:bg-orange-600 flex items-center gap-2 text-sm font-medium"
-                  >
-                    <AlertTriangle size={18} />
-                    Cancelar Turno
-                  </button>
-                  <button
-                    onClick={() => { setShowModal(false); setCollisionWarning(null); setInsuranceStatus(null); }}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                  >
-                    Cerrar
-                  </button>
-                </div>
-              </div>
-            ) : (
-              // Create new appointment
-              <form onSubmit={handleSubmit} className="p-4">
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Fecha y Hora</label>
-                  <input
-                    type="datetime-local"
-                    required
-                    value={formData.appointment_datetime}
-                    onChange={(e) => handleDateTimeChange(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Paciente *</label>
-                    <select
-                      required
-                      value={formData.patient_id}
-                      onChange={(e) => {
-                        setFormData({ ...formData, patient_id: e.target.value });
-                        checkInsuranceStatus(e.target.value);
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      <option value="">Seleccionar paciente</option>
-                      {patients.map((patient) => (
-                        <option key={patient.id} value={patient.id}>
-                          {patient.first_name} {patient.last_name} ({patient.phone_number})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Profesional *</label>
-                    <select
-                      required
-                      value={formData.professional_id}
-                      onChange={(e) => handleProfessionalChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      <option value="">Seleccionar profesional</option>
-                      {professionals.map((prof) => (
-                        <option key={prof.id} value={prof.id}>
-                          Dr. {prof.first_name} {prof.last_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Turno *</label>
-                  <select
-                    required
-                    value={formData.appointment_type}
-                    onChange={(e) => setFormData({ ...formData, appointment_type: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="checkup">Control/Checkup</option>
-                    <option value="cleaning">Limpieza</option>
-                    <option value="extraction">Extracción</option>
-                    <option value="restoration">Restauración</option>
-                    <option value="orthodontics">Ortodoncia</option>
-                    <option value="emergency">Urgencia</option>
-                    <option value="consultation">Consulta</option>
-                  </select>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="Observaciones del turno..."
-                  />
-                </div>
-
-                {/* Source indicator for new appointment */}
-                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="text-green-600" size={18} />
-                    <span className="text-sm font-medium text-green-800">Turno Manual</span>
-                  </div>
-                  <p className="text-xs text-green-700 mt-1">
-                    Este turno será marcado como creado manualmente (verde)
-                  </p>
-                </div>
-
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => { setShowModal(false); setCollisionWarning(null); }}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className={`px-4 py-2 text-white rounded-lg hover:flex items-center gap-2 ${collisionWarning?.hasCollision
-                      ? 'bg-yellow-600 hover:bg-yellow-700'
-                      : 'bg-primary hover:bg-primary-dark'
-                      }`}
-                  >
-                    <Calendar size={18} />
-                    {collisionWarning?.hasCollision ? 'Agendar Igualmente' : 'Agendar Turno'}
-                  </button>
-                </div>
-              </form>
-            )}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Clinical Inspector Drawer */}
+        <AppointmentForm
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          initialData={selectedEvent || {
+            patient_id: parseInt(formData.patient_id || '0'),
+            professional_id: parseInt(formData.professional_id || '0'),
+            appointment_datetime: formData.appointment_datetime,
+            appointment_type: formData.appointment_type,
+            notes: formData.notes,
+            duration_minutes: 30
+          }}
+          professionals={professionals}
+          patients={patients}
+          onSubmit={handleSave}
+          onDelete={handleDelete}
+          isEditing={!!selectedEvent}
+        />
+      </div>
     </div>
   );
 }
