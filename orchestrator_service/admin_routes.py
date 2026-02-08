@@ -604,22 +604,32 @@ async def send_chat_message(payload: ChatSendMessage, request: Request, backgrou
 # ==================== ENDPOINTS DASHBOARD ====================
 
 @router.get("/stats/summary", dependencies=[Depends(verify_admin_token)])
-async def get_dashboard_stats():
-    """Devuelve métricas avanzadas para el dashboard soberano."""
+async def get_dashboard_stats(range: str = 'weekly'):
+    """Devuelve métricas avanzadas filtradas por rango temporal (weekly/monthly)."""
     try:
-        # 1. IA Conversations (Total de mensajes promediado por actividad)
-        ia_conversations = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages") or 0
+        days = 7 if range == 'weekly' else 30
         
-        # 2. IA Appointments (Turnos originados por la IA)
-        ia_appointments = await db.pool.fetchval("SELECT COUNT(*) FROM appointments WHERE source = 'ai'") or 0
+        # 1. IA Conversations (Mensajes en el rango seleccionado)
+        ia_conversations = await db.pool.fetchval("""
+            SELECT COUNT(*) FROM chat_messages 
+            WHERE created_at >= CURRENT_DATE - INTERVAL '1 day' * $1
+        """, days) or 0
         
-        # 3. Urgencias activas
+        # 2. IA Appointments (Turnos de IA en el rango seleccionado)
+        ia_appointments = await db.pool.fetchval("""
+            SELECT COUNT(*) FROM appointments 
+            WHERE source = 'ai' AND appointment_datetime >= CURRENT_DATE - INTERVAL '1 day' * $1
+        """, days) or 0
+        
+        # 3. Urgencias activas (Total acumulado de urgencias detectadas en el rango)
         active_urgencies = await db.pool.fetchval("""
             SELECT COUNT(*) FROM appointments 
-            WHERE urgency_level IN ('high', 'emergency') AND status NOT IN ('cancelled', 'completed')
-        """) or 0
+            WHERE urgency_level IN ('high', 'emergency') 
+            AND status NOT IN ('cancelled', 'completed')
+            AND appointment_datetime >= CURRENT_DATE - INTERVAL '1 day' * $1
+        """, days) or 0
         
-        # 4. Ingresos Totales (Solo por turnos con asistencia confirmada)
+        # 4. Ingresos Totales (Basado en el rango seleccionado)
         total_revenue = await db.pool.fetchval("""
             SELECT COALESCE(SUM(at.amount), 0) 
             FROM accounting_transactions at
@@ -627,16 +637,17 @@ async def get_dashboard_stats():
             WHERE at.transaction_type = 'payment' 
             AND at.status = 'completed'
             AND a.status IN ('completed', 'attended')
-        """) or 0
+            AND a.appointment_datetime >= CURRENT_DATE - INTERVAL '1 day' * $1
+        """, days) or 0
 
-        # 5. Datos de crecimiento (Últimos 7 días)
-        growth_rows = await db.pool.fetch("""
+        # 5. Datos de crecimiento (Últimos N días)
+        growth_rows = await db.pool.fetch(f"""
             SELECT 
                 DATE(appointment_datetime) as date,
                 COUNT(*) FILTER (WHERE source = 'ai') as ia_referrals,
                 COUNT(*) FILTER (WHERE status IN ('completed', 'attended')) as completed_appointments
             FROM appointments
-            WHERE appointment_datetime >= CURRENT_DATE - INTERVAL '7 days'
+            WHERE appointment_datetime >= CURRENT_DATE - INTERVAL '{days} days'
             GROUP BY DATE(appointment_datetime)
             ORDER BY DATE(appointment_datetime) ASC
         """)

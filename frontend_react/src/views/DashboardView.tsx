@@ -85,6 +85,7 @@ export default function DashboardView() {
   const [stats, setStats] = useState<AnalyticsStats | null>(null);
   const [urgencies, setUrgencies] = useState<UrgencyRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState<'weekly' | 'monthly'>('weekly');
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -102,11 +103,11 @@ export default function DashboardView() {
       });
     });
 
-    const loadDashboardData = async () => {
+    const loadDashboardData = async (range: string) => {
       try {
         setLoading(true);
         const [statsRes, urgenciesRes] = await Promise.all([
-          api.get('/admin/stats/summary'),
+          api.get(`/admin/stats/summary?range=${range}`),
           api.get('/admin/chat/urgencies')
         ]);
 
@@ -120,12 +121,12 @@ export default function DashboardView() {
       }
     };
 
-    loadDashboardData();
+    loadDashboardData(timeRange);
 
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
-  }, []);
+  }, [timeRange]); // Re-run effect when timeRange changes to fetch new data
 
   if (loading) {
     return (
@@ -144,8 +145,24 @@ export default function DashboardView() {
           <p className="text-slate-500 text-sm">Monitoreo en tiempo real de la clínica</p>
         </div>
         <div className="flex gap-2">
-          <button className="px-4 py-2 bg-white rounded-xl shadow-sm border border-slate-200 text-sm font-medium hover:bg-slate-50 transition-colors">Semanal</button>
-          <button className="px-4 py-2 bg-slate-800 text-white rounded-xl shadow-sm text-sm font-medium hover:bg-slate-700 transition-colors">Mensual</button>
+          <button
+            onClick={() => setTimeRange('weekly')}
+            className={`px-4 py-2 rounded-xl shadow-sm border text-sm font-medium transition-colors ${timeRange === 'weekly'
+                ? 'bg-slate-800 text-white border-slate-800'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+          >
+            Semanal
+          </button>
+          <button
+            onClick={() => setTimeRange('monthly')}
+            className={`px-4 py-2 rounded-xl shadow-sm border text-sm font-medium transition-colors ${timeRange === 'monthly'
+                ? 'bg-slate-800 text-white border-slate-800'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+          >
+            Mensual
+          </button>
         </div>
       </header>
 
