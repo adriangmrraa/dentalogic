@@ -389,6 +389,29 @@ shared/
 
 ---
 
-**Fecha de Creación:** 2025-01-30  
-**Versión:** 1.0  
-**Estado:** Especificación Completa - Listo para Implementación
+---
+
+## 📊 Analítica y Business Intelligence (BI)
+
+Para la toma de decisiones gerenciales, el sistema implementa un motor de analítica soberana que consume datos de pacientes, turnos e historias clínicas.
+
+### 1. Lógica de Negocio: Ingresos Reales
+A diferencia de los sistemas contables tradicionales, el dashboard de Dentalogic prioriza el **flujo de caja confirmado**.
+- **Regla**: Solo se computan como ingresos las transacciones `completed` vinculadas a turnos con estado `completed` o `attended`.
+- **Propósito**: Evitar inflar métricas con turnos agendados que nunca se concretaron.
+
+### 2. Métricas de IA y Eficiencia
+- **IA Conversaciones**: Conteo real de mensajes en `chat_messages` dentro del rango temporal.
+- **IA Citas**: Turnos en `appointments` donde `source = 'ai'`, permitiendo medir el ROI del asistente virtual.
+- **Triage Monitoring**: Seguimiento de `urgency_level` en tiempo real para optimización de agenda.
+
+### 3. Filtrado por Rango Temporal
+- **Semanal**: Últimos 7 días.
+- **Mensual**: Últimos 30 días.
+- Todas las agregaciones de base de datos deben soportar el parámetro `range` para garantizar consistencia visual en el dashboard.
+
+---
+
+**Fecha de Actualización:** 2026-02-08
+**Versión:** 1.1 (Sovereign Analytics Integration)
+**Estado:** Especificación Actualizada

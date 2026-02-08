@@ -97,4 +97,15 @@ Para que un componente hijo (`MobileAgenda`) tenga un scroll independiente dentr
 
 ### 20.3 Normalización de Fechas
 Se recomienda el uso de `format(parseISO(...), 'yyyy-MM-dd')` de `date-fns` para todas las comparaciones de UI, evitando inconsistencias de huso horario entre el backend (UTC) y los dispositivos móviles.
+
+## 21. Sovereign Analytics Engine (2026-02-08)
+
+### 21.1 Lógica de Ingresos por Asistencia
+Para garantizar el alineamiento con el flujo de caja real, los ingresos en el Dashboard **solo** se cuentan si:
+1. La transacción en `accounting_transactions` tiene `status = 'completed'`.
+2. El turno (`appointment_id`) asociado tiene `status` en `('completed', 'attended')`.
+*No se deben sumar ingresos de turnos `scheduled` o `confirmed` hasta que se valide la presencia del paciente.*
+
+### 21.2 Filtrado de Rangos (Query Params)
+El endpoint `/admin/stats/summary` requiere el parámetro `range` (`weekly` | `monthly`) para calcular los intervalos SQL dinámicamente. Esto evita cargar data masiva innecesaria en el frontend.
 泛

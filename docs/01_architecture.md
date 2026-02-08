@@ -91,6 +91,11 @@ AgendaView / Odontograma
   - Endpoints de actualización de estado (`PUT /admin/appointments/{id}/status`) ahora convierten UUID a string antes de JSON response
   - Eliminado error `TypeError: Object of type UUID is not JSON serializable`
 - **Multi-Tenancy:** Soporte para múltiples consultorios/clínicas.
+- **Sovereign Analytics Engine (v1 2026-02-08):**
+  - **Propósito**: Consolidar métricas operativas y financieras en un dashboard centralizado.
+  - **Lógica de Ingresos**: Basada estrictamente en asistencia confirmada (`attended` o `completed`).
+  - **Filtrado Dinámico**: Soporte nativo para rangos `weekly` (7 días) y `monthly` (30 días).
+  - **Triage Monitoring**: Integración directa con el flujo de detección de urgencias IA.
 
 ### D. Sistema de Layout y Scroll (SaaS-style)
 

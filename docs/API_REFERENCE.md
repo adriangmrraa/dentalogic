@@ -113,8 +113,50 @@ Crea una ficha médica administrativamente. Incluye triaje inicial.
 }
 ```
 
+## Analítica y Estadísticas
+
+### Resumen de Estadísticas
+`GET /admin/stats/summary`
+
+Retorna métricas clave del sistema (IA, Ingresos, Urgencias).
+
+**Query Params:**
+- `range`: Período de tiempo (`weekly` para 7 días, `monthly` para 30 días). Default: `weekly`.
+
+**Response:**
+```json
+{
+  "ia_conversations": 150,
+  "ia_appointments": 12,
+  "active_urgencies": 3,
+  "total_revenue": 45000.0,
+  "growth_data": [
+    { "date": "2026-02-01", "ia_referrals": 5, "completed_appointments": 3 }
+  ]
+}
+```
+
+### Urgencias Recientes
+`GET /admin/chat/urgencies`
+
+Lista los últimos casos de urgencia detectados por el sistema de triaje IA.
+
+**Response:**
+```json
+[
+  {
+    "id": "123",
+    "patient_name": "Juan Perez",
+    "phone": "+54911...",
+    "urgency_level": "CRITICAL",
+    "reason": "Dolor agudo...",
+    "timestamp": "2026-02-08T10:30:00"
+  }
+]
+```
+
 ## Parámetros Globales (Paginación)
-Todos los endpoints `GET` que retornan listas de recursos soportan:
+Todas las rutas administrativas soportan:
 - `limit`: Cantidad de registros (default: 50).
-- `offset`: Desplazamiento para paginación incremental.
-- `search`: Filtro por texto (nombre, DNI, etc).
+- `offset`: Desplazamiento.
+- `search`: Filtro por texto libre.

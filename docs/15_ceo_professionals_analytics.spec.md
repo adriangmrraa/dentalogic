@@ -1,5 +1,8 @@
 # Especificación Técnica: Dashboard de Analítica de Profesionales (CEO View)
 
+> [!WARNING]
+> **SUPERSEDED (2026-02-08)**: Esta especificación ha sido integrada y superada por el **Sovereign Analytics Dashboard** documentado en `docs/01_architecture.md` y `docs/09_fase1_dental_datos_especificacion.md`. La lógica de ingresos ahora se rige por asistencia confirmada.
+
 **Autor:** Antigravity Agent  
 **Fecha:** 2026-02-07  
 **Estado:** Draft  
