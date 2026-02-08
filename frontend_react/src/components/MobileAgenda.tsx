@@ -1,10 +1,11 @@
 import DateStrip from './DateStrip';
-import type { Appointment, Professional } from '../views/AgendaView';
-import { Clock, User, Phone } from 'lucide-react';
+import type { Appointment, Professional, GoogleCalendarBlock } from '../views/AgendaView';
+import { Clock, User, Phone, Lock } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 interface MobileAgendaProps {
     appointments: Appointment[];
+    googleBlocks: GoogleCalendarBlock[];
     selectedDate: Date;
     onDateChange: (date: Date) => void;
     onEventClick: (event: any) => void;
@@ -13,6 +14,7 @@ interface MobileAgendaProps {
 
 export default function MobileAgenda({
     appointments,
+    googleBlocks,
     selectedDate,
     onDateChange,
     onEventClick,
@@ -24,7 +26,24 @@ export default function MobileAgenda({
         const aptDateString = format(parseISO(apt.appointment_datetime), 'yyyy-MM-dd');
         const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
         return aptDateString === selectedDateString;
-    }).sort((a, b) => new Date(a.appointment_datetime).getTime() - new Date(b.appointment_datetime).getTime());
+    });
+
+    // Filter blocks for the selected date
+    const dailyBlocks = googleBlocks.filter(block => {
+        const blockDateString = format(parseISO(block.start_datetime), 'yyyy-MM-dd');
+        const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
+        return blockDateString === selectedDateString;
+    });
+
+    // Unify and sort
+    const allDailyEvents = [
+        ...dailyAppointments.map(apt => ({ ...apt, uiType: 'appointment' })),
+        ...dailyBlocks.map(block => ({ ...block, uiType: 'block' }))
+    ].sort((a: any, b: any) => {
+        const timeA = new Date(a.appointment_datetime || a.start_datetime).getTime();
+        const timeB = new Date(b.appointment_datetime || b.start_datetime).getTime();
+        return timeA - timeB;
+    });
 
     const formatTime = (dateStr: string) => {
         return new Date(dateStr).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -48,52 +67,73 @@ export default function MobileAgenda({
 
             {/* Appointment List */}
             <div className="flex-1 overflow-y-auto p-4 pb-24 space-y-3 min-h-0">
-                {dailyAppointments.length === 0 ? (
+                {allDailyEvents.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-48 text-gray-400">
                         <Clock size={48} className="mb-2 opacity-20" />
                         <p className="text-sm">No hay turnos para este día</p>
                     </div>
                 ) : (
-                    dailyAppointments.map((apt) => (
+                    allDailyEvents.map((evt: any) => (
                         <div
-                            key={apt.id}
-                            onClick={() => onEventClick({ event: { start: new Date(apt.appointment_datetime), extendedProps: { ...apt, eventType: 'appointment' } } })}
-                            className={`bg-white rounded-xl shadow-sm p-4 border-l-4 ${getStatusColor(apt.status)} active:scale-[0.98] transition-transform touch-manipulation`}
+                            key={evt.id}
+                            onClick={() => onEventClick({
+                                event: {
+                                    start: new Date(evt.appointment_datetime || evt.start_datetime),
+                                    extendedProps: { ...evt, eventType: evt.uiType === 'block' ? 'gcalendar_block' : 'appointment' }
+                                }
+                            })}
+                            className={`bg-white rounded-xl shadow-sm p-4 border-l-4 ${evt.uiType === 'block'
+                                    ? 'border-l-gray-400 bg-gray-50/50'
+                                    : getStatusColor(evt.status)
+                                } active:scale-[0.98] transition-transform touch-manipulation`}
                         >
                             <div className="flex justify-between items-start mb-2">
                                 <div className="flex items-center gap-2">
                                     <span className="text-lg font-bold text-gray-800">
-                                        {formatTime(apt.appointment_datetime)}
+                                        {formatTime(evt.appointment_datetime || evt.start_datetime)}
                                     </span>
-                                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                                        {30} min
-                                    </span>
+                                    {evt.uiType === 'appointment' && (
+                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                                            {evt.duration_minutes || 30} min
+                                        </span>
+                                    )}
                                 </div>
                                 {/* Status Badge */}
                                 <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded bg-gray-50 text-gray-500`}>
-                                    {apt.status}
+                                    {evt.uiType === 'block' ? 'Bloqueado' : evt.status}
                                 </span>
                             </div>
 
                             <div className="mb-1">
                                 <h3 className="text-base font-semibold text-gray-900 line-clamp-1">
-                                    {apt.patient_name || 'Paciente sin nombre'}
+                                    {evt.uiType === 'block' ? (
+                                        <span className="flex items-center gap-1.5 text-gray-500">
+                                            <Lock size={14} className="shrink-0" />
+                                            Google: {evt.title}
+                                        </span>
+                                    ) : (
+                                        evt.patient_name || 'Paciente sin nombre'
+                                    )}
                                 </h3>
-                                <p className="text-sm text-gray-500 line-clamp-1">
-                                    {apt.appointment_type}
-                                </p>
+                                {evt.uiType === 'appointment' && (
+                                    <p className="text-sm text-gray-500 line-clamp-1">
+                                        {evt.appointment_type}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-50">
-                                {/* Professional Name - Derived from ID if needed, or if available in apt */}
+                                {/* Professional Name */}
                                 <div className="flex items-center gap-1.5 text-gray-400">
                                     <User size={14} />
-                                    <span className="text-xs">Dr. {professionals.find((p: Professional) => p.id === apt.professional_id)?.last_name || '...'}</span>
+                                    <span className="text-xs">
+                                        Dr. {professionals.find((p: Professional) => p.id === evt.professional_id)?.last_name || '...'}
+                                    </span>
                                 </div>
-                                {apt.patient_phone && (
+                                {evt.uiType === 'appointment' && evt.patient_phone && (
                                     <div className="flex items-center gap-1.5 text-gray-400">
                                         <Phone size={14} />
-                                        <span className="text-xs">{apt.patient_phone}</span>
+                                        <span className="text-xs">{evt.patient_phone}</span>
                                     </div>
                                 )}
                             </div>

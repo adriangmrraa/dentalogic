@@ -10,6 +10,7 @@ import MobileAgenda from '../components/MobileAgenda';
 import { RefreshCw, Stethoscope } from 'lucide-react';
 import AppointmentCard from '../components/AppointmentCard';
 import api from '../api/axios';
+import { addDays, subDays, startOfDay, endOfDay } from 'date-fns';
 import { io, Socket } from 'socket.io-client';
 import { BACKEND_URL } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
@@ -212,12 +213,18 @@ export default function AgendaView() {
       fetchClinicSettings();
 
       // Get current calendar date range
-      let startDate = new Date();
-      let endDate = new Date();
+      let startDate: Date;
+      let endDate: Date;
+
       if (calendarRef.current) {
         const calendarApi = calendarRef.current.getApi();
         startDate = calendarApi.view.activeStart;
         endDate = calendarApi.view.activeEnd;
+      } else {
+        // Fallback for mobile view where FullCalendar is unmounted
+        const baseDate = selectedDate || new Date();
+        startDate = startOfDay(subDays(baseDate, 7));
+        endDate = endOfDay(addDays(baseDate, 7));
       }
 
       const startDateStr = startDate.toISOString();
@@ -390,6 +397,13 @@ export default function AgendaView() {
     fetchData();
   }, [selectedProfessionalId]);
 
+  // FIX: Refetch on mobile when selectedDate changes to ensure data is available
+  useEffect(() => {
+    if (isMobile && selectedDate) {
+      fetchData(true); // Background fetch to avoid flickering
+    }
+  }, [selectedDate, isMobile]);
+
   // Calendar events transformer
   const calendarEvents = [
     ...filteredAppointments.map((apt) => ({
@@ -556,11 +570,12 @@ export default function AgendaView() {
         {/* Mobile View or Desktop Calendar */}
         {isMobile ? (
           <MobileAgenda
-            appointments={appointments}
+            appointments={filteredAppointments}
+            googleBlocks={filteredBlocks}
             selectedDate={selectedDate || new Date()}
             onDateChange={(date) => {
               setSelectedDate(date);
-              // Also sync calendar ref if needed
+              // Sync calendar ref if it ever gets remounted or for consistency
               if (calendarRef.current) calendarRef.current.getApi().gotoDate(date);
             }}
             onEventClick={handleEventClick}
