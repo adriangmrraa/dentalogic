@@ -132,8 +132,9 @@ def parse_date(date_query: str) -> date:
         'sunday': lambda: get_next_weekday(6),
     }
     
-    if query in day_map:
-        return day_map[query]()
+    for key, func in day_map.items():
+        if key in query:
+            return func()
     
     # Intentar parsear como fecha
     try:
@@ -478,8 +479,10 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
             return f"No encontré huecos libres de {duration} min para {date_query}. ¿Probamos otro día o momento?"
             
     except Exception as e:
+        import traceback
         logger.error(f"Error en check_availability: {e}")
-        return "No pude consultar la disponibilidad. ¿Probamos una fecha diferente?"
+        logger.error(traceback.format_exc())
+        return f"No pude consultar la disponibilidad para {date_query}. ¿Probamos una fecha diferente?"
 
 @tool
 async def book_appointment(date_time: str, treatment_reason: str, 
