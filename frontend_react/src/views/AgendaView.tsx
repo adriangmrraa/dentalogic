@@ -306,14 +306,11 @@ export default function AgendaView() {
     const initializeAgenda = async () => {
       // 1. First, run auto-sync if user has permissions
       if (user?.role === 'ceo' || user?.role === 'secretary' || user?.role === 'professional') {
-        console.log('🔄 Auto-sync: Sincronizando con GCal...');
         try {
           await api.post('/admin/calendar/sync');
           // Delay to ensure backend DB write completes
           await new Promise(resolve => setTimeout(resolve, 800));
-          console.log('✅ Auto-sync completado, cargando datos...');
         } catch (error) {
-          console.error('⚠️ Auto-sync failed:', error);
           // Continue with data fetch even if sync fails
         }
       }
@@ -334,28 +331,23 @@ export default function AgendaView() {
 
     // Connection status handlers
     socketRef.current.on('connect', () => {
-      console.log('WebSocket connected');
     });
 
     socketRef.current.on('disconnect', () => {
-      console.log('WebSocket disconnected');
     });
 
-    socketRef.current.on('connect_error', (error) => {
-      console.error('WebSocket connection error:', error);
+    socketRef.current.on('connect_error', () => {
     });
 
     // Listen for NEW_APPOINTMENT events - Real-time omnipresent sync
-    socketRef.current.on('NEW_APPOINTMENT', (newAppointment: Appointment) => {
-      console.log('📅 Real-time: Nuevo turno detectado', newAppointment);
+    socketRef.current.on('NEW_APPOINTMENT', () => {
 
       // Trigger complete re-fetch from sources (DB + GCal blocks)
       fetchData(true);
     });
 
     // Listen for APPOINTMENT_UPDATED events - Real-time updates
-    socketRef.current.on('APPOINTMENT_UPDATED', (updatedAppointment: Appointment) => {
-      console.log('🔄 Real-time: Turno actualizado', updatedAppointment);
+    socketRef.current.on('APPOINTMENT_UPDATED', () => {
 
       // Trigger complete re-fetch for consistency
       fetchData(true);
@@ -363,7 +355,6 @@ export default function AgendaView() {
 
     // Listen for APPOINTMENT_DELETED events
     socketRef.current.on('APPOINTMENT_DELETED', (deletedAppointmentId: string) => {
-      console.log('❌ Turno eliminado via WebSocket:', deletedAppointmentId);
 
       setAppointments(prevAppointments => {
         const updated = prevAppointments.filter(apt => apt.id !== deletedAppointmentId);
@@ -464,7 +455,6 @@ export default function AgendaView() {
   };
 
   const handleSave = async (data: any) => {
-    console.log('Saving appointment:', data);
     try {
       if (selectedEvent) {
         // Update
@@ -480,7 +470,6 @@ export default function AgendaView() {
       await fetchData();
       setShowModal(false);
     } catch (error: any) {
-      console.error('Error saving appointment:', error);
       throw error; // Propagate to form for error display
     }
   };
@@ -492,7 +481,6 @@ export default function AgendaView() {
       await fetchData();
       setShowModal(false);
     } catch (error) {
-      console.error('Error deleting appointment:', error);
       alert('Error al cancelar turno');
     }
   };

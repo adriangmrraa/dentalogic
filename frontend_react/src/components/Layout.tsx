@@ -37,7 +37,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     // Listener
     // Listener
     const handleHandoff = (data: { phone_number: string; reason: string }) => {
-      console.log('🔔 Global Handoff Notification:', data);
 
       // Mostrar notificación
       setNotification({
@@ -55,7 +54,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       try {
         const audio = new Audio('/assets/notification.mp3');
         // Fallback or generic sound logic here if asset missing
-        audio.play().catch(e => console.log('Audio play blocked', e));
+        audio.play().catch(_e => { });
       } catch (e) { }
     };
 
@@ -79,7 +78,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 to-blue-50 relative">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 to-blue-50 relative overflow-hidden">
       {/* Mobile Backdrop */}
       {isMobileMenuOpen && (
         <div
