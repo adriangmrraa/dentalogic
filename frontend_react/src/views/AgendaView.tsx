@@ -3,6 +3,7 @@ import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import timeGridPlugin from '@fullcalendar/timegrid';
+import listPlugin from '@fullcalendar/list';
 import { Calendar, X, User, Stethoscope, Clock, Phone, MessageCircle, AlertTriangle, Wifi, WifiOff, RefreshCw, CloudOff, CheckCircle, AlertCircle } from 'lucide-react';
 import api from '../api/axios';
 import { io, Socket } from 'socket.io-client';
@@ -141,6 +142,7 @@ export default function AgendaView() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(true);  // Loading state for initial sync
   const [showModal, setShowModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Appointment | null>(null);
@@ -401,6 +403,8 @@ export default function AgendaView() {
   // Setup WebSocket connection and listeners
   useEffect(() => {
     const initializeAgenda = async () => {
+      setIsInitializing(true);  // Activate loading UI
+
       // 1. First, run auto-sync if user has permissions
       if (user?.role === 'ceo' || user?.role === 'secretary' || user?.role === 'professional') {
         console.log('🔄 Auto-sync: Sincronizando con GCal...');
@@ -417,6 +421,8 @@ export default function AgendaView() {
 
       // 2. Now fetch all data (includes synced GCal blocks)
       await fetchData();
+
+      setIsInitializing(false);  // Deactivate loading UI
     };
 
     initializeAgenda();
@@ -693,10 +699,20 @@ export default function AgendaView() {
       fetchData();
       setShowModal(false);
     } catch (error) {
-      console.error('Error deleting appointment:', error);
-      alert('Error al eliminar el turno');
     }
   };
+
+  // Show loading spinner during initial sync+fetch
+  if (isInitializing) {
+    return (
+      <div className="flex items-center justify-center h-full bg-gray-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-medical-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 text-sm">Cargando agenda...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 lg:p-6 h-full overflow-y-auto bg-gray-100">
@@ -831,7 +847,7 @@ export default function AgendaView() {
         ) : (
           <FullCalendar
             ref={calendarRef}
-            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
             initialView={window.innerWidth < 768 ? 'timeGridDay' : 'rollingWeek'}
             views={{
               rollingWeek: {

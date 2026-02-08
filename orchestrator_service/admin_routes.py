@@ -1205,7 +1205,7 @@ async def update_appointment_status(id: str, payload: StatusUpdate, request: Req
         else:
             await emit_appointment_event("APPOINTMENT_UPDATED", dict(appointment_data), request)
     
-    return {"status": "updated"}
+    return {"status": "updated", "appointment_id": str(id), "new_status": payload.status}
 
 @router.put("/appointments/{id}", dependencies=[Depends(verify_admin_token)])
 async def update_appointment(id: str, apt: AppointmentCreate, request: Request):
