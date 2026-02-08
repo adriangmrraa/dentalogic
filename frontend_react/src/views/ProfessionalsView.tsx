@@ -13,17 +13,23 @@ interface Professional {
   specialty?: string;
   license_number?: string;
   is_active: boolean;
-  availability?: ProfessionalAvailability;
+  working_hours?: WorkingHours;
+  availability?: any; // Keep for legacy if needed by other views
 }
 
-interface ProfessionalAvailability {
-  monday: TimeSlot[];
-  tuesday: TimeSlot[];
-  wednesday: TimeSlot[];
-  thursday: TimeSlot[];
-  friday: TimeSlot[];
-  saturday: TimeSlot[];
-  sunday: TimeSlot[];
+interface WorkingHours {
+  monday: DayConfig;
+  tuesday: DayConfig;
+  wednesday: DayConfig;
+  thursday: DayConfig;
+  friday: DayConfig;
+  saturday: DayConfig;
+  sunday: DayConfig;
+}
+
+interface DayConfig {
+  enabled: boolean;
+  slots: TimeSlot[];
 }
 
 interface TimeSlot {
@@ -39,7 +45,7 @@ const DAYS = [
   { key: 'friday', label: 'Viernes' },
   { key: 'saturday', label: 'Sábado' },
   { key: 'sunday', label: 'Domingo' },
-];
+] as const;
 
 const SPECIALTIES = [
   'Odontología General',
@@ -66,15 +72,18 @@ export default function ProfessionalsView() {
     specialty: '',
     license_number: '',
     is_active: true,
-    availability: createEmptyAvailability(),
+    working_hours: createDefaultWorkingHours(),
   });
 
-  function createEmptyAvailability(): ProfessionalAvailability {
-    const availability: ProfessionalAvailability = {} as ProfessionalAvailability;
+  function createDefaultWorkingHours(): WorkingHours {
+    const wh: any = {};
     DAYS.forEach(day => {
-      availability[day.key as keyof ProfessionalAvailability] = [];
+      wh[day.key] = {
+        enabled: day.key !== 'sunday',
+        slots: day.key !== 'sunday' ? [{ start: '09:00', end: '18:00' }] : []
+      };
     });
-    return availability;
+    return wh as WorkingHours;
   }
 
   useEffect(() => {
@@ -85,7 +94,6 @@ export default function ProfessionalsView() {
     try {
       setLoading(true);
       const response = await api.get('/admin/professionals');
-      // Map API response to Component State (handling first_name/last_name mismatch)
       const mappedData = response.data.map((p: any) => ({
         ...p,
         name: p.name || `${p.first_name} ${p.last_name || ''}`.trim()
@@ -118,6 +126,7 @@ export default function ProfessionalsView() {
     try {
       await api.put(`/admin/professionals/${professional.id}`, {
         is_active: !professional.is_active,
+        name: professional.name,
       });
       fetchProfessionals();
     } catch (error) {
@@ -134,7 +143,7 @@ export default function ProfessionalsView() {
       specialty: professional.specialty || '',
       license_number: professional.license_number || '',
       is_active: professional.is_active,
-      availability: professional.availability || createEmptyAvailability(),
+      working_hours: professional.working_hours || createDefaultWorkingHours(),
     });
     setExpandedDays({});
   };
@@ -148,7 +157,7 @@ export default function ProfessionalsView() {
       specialty: '',
       license_number: '',
       is_active: true,
-      availability: createEmptyAvailability(),
+      working_hours: createDefaultWorkingHours(),
     });
     setExpandedDays({});
   };
@@ -157,178 +166,247 @@ export default function ProfessionalsView() {
     setEditingProfessional(null);
   };
 
-  const toggleDay = (professionalId: number, day: string) => {
-    setExpandedDays((prev: Record<number, string[]>) => {
-      const current = prev[professionalId] || [];
-      if (current.includes(day)) {
-        return { ...prev, [professionalId]: current.filter((d: string) => d !== day) };
+  const toggleDayExpansion = (day: string) => {
+    setExpandedDays(prev => {
+      const current = prev[-1] || [];
+      const isMobile = window.innerWidth < 768;
+
+      if (isMobile) {
+        // En mobile solo uno abierto a la vez (Acordeón real)
+        return { ...prev, [-1]: current.includes(day) ? [] : [day] };
       }
-      return { ...prev, [professionalId]: [...current, day] };
+
+      // En desktop mantenemos multi-expandible si se desea o el comportamiento anterior
+      if (current.includes(day)) {
+        return { ...prev, [-1]: current.filter(d => d !== day) };
+      }
+      return { ...prev, [-1]: [...current, day] };
     });
   };
 
-  const addTimeSlot = (dayKey: string) => {
-    setFormData((prev: any) => ({
+  const toggleDayEnabled = (dayKey: keyof WorkingHours) => {
+    setFormData(prev => ({
       ...prev,
-      availability: {
-        ...prev.availability,
-        [dayKey]: [
-          ...(prev.availability[dayKey as keyof ProfessionalAvailability] || []),
-          { start: '09:00', end: '17:00' }
-        ],
-      },
+      working_hours: {
+        ...prev.working_hours,
+        [dayKey]: {
+          ...prev.working_hours[dayKey],
+          enabled: !prev.working_hours[dayKey].enabled,
+          slots: !prev.working_hours[dayKey].enabled && prev.working_hours[dayKey].slots.length === 0
+            ? [{ start: '09:00', end: '18:00' }] : prev.working_hours[dayKey].slots
+        }
+      }
     }));
   };
 
-  const removeTimeSlot = (dayKey: string, index: number) => {
-    setFormData((prev: any) => ({
+  const addTimeSlot = (dayKey: keyof WorkingHours) => {
+    setFormData(prev => ({
       ...prev,
-      availability: {
-        ...prev.availability,
-        [dayKey]: prev.availability[dayKey as keyof ProfessionalAvailability].filter((_: any, i: number) => i !== index),
-      },
+      working_hours: {
+        ...prev.working_hours,
+        [dayKey]: {
+          ...prev.working_hours[dayKey],
+          slots: [...prev.working_hours[dayKey].slots, { start: '09:00', end: '18:00' }]
+        }
+      }
     }));
   };
 
-  const updateTimeSlot = (dayKey: string, index: number, field: 'start' | 'end', value: string) => {
-    setFormData((prev: any) => ({
+  const removeTimeSlot = (dayKey: keyof WorkingHours, index: number) => {
+    setFormData(prev => ({
       ...prev,
-      availability: {
-        ...prev.availability,
-        [dayKey]: prev.availability[dayKey as keyof ProfessionalAvailability].map((slot: TimeSlot, i: number) =>
-          i === index ? { ...slot, [field]: value } : slot
-        ),
-      },
+      working_hours: {
+        ...prev.working_hours,
+        [dayKey]: {
+          ...prev.working_hours[dayKey],
+          slots: prev.working_hours[dayKey].slots.filter((_, i) => i !== index)
+        }
+      }
     }));
   };
 
-  const getActiveProfessionals = () => professionals.filter((p: Professional) => p.is_active).length;
+  const updateTimeSlot = (dayKey: keyof WorkingHours, index: number, field: 'start' | 'end', value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      working_hours: {
+        ...prev.working_hours,
+        [dayKey]: {
+          ...prev.working_hours[dayKey],
+          slots: prev.working_hours[dayKey].slots.map((slot, i) =>
+            i === index ? { ...slot, [field]: value } : slot
+          )
+        }
+      }
+    }));
+  };
 
-  const getTotalSlots = (availability?: ProfessionalAvailability) => {
-    if (!availability) return 0;
-    return DAYS.reduce((total, day) => {
-      return total + (availability[day.key as keyof ProfessionalAvailability]?.length || 0);
-    }, 0);
+  const getActiveProfessionals = () => professionals.filter(p => p.is_active).length;
+
+  const getTotalSlots = (wh?: WorkingHours) => {
+    if (!wh) return 0;
+    return Object.values(wh).reduce((total, day) => total + (day.enabled ? day.slots.length : 0), 0);
   };
 
   return (
-    <div className="p-4 lg:p-6 h-full overflow-y-auto bg-gray-100">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Profesionales</h1>
-          <p className="text-sm text-gray-500">Gestión del staff médico y disponibilidad</p>
-        </div>
-        <button
-          onClick={openCreateModal}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition-colors text-sm"
-        >
-          <Plus size={20} />
-          Nuevo Profesional
-        </button>
-      </div>
+    <div className="flex flex-col h-full bg-gray-100 overflow-hidden">
+      {/* Scrollable Container with Scroll Isolation */}
+      <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6">
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow p-4 border-l-4 border-primary">
-          <div className="text-xs text-gray-500 uppercase font-semibold">Total</div>
-          <div className="text-2xl font-bold">{professionals.length}</div>
+        {/* Header - Fixed internally with padding */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">Profesionales</h1>
+            <p className="text-sm text-gray-500">Gestión del staff médico y disponibilidad</p>
+          </div>
+          <button
+            onClick={openCreateModal}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 text-sm font-semibold"
+          >
+            <Plus size={20} />
+            Nuevo Profesional
+          </button>
         </div>
-        <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-          <div className="text-xs text-gray-500 uppercase font-semibold">Activos</div>
-          <div className="text-2xl font-bold text-green-600">{getActiveProfessionals()}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4 border-l-4 border-gray-300">
-          <div className="text-xs text-gray-500 uppercase font-semibold">Inactivos</div>
-          <div className="text-2xl font-bold text-gray-400">
-            {professionals.length - getActiveProfessionals()}
+
+        {/* Stats Grid - Responsive behavior */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-primary">
+            <div className="text-xs text-gray-500 uppercase font-bold tracking-tight">Total Staff</div>
+            <div className="text-3xl font-black mt-1 text-gray-900">{professionals.length}</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-green-500">
+            <div className="text-xs text-gray-500 uppercase font-bold tracking-tight">Médicos Activos</div>
+            <div className="text-3xl font-black mt-1 text-green-600">{getActiveProfessionals()}</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-gray-300 sm:col-span-2 lg:col-span-1">
+            <div className="text-xs text-gray-500 uppercase font-bold tracking-tight">En Pausa</div>
+            <div className="text-3xl font-black mt-1 text-gray-400">
+              {professionals.length - getActiveProfessionals()}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Professionals List */}
-      <div className="bg-white rounded-lg shadow">
+        {/* Professionals Grid - The core responsive refactor */}
         {loading ? (
-          <div className="p-8 text-center text-gray-500">Cargando profesionales...</div>
+          <div className="flex items-center justify-center p-12 bg-white rounded-2xl border border-gray-100 shadow-sm">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-gray-500 font-medium">Cargando equipo médico...</p>
+            </div>
+          </div>
         ) : professionals.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            No hay profesionales registrados
+          <div className="p-12 text-center bg-white rounded-2xl border border-gray-100 shadow-sm">
+            <div className="mx-auto w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 mb-4">
+              <ClipboardList size={32} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-800">No hay profesionales</h3>
+            <p className="text-gray-500 max-w-xs mx-auto text-sm">Comienza agregando el primer miembro del staff médico para gestionar turnos.</p>
           </div>
         ) : (
-          <div className="divide-y">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {professionals.map((professional: Professional) => (
-              <div key={professional.id} className="p-4 hover:bg-gray-50 transition-colors">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="flex items-start gap-4 w-full">
-                    <div className={`w-12 h-12 rounded-full shrink-0 flex items-center justify-center text-white font-bold ${professional.is_active ? 'bg-primary' : 'bg-gray-400'
-                      }`}>
-                      {professional.name.charAt(0)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-semibold text-gray-900 truncate">
-                          Dr. {professional.name}
-                        </h3>
-                        {professional.is_active ? (
-                          <CheckCircle className="text-green-500 shrink-0" size={16} />
-                        ) : (
-                          <XCircle className="text-gray-400 shrink-0" size={16} />
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-500 font-medium truncate">
-                        {professional.specialty || 'Sin especialidad'}
-                      </div>
-                      <div className="flex flex-col gap-0.5 mt-1">
-                        {professional.email && (
-                          <span className="flex items-center gap-1.5 text-xs text-gray-400 truncate">
-                            <Mail size={12} className="shrink-0" /> {professional.email}
-                          </span>
-                        )}
-                        {professional.phone && (
-                          <span className="flex items-center gap-1.5 text-xs text-gray-400">
-                            <Phone size={12} className="shrink-0" /> {professional.phone}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+              <div
+                key={professional.id}
+                className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group"
+              >
+                {/* Card Header Profile */}
+                <div className="p-5 flex items-start gap-4">
+                  <div className={`w-14 h-14 rounded-2xl shrink-0 flex items-center justify-center text-white font-black text-xl shadow-inner ${professional.is_active ? 'bg-primary' : 'bg-gray-400'
+                    }`}>
+                    {professional.name.charAt(0)}
                   </div>
-
-                  <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-none border-gray-100">
-                    <div className="text-left sm:text-right">
-                      <div className="flex items-center gap-1 text-xs font-medium text-gray-500">
-                        <Clock size={14} />
-                        {getTotalSlots(professional.availability)} bloques
-                      </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className="font-bold text-gray-900 truncate leading-tight">
+                        Dr. {professional.name}
+                      </h3>
+                      {professional.is_active ? (
+                        <div className="w-2 h-2 rounded-full bg-green-500 shadow-sm shadow-green-200"></div>
+                      ) : (
+                        <div className="w-2 h-2 rounded-full bg-gray-300"></div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => openEditModal(professional)}
-                        className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 sm:border-none"
-                      >
-                        <Edit size={18} />
-                      </button>
-                      <button
-                        onClick={() => handleToggleActive(professional)}
-                        className={`p-2 rounded-lg transition-colors border sm:border-none ${professional.is_active
-                          ? 'text-gray-600 hover:text-red-600 hover:bg-red-50 border-gray-200'
-                          : 'text-gray-400 hover:text-green-600 hover:bg-green-50 border-gray-200'
-                          }`}
-                      >
-                        {professional.is_active ? <XCircle size={18} /> : <CheckCircle size={18} />}
-                      </button>
+                    <p className="text-[10px] font-black text-primary bg-primary/5 inline-block px-2 py-0.5 rounded mt-1 uppercase tracking-wider">
+                      {professional.specialty || 'General'}
+                    </p>
+                    {/* Mobile Attribute List Format */}
+                    <div className="grid grid-cols-2 gap-3 mt-3 sm:hidden">
+                      {professional.email && (
+                        <div>
+                          <span className="block text-[9px] font-black text-gray-400 uppercase tracking-tight mb-0.5">E-mail</span>
+                          <div className="flex items-center gap-1.5 text-xs text-gray-600 truncate font-semibold">
+                            <Mail size={10} className="text-primary/60" /> {professional.email}
+                          </div>
+                        </div>
+                      )}
+                      {professional.phone && (
+                        <div>
+                          <span className="block text-[9px] font-black text-gray-400 uppercase tracking-tight mb-0.5">WhatsApp</span>
+                          <div className="flex items-center gap-1.5 text-xs text-gray-600 font-semibold">
+                            <Phone size={10} className="text-primary/60" /> {professional.phone}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* Desktop Inline Info */}
+                    <div className="hidden sm:space-y-1 sm:mt-2 sm:block">
+                      {professional.email && (
+                        <div className="flex items-center gap-2 text-[11px] text-gray-500 truncate">
+                          <Mail size={12} className="text-gray-400" /> {professional.email}
+                        </div>
+                      )}
+                      {professional.phone && (
+                        <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                          <Phone size={12} className="text-gray-400" /> {professional.phone}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Availability Preview */}
-                {professional.availability && getTotalSlots(professional.availability) > 0 && (
-                  <div className="mt-3 sm:ml-16">
+                {/* Card Divider Text */}
+                <div className="px-5 py-3 border-t border-gray-50 flex items-center justify-between bg-gray-50/30">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                    <Clock size={14} className="text-primary/70" />
+                    {getTotalSlots(professional.working_hours)} Bloques Disponibles
+                  </div>
+                  <div className="flex items-center gap-1">
                     <button
-                      onClick={() => toggleDay(professional.id, 'toggle')}
-                      className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+                      onClick={() => openEditModal(professional)}
+                      className="p-3 text-gray-500 hover:text-primary hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-200 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                      title="Editar Perfil"
                     >
-                      <Calendar size={14} />
-                      Ver disponibilidad
+                      <Edit size={18} />
+                    </button>
+                    <button
+                      onClick={() => handleToggleActive(professional)}
+                      className={`p-3 rounded-xl transition-all border border-transparent min-h-[44px] min-w-[44px] flex items-center justify-center ${professional.is_active
+                        ? 'text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100'
+                        : 'text-gray-400 hover:text-green-600 hover:bg-green-50 hover:border-green-100'
+                        }`}
+                      title={professional.is_active ? 'Desactivar' : 'Activar'}
+                    >
+                      {professional.is_active ? <XCircle size={18} /> : <CheckCircle size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Availability Sub-Card */}
+                {professional.working_hours && getTotalSlots(professional.working_hours) > 0 && (
+                  <div className="px-5 pb-5">
+                    <button
+                      onClick={() => {
+                        const current = expandedDays[professional.id] || [];
+                        setExpandedDays({
+                          ...expandedDays,
+                          [professional.id]: current.includes('toggle') ? [] : ['toggle']
+                        });
+                      }}
+                      className="w-full flex items-center justify-between p-2.5 bg-gray-50 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Calendar size={14} className="text-gray-400" />
+                        <span>Ver Horarios</span>
+                      </div>
                       {(expandedDays[professional.id] || []).includes('toggle') ? (
                         <ChevronUp size={14} />
                       ) : (
@@ -336,14 +414,21 @@ export default function ProfessionalsView() {
                       )}
                     </button>
                     {(expandedDays[professional.id] || []).includes('toggle') && (
-                      <div className="mt-2 flex flex-wrap gap-2">
+                      <div className="mt-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                         {DAYS.map(day => {
-                          const slots = professional.availability?.[day.key as keyof ProfessionalAvailability];
-                          if (slots && slots.length > 0) {
+                          const config = professional.working_hours?.[day.key];
+                          if (config?.enabled && config.slots.length > 0) {
                             return (
-                              <span key={day.key} className="text-xs bg-secondary text-primary px-2 py-1 rounded">
-                                {day.label}: {slots.map((s: TimeSlot) => `${s.start}-${s.end}`).join(', ')}
-                              </span>
+                              <div key={day.key} className="flex items-start justify-between text-[11px] border-b border-gray-50 pb-1.5 last:border-0 last:pb-0">
+                                <span className="font-bold text-gray-700">{day.label}</span>
+                                <div className="text-right text-gray-500 font-medium">
+                                  {config.slots.map((s, idx) => (
+                                    <div key={idx} className="bg-white px-1.5 py-0.5 rounded border border-gray-100 mb-0.5 inline-block ml-1">
+                                      {s.start} - {s.end}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
                             );
                           }
                           return null;
@@ -358,228 +443,282 @@ export default function ProfessionalsView() {
         )}
       </div>
 
-      {/* Modal - Enhanced Nexus UI */}
+      {/* Modal - Optimized for Mobile & Desktop */}
       {editingProfessional !== null && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 overflow-y-auto p-4 md:p-8 animate-in fade-in duration-300">
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl w-full max-w-5xl shadow-2xl border border-white/20 overflow-hidden transform animate-in slide-in-from-bottom-4 duration-300 my-auto">
-            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-white/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-lg text-primary">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4 sm:p-6 lg:p-12 animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
+
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-white sticky top-0 z-10">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
                   {editingProfessional.id ? <Edit size={24} /> : <Plus size={24} />}
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">
-                    {editingProfessional.id ? `Editar Perfil: Dr. ${editingProfessional.name}` : 'Nuevo Profesional'}
+                  <h2 className="text-xl font-black text-gray-900">
+                    {editingProfessional.id ? 'Editar Perfil Médico' : 'Nuevo Miembro del Equipo'}
                   </h2>
-                  <p className="text-sm text-gray-500">Completa la información del staff médico</p>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">
+                    {editingProfessional.id ? `ID: PROF-${editingProfessional.id}` : 'Registro de nuevo profesional'}
+                  </p>
                 </div>
               </div>
               <button
                 onClick={closeModal}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600"
+                className="p-2.5 hover:bg-gray-50 rounded-2xl transition-all text-gray-400 hover:text-gray-900 border border-transparent hover:border-gray-100"
               >
                 <X size={24} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[75vh]">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                {/* Information Sections Column */}
-                <div className="lg:col-span-7 space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Basic Info Section */}
-                    <div className="space-y-4">
-                      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                        <ClipboardList size={16} /> Datos Principales
-                      </h3>
+            {/* Modal Content - Internal Scroll Isolation */}
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-gray-50/50">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                          Nombre Completo <span className="text-red-500">*</span>
+                {/* Column 1: Info */}
+                <div className="lg:col-span-5 space-y-8">
+                  <div className="bg-white p-6 rounded-3xl border border-gray-200/60 shadow-sm space-y-6">
+                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2 mb-2">
+                      <ClipboardList size={16} className="text-primary" /> Perfil Profesional
+                    </h3>
+
+                    <div className="space-y-4">
+                      <div className="group">
+                        <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
+                          Nombre y Apellido <span className="text-red-500">*</span>
                         </label>
                         <input
                           type="text"
                           required
                           value={formData.name}
                           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-sm"
-                          placeholder="Ej: Juan Pérez"
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none text-sm font-semibold text-gray-800"
+                          placeholder="Dr. Nombre Apellido"
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                          Especialidad
-                        </label>
-                        <select
-                          value={formData.specialty}
-                          onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
-                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-sm"
-                        >
-                          <option value="">Seleccionar...</option>
-                          {SPECIALTIES.map(spec => (
-                            <option key={spec} value={spec}>{spec}</option>
-                          ))}
-                        </select>
-                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="group">
+                          <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
+                            Especialidad
+                          </label>
+                          <select
+                            value={formData.specialty}
+                            onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none text-sm font-semibold text-gray-800 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%236b7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.25rem_1.25rem] bg-[right_0.75rem_center] bg-no-repeat"
+                          >
+                            <option value="">Seleccionar...</option>
+                            {SPECIALTIES.map(spec => (
+                              <option key={spec} value={spec}>{spec}</option>
+                            ))}
+                          </select>
+                        </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                          Matrícula
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.license_number}
-                          onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
-                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-sm"
-                          placeholder="MN 12345"
-                        />
+                        <div className="group">
+                          <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
+                            Nro. Matrícula
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.license_number}
+                            onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none text-sm font-semibold text-gray-800"
+                            placeholder="MN 00000"
+                          />
+                        </div>
                       </div>
                     </div>
+                  </div>
 
-                    {/* Contact Section */}
-                    <div className="space-y-4">
-                      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                        <Mail size={16} /> Contacto & Estado
-                      </h3>
+                  <div className="bg-white p-6 rounded-3xl border border-gray-200/60 shadow-sm space-y-6">
+                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2 mb-2">
+                      <Mail size={16} className="text-primary" /> Contacto Oficial
+                    </h3>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                          E-mail
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="group">
+                        <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
+                          Email
                         </label>
                         <input
                           type="email"
                           value={formData.email}
                           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-sm"
-                          placeholder="doctor@clinica.com"
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none text-sm font-semibold text-gray-800"
+                          placeholder="doc@clinica.com"
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                          Teléfono
+                      <div className="group">
+                        <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
+                          WhatsApp
                         </label>
                         <input
                           type="tel"
                           value={formData.phone}
                           onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                          className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-sm"
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none text-sm font-semibold text-gray-800"
                           placeholder="+54 9..."
                         />
                       </div>
+                    </div>
 
-                      <div className="pt-2">
-                        <label className="relative flex items-center p-3 border border-gray-100 rounded-xl bg-gray-50/50 cursor-pointer hover:bg-white transition-colors">
+                    <div className="pt-2 border-t border-gray-50">
+                      <label className="flex items-center gap-3 p-4 bg-gray-50 rounded-2xl cursor-pointer hover:bg-white border border-transparent hover:border-primary/20 transition-all group">
+                        <div className="relative">
                           <input
                             type="checkbox"
                             checked={formData.is_active}
                             onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                            className="w-4 h-4 text-primary rounded-lg border-gray-300 focus:ring-primary/20"
+                            className="sr-only peer"
                           />
-                          <div className="ml-2">
-                            <span className="block text-xs font-bold text-gray-900">Activo</span>
-                          </div>
-                        </label>
-                      </div>
+                          <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-gray-800 group-hover:text-green-600 transition-colors">Personal Activo</span>
+                          <span className="text-[10px] text-gray-400 uppercase font-black">Habilitado para la agenda global</span>
+                        </div>
+                      </label>
                     </div>
                   </div>
                 </div>
 
-                {/* Availability Section Column */}
-                <div className="lg:col-span-5 h-full border-l lg:border-l border-gray-100 lg:pl-6">
-                  <div className="sticky top-0 bg-white/90 backdrop-blur-sm pb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                        <Clock size={16} /> Disponibilidad
+                {/* Column 2: Working Hours */}
+                <div className="lg:col-span-1 border-l border-gray-100 hidden lg:block"></div>
+
+                <div className="lg:col-span-6 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                        <Clock size={16} className="text-primary" /> Configurar Calendarios
                       </h3>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-wider">Define la disponibilidad semanal</p>
                     </div>
-                    <p className="text-[10px] text-gray-500 italic mb-4">
-                      Intervalos para el bot de IA por WhatsApp.
-                    </p>
                   </div>
 
-                  <div className="space-y-2">
-                    {DAYS.map(day => (
-                      <div key={day.key} className="group border border-gray-100 rounded-xl overflow-hidden hover:border-primary/30 transition-all bg-white">
-                        <button
-                          type="button"
-                          onClick={() => toggleDay(-1, day.key)}
-                          className={`w-full flex items-center justify-between p-2.5 transition-colors ${formData.availability[day.key as keyof ProfessionalAvailability]?.length > 0
-                            ? 'bg-primary/5' : 'bg-gray-50/50'
+                  <div className="space-y-3">
+                    {DAYS.map(day => {
+                      const dayKey = day.key as keyof WorkingHours;
+                      const config = formData.working_hours[dayKey];
+                      const isExpanded = (expandedDays[-1] || []).includes(dayKey);
+
+                      return (
+                        <div
+                          key={day.key}
+                          className={`rounded-3xl border transition-all duration-300 overflow-hidden ${config.enabled
+                            ? 'bg-white border-primary/20 shadow-sm'
+                            : 'bg-white/40 border-gray-100 grayscale-[0.5]'
                             }`}
                         >
-                          <span className={`font-bold text-[11px] ${formData.availability[day.key as keyof ProfessionalAvailability]?.length > 0
-                            ? 'text-primary' : 'text-gray-600'
-                            }`}>{day.label}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-gray-400 font-medium">
-                              {formData.availability[day.key as keyof ProfessionalAvailability]?.length || 0} slots
-                            </span>
-                            <ChevronDown size={12} className="text-gray-400 group-hover:text-primary" />
-                          </div>
-                        </button>
+                          <div
+                            className={`flex items-center justify-between p-4 cursor-pointer transition-colors ${isExpanded ? 'bg-primary/5' : 'hover:bg-gray-50'
+                              }`}
+                            onClick={() => config.enabled && toggleDayExpansion(dayKey)}
+                          >
+                            <div className="flex items-center gap-4">
+                              <label
+                                className="relative inline-flex items-center cursor-pointer"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="sr-only peer"
+                                  checked={config.enabled}
+                                  onChange={() => toggleDayEnabled(dayKey)}
+                                />
+                                <div className="w-10 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                              </label>
+                              <span className={`text-sm font-black uppercase tracking-widest ${config.enabled ? 'text-gray-900' : 'text-gray-400'
+                                }`}>
+                                {day.label}
+                              </span>
+                            </div>
 
-                        {(expandedDays[-1] || []).includes(day.key) && (
-                          <div className="p-2 space-y-1.5 bg-white animate-in slide-in-from-top-1 duration-200">
-                            {formData.availability[day.key as keyof ProfessionalAvailability]?.map((slot: TimeSlot, index: number) => (
-                              <div key={index} className="flex items-center gap-1.5 group/slot">
-                                <div className="flex-1 flex gap-1">
-                                  <input
-                                    type="time"
-                                    value={slot.start}
-                                    onChange={(e) => updateTimeSlot(day.key, index, 'start', e.target.value)}
-                                    className="flex-1 px-1.5 py-1 bg-gray-50 border-none rounded-lg text-[10px] font-semibold focus:ring-1 focus:ring-primary outline-none"
-                                  />
-                                  <span className="text-gray-300 self-center text-[10px]">-</span>
-                                  <input
-                                    type="time"
-                                    value={slot.end}
-                                    onChange={(e) => updateTimeSlot(day.key, index, 'end', e.target.value)}
-                                    className="flex-1 px-1.5 py-1 bg-gray-50 border-none rounded-lg text-[10px] font-semibold focus:ring-1 focus:ring-primary outline-none"
-                                  />
+                            <div className="flex items-center gap-4">
+                              {config.enabled && (
+                                <div className="flex -space-x-1">
+                                  {config.slots.map((_, i) => (
+                                    <div key={i} className="w-2.5 h-2.5 rounded-full border-2 border-white bg-primary shadow-sm"></div>
+                                  ))}
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => removeTimeSlot(day.key, index)}
-                                  className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                >
-                                  <X size={12} />
-                                </button>
-                              </div>
-                            ))}
-                            <button
-                              type="button"
-                              onClick={() => addTimeSlot(day.key)}
-                              className="w-full py-1 border border-dashed border-gray-200 rounded-lg text-[10px] font-bold text-gray-400 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all mt-1"
-                            >
-                              + Slot
-                            </button>
+                              )}
+                              {config.enabled && (
+                                <div className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
+                                  <ChevronDown size={20} className="text-gray-400" />
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    ))}
+
+                          {/* Slots Container - Smooth expansion */}
+                          {isExpanded && config.enabled && (
+                            <div className="p-5 pt-2 space-y-3 bg-gradient-to-b from-primary/5 to-white animate-in slide-in-from-top-4 duration-300">
+                              {config.slots.map((slot, index) => (
+                                <div key={index} className="flex items-center gap-3 animate-in fade-in duration-500">
+                                  <div className="flex-1 grid grid-cols-2 gap-px bg-gray-200 rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+                                    <div className="bg-white p-3 flex flex-col items-center">
+                                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">Entrada</span>
+                                      <input
+                                        type="time"
+                                        value={slot.start}
+                                        onChange={(e) => updateTimeSlot(dayKey, index, 'start', e.target.value)}
+                                        className="text-sm font-bold text-gray-800 outline-none w-full text-center hover:text-primary transition-colors"
+                                      />
+                                    </div>
+                                    <div className="bg-white p-3 flex flex-col items-center border-l border-gray-50">
+                                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">Salida</span>
+                                      <input
+                                        type="time"
+                                        value={slot.end}
+                                        onChange={(e) => updateTimeSlot(dayKey, index, 'end', e.target.value)}
+                                        className="text-sm font-bold text-gray-800 outline-none w-full text-center hover:text-primary transition-colors"
+                                      />
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeTimeSlot(dayKey, index)}
+                                    className="p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all border border-transparent hover:border-red-100"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => addTimeSlot(dayKey)}
+                                className="w-full py-3 bg-white border-2 border-dashed border-primary/20 rounded-2xl text-[11px] font-black uppercase tracking-widest text-primary/60 hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all shadow-sm"
+                              >
+                                + Agregar Bloque Horario
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
-
-              <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-gray-100 bg-white/50 sticky bottom-0">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-6 py-2 text-sm font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-8 py-2 text-sm font-bold text-white bg-primary hover:bg-primary-dark rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/30 transform hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center gap-2"
-                >
-                  <Save size={18} />
-                  Guardar Cambios
-                </button>
-              </div>
             </form>
+
+            {/* Modal Footer - Sticky Bottom on Mobile */}
+            <div className="p-6 border-t border-gray-100 bg-white flex flex-col sm:flex-row justify-end gap-3 sticky bottom-0 z-10 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="w-full sm:w-auto px-8 py-3.5 text-sm font-black uppercase tracking-widest text-gray-400 hover:text-gray-900 border border-transparent hover:border-gray-100 rounded-2xl transition-all min-h-[44px]"
+              >
+                Cerrar
+              </button>
+              <button
+                type="submit"
+                onClick={handleSubmit}
+                className="w-full sm:w-auto px-10 py-3.5 text-sm font-black uppercase tracking-widest text-white bg-primary hover:bg-primary-dark rounded-2xl shadow-xl shadow-primary/20 hover:shadow-primary/40 transform hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-3 min-h-[44px]"
+              >
+                <Save size={20} />
+                {editingProfessional?.id ? 'Guardar Cambios' : 'Firmar Alta Médica'}
+              </button>
+            </div>
           </div>
         </div>
       )}

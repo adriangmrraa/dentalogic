@@ -194,6 +194,28 @@ def to_json_safe(data):
         return data.isoformat()
     return data
 
+def is_time_in_working_hours(time_str: str, day_config: Dict[str, Any]) -> bool:
+    """Verifica si un HH:MM está dentro de los slots habilitados del día."""
+    if not day_config.get("enabled", False):
+        return False
+    
+    # Normalizar time_str a minutos desde medianoche para comparación fácil
+    try:
+        th, tm = map(int, time_str.split(':'))
+        current_m = th * 60 + tm
+        
+        for slot in day_config.get("slots", []):
+            sh, sm = map(int, slot['start'].split(':'))
+            eh, em = map(int, slot['end'].split(':'))
+            start_m = sh * 60 + sm
+            end_m = eh * 60 + em
+            
+            if start_m <= current_m < end_m:
+                return True
+    except:
+        pass
+    return False
+
 def generate_free_slots(target_date: date, busy_intervals_by_prof: Dict[int, set], 
                         start_time_str="09:00", end_time_str="18:00", interval_minutes=30, 
                         duration_minutes=30, limit=20, time_preference: Optional[str] = None) -> List[str]:
@@ -284,7 +306,7 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
             # Remover títulos comunes y normalizar
             clean_name = re.sub(r'^(dr|dra|doctor|doctora)\.?\s+', '', professional_name, flags=re.IGNORECASE).strip()
         
-        query = "SELECT id, first_name, last_name, google_calendar_id FROM professionals WHERE is_active = true"
+        query = "SELECT id, first_name, last_name, google_calendar_id, working_hours FROM professionals WHERE is_active = true"
         params = []
         if clean_name:
             query += " AND (first_name ILIKE $1 OR last_name ILIKE $1 OR (first_name || ' ' || last_name) ILIKE $1)"
@@ -295,7 +317,19 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
             return f"❌ No encontré al profesional '{professional_name}'. ¿Querés consultar disponibilidad general?"
 
         target_date = parse_date(date_query)
-        # ... (rest of date validation)
+        
+        # 0. B) Validar contra Working Hours antes de GCal (Primer Filtro)
+        day_name_en = target_date.strftime("%A").lower()
+        
+        # Si se pidió un profesional específico, verificar si atiende ese día
+        if clean_name and active_professionals:
+            prof = active_professionals[0]
+            wh = prof.get('working_hours') or {}
+            day_config = wh.get(day_name_en, {"enabled": False, "slots": []})
+            
+            if not day_config.get("enabled"):
+                return f"Lo siento, el/la Dr/a. {prof['first_name']} no atiende los {target_date.strftime('%A')}. ¿Querés que busquemos disponibilidad con otros profesionales?"
+
         if target_date.weekday() == 6:
             return f"Lo siento, el {date_query} es domingo y la clínica está cerrada. Atendemos Lunes a Sábados."
 
@@ -376,14 +410,31 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
 
         # Mapear intervalos ocupados por profesional
         busy_map = {pid: set() for pid in prof_ids}
-        # Agregar bloques globales a todos
+        
+        # --- Pre-llenar busy_map con horarios NO LABORALES del profesional ---
+        for prof in active_professionals:
+            wh = prof.get('working_hours') or {}
+            day_config = wh.get(day_name_en, {"enabled": False, "slots": []})
+            
+            prof_id = prof['id']
+            # Iterar cada bloque de 30 min del día y marcar como ocupado si NO está en working_hours
+            check_time = datetime.combine(target_date, datetime.min.time()).replace(hour=8, minute=0) # Desde las 8am
+            for _ in range(24): # Hasta las 20hs aprox (12 horas * 2 slots/hora)
+                h_m = check_time.strftime("%H:%M")
+                if not is_time_in_working_hours(h_m, day_config):
+                    busy_map[prof_id].add(h_m)
+                check_time += timedelta(minutes=30)
+                if check_time.hour >= 20: break
+
+        # Agregar bloqueos de GCal
         global_busy = set()
         for b in gcal_blocks:
             it = b['start'].astimezone(ARG_TZ)
             while it < b['end'].astimezone(ARG_TZ):
                 h_m = it.strftime("%H:%M")
                 if b['professional_id']:
-                    busy_map[b['professional_id']].add(h_m)
+                    if b['professional_id'] in busy_map:
+                        busy_map[b['professional_id']].add(h_m)
                 else:
                     global_busy.add(h_m)
                 it += timedelta(minutes=30)
@@ -392,7 +443,8 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
             it = appt['start'].astimezone(ARG_TZ)
             end_it = it + timedelta(minutes=appt['duration_minutes'])
             while it < end_it:
-                busy_map[appt['professional_id']].add(it.strftime("%H:%M"))
+                if appt['professional_id'] in busy_map:
+                    busy_map[appt['professional_id']].add(it.strftime("%H:%M"))
                 it += timedelta(minutes=30)
         
         # Unir globales a todos
@@ -487,7 +539,7 @@ async def book_appointment(date_time: str, treatment_reason: str,
         if professional_name:
             clean_p_name = re.sub(r'^(dr|dra|doctor|doctora)\.?\s+', '', professional_name, flags=re.IGNORECASE).strip()
 
-        p_query = "SELECT id, first_name, last_name, google_calendar_id FROM professionals WHERE is_active = true"
+        p_query = "SELECT id, first_name, last_name, google_calendar_id, working_hours FROM professionals WHERE is_active = true"
         p_params = []
         if clean_p_name:
             p_query += " AND (first_name ILIKE $1 OR last_name ILIKE $1 OR (first_name || ' ' || last_name) ILIKE $1)"
@@ -502,7 +554,18 @@ async def book_appointment(date_time: str, treatment_reason: str,
         apt_gids_set = {row['google_calendar_event_id'] for row in existing_apt_gids}
 
         target_prof = None
+        day_name_en = apt_datetime.strftime("%A").lower()
+        
         for cand in candidates:
+            # --- Nuevo Filtro: Working Hours ---
+            wh = cand.get('working_hours') or {}
+            day_config = wh.get(day_name_en, {"enabled": False, "slots": []})
+            apt_time_str = apt_datetime.strftime("%H:%M")
+            
+            if not is_time_in_working_hours(apt_time_str, day_config):
+                continue # Este profesional no atiende a esta hora
+            # ----------------------------------
+
             # JIT Sync GCal for this prof/day before checking
             try:
                 g_events = gcal_service.get_events_for_day(calendar_id=cand['google_calendar_id'], date_obj=apt_datetime.date())
@@ -884,10 +947,13 @@ IDENTIDAD Y TONO ARGENTINO (FUNDAMENTAL):
 
 POLÍTICAS DURAS:
 • NUNCA INVENTES: No inventes horarios ni disponibilidad. Siempre usá 'check_availability'.
+• HORARIOS SAGRADOS: Los horarios de los profesionales son sagrados. Si un profesional no atiende el día solicitado, debés informarlo claramente al paciente ("Mirá, el Dr. Juan no atiende los Miércoles") y ofrecerle alternativas:
+  a) Buscar disponibilidad en otro día con el mismo profesional.
+  b) Buscar disponibilidad general (otros profesionales) para el día solicitado.
 • NO DIAGNOSTICAR: Ante dudas clínicas, decí: "La Dra. Laura va a tener que evaluarte acá en el consultorio para darte un diagnóstico certero y ver bien qué necesitás".
 • ZONA HORARIA: America/Argentina/Buenos_Aires (GMT-3). 
 • TIEMPO ACTUAL: {{current_time}}
-• HORARIOS DE ATENCIÓN: Lunes a Sábados de {CLINIC_HOURS_START} a {CLINIC_HOURS_END} (Domingos cerrado).
+• HORARIOS DE ATENCIÓN GENERAL: Lunes a Sábados de {CLINIC_HOURS_START} a {CLINIC_HOURS_END} (Domingos cerrado). Sin embargo, recordá que cada profesional tiene su propio horario específico que 'check_availability' conoce.
 • REGLA ANTI-PASADO: No podés agendar turnos para horarios que ya pasaron. Si un paciente pide hoy a las 15:00 y son las 15:30, informale amablemente que ese horario ya pasó y ofrecele los siguientes disponibles.
 • DERIVACIÓN (Human Handoff): 
   - Usá 'derivhumano' INMEDIATAMENTE si: 

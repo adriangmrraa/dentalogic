@@ -257,6 +257,7 @@ class ProfessionalCreate(BaseModel):
     address: Optional[str] = None
     is_active: bool = True
     availability: Dict[str, Any] = {}
+    working_hours: Optional[Dict[str, Any]] = None
 
 class ProfessionalUpdate(BaseModel):
     name: str
@@ -266,6 +267,21 @@ class ProfessionalUpdate(BaseModel):
     license_number: Optional[str] = None
     is_active: bool
     availability: Dict[str, Any]
+    working_hours: Optional[Dict[str, Any]] = None
+
+def generate_default_working_hours():
+    """Genera el JSON de horarios por defecto (Mon-Sat, 09:00-18:00)"""
+    start = os.getenv("CLINIC_START_TIME", "09:00")
+    end = os.getenv("CLINIC_END_TIME", "18:00")
+    slot = {"start": start, "end": end}
+    wh = {}
+    for day in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]:
+        is_working_day = day != "sunday"
+        wh[day] = {
+            "enabled": is_working_day,
+            "slots": [slot] if is_working_day else []
+        }
+    return wh
 
 class TreatmentTypeCreate(BaseModel):
     code: str
@@ -822,14 +838,16 @@ async def create_professional(professional: ProfessionalCreate):
         """, user_id, email, "hash_placeholder", professional.name)
 
         # 2. Crear profesional
+        wh = professional.working_hours or generate_default_working_hours()
+        
         await db.pool.execute("""
             INSERT INTO professionals (
                 user_id, first_name, specialty, license_number, phone_number, 
-                address, is_active, availability, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                address, is_active, availability, working_hours, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
         """, user_id, professional.name, professional.specialty, professional.license_number,
              professional.phone, professional.address, professional.is_active,
-             json.dumps(professional.availability))
+             json.dumps(professional.availability), json.dumps(wh))
              
         return {"status": "created", "user_id": str(user_id)}
     except Exception as e:
@@ -846,20 +864,33 @@ async def update_professional(id: int, payload: ProfessionalUpdate):
             raise HTTPException(status_code=404, detail="Profesional no encontrado")
 
         # Actualizar datos básicos y disponibilidad
-        await db.pool.execute("""
-            UPDATE professionals SET
-                first_name = $1,
-                specialty = $2,
-                license_number = $3,
-                phone_number = $4,
-                email = $5,
-                is_active = $6,
-                availability = $7::jsonb,
-                updated_at = NOW()
-            WHERE id = $8
-        """, payload.name, payload.specialty, payload.license_number, 
-             payload.phone, payload.email, payload.is_active, 
-             json.dumps(payload.availability), id)
+        current_wh = payload.working_hours
+        if current_wh:
+             sql_update = """
+                UPDATE professionals SET
+                    first_name = $1, specialty = $2, license_number = $3,
+                    phone_number = $4, email = $5, is_active = $6,
+                    availability = $7::jsonb, working_hours = $8::jsonb,
+                    updated_at = NOW()
+                WHERE id = $9
+            """
+             params = [payload.name, payload.specialty, payload.license_number, 
+                      payload.phone, payload.email, payload.is_active, 
+                      json.dumps(payload.availability), json.dumps(current_wh), id]
+        else:
+             sql_update = """
+                UPDATE professionals SET
+                    first_name = $1, specialty = $2, license_number = $3,
+                    phone_number = $4, email = $5, is_active = $6,
+                    availability = $7::jsonb,
+                    updated_at = NOW()
+                WHERE id = $8
+            """
+             params = [payload.name, payload.specialty, payload.license_number, 
+                      payload.phone, payload.email, payload.is_active, 
+                      json.dumps(payload.availability), id]
+
+        await db.pool.execute(sql_update, *params)
              
         return {"id": id, "status": "updated"}
     except HTTPException:
@@ -1131,9 +1162,9 @@ async def create_appointment_manual(apt: AppointmentCreate, request: Request):
 
 @router.put("/appointments/{id}/status", dependencies=[Depends(verify_admin_token)])
 @router.patch("/appointments/{id}/status", dependencies=[Depends(verify_admin_token)])
-async def update_appointment_status(id: str, status: str, request: Request):
+async def update_appointment_status(id: str, payload: StatusUpdate, request: Request):
     """Cambiar estado: confirmed, cancelled, attended, no_show."""
-    await db.pool.execute("UPDATE appointments SET status = $1 WHERE id = $2", status, id)
+    await db.pool.execute("UPDATE appointments SET status = $1 WHERE id = $2", payload.status, id)
     
     # Obtener datos actualizados del turno para emitir evento
     appointment_data = await db.pool.fetchrow("""
@@ -1151,7 +1182,7 @@ async def update_appointment_status(id: str, status: str, request: Request):
     
     if appointment_data:
         # 1. Sincronizar cancelación con Google Calendar
-        if status == 'cancelled' and appointment_data['google_calendar_event_id']:
+        if payload.status == 'cancelled' and appointment_data['google_calendar_event_id']:
             try:
                 # Need to fetch professional's calendar ID
                 google_calendar_id = await db.pool.fetchval(
@@ -1169,7 +1200,7 @@ async def update_appointment_status(id: str, status: str, request: Request):
                 print(f"Error deleting GCal event: {ge}")
 
         # 2. Emitir evento según el nuevo estado
-        if status == 'cancelled':
+        if payload.status == 'cancelled':
             await emit_appointment_event("APPOINTMENT_DELETED", id, request)
         else:
             await emit_appointment_event("APPOINTMENT_UPDATED", dict(appointment_data), request)

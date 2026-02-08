@@ -235,6 +235,9 @@ CREATE TABLE IF NOT EXISTS professionals (
     email VARCHAR(255),
     phone VARCHAR(20),
     
+    -- Configuración Avanzada
+    working_hours JSONB DEFAULT '{}',     -- { "monday": { "enabled": true, "slots": [...] }, ... }
+    
     -- Auditoría
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -410,6 +413,7 @@ class Professional(Base):
     specialization = Column(String(100))
     is_active = Column(Boolean, default=True, index=True)
     schedule_json = Column(JSON, default={})
+    working_hours = Column(JSON, default={})
     email = Column(String(255))
     phone = Column(String(20))
     created_at = Column(DateTime, default=datetime.utcnow)

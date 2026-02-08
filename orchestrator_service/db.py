@@ -218,6 +218,32 @@ class Database:
                 END IF;
             END $$;
             """,
+            # Parche 9: Agregar working_hours a la tabla profesionales
+            """
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='professionals' AND column_name='working_hours') THEN
+                    ALTER TABLE professionals ADD COLUMN working_hours JSONB DEFAULT '{}';
+                END IF;
+            END $$;
+            """,
+            # Parche 10: Inicializar working_hours para profesionales existentes
+            """
+            DO $$ 
+            BEGIN 
+                UPDATE professionals 
+                SET working_hours = '{
+                    "monday": {"enabled": true, "slots": [{"start": "09:00", "end": "18:00"}]},
+                    "tuesday": {"enabled": true, "slots": [{"start": "09:00", "end": "18:00"}]},
+                    "wednesday": {"enabled": true, "slots": [{"start": "09:00", "end": "18:00"}]},
+                    "thursday": {"enabled": true, "slots": [{"start": "09:00", "end": "18:00"}]},
+                    "friday": {"enabled": true, "slots": [{"start": "09:00", "end": "18:00"}]},
+                    "saturday": {"enabled": true, "slots": [{"start": "09:00", "end": "18:00"}]},
+                    "sunday": {"enabled": false, "slots": []}
+                }'::jsonb
+                WHERE working_hours = '{}'::jsonb OR working_hours IS NULL;
+            END $$;
+            """,
         ]
 
         async with self.pool.acquire() as conn:

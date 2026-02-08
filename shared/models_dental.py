@@ -104,16 +104,25 @@ class PatientResponse(BaseModel):
 
 # ==================== PROFESIONALES ====================
 
-class ProfessionalSchedule(BaseModel):
-    """Horarios del profesional por día"""
-    monday: List[str] = Field(default=[], example=["09:00-13:00", "14:00-18:00"])
-    tuesday: List[str] = Field(default=[])
-    wednesday: List[str] = Field(default=[])
-    thursday: List[str] = Field(default=[])
-    friday: List[str] = Field(default=[])
-    saturday: Optional[List[str]] = Field(default=None)
-    sunday: Optional[List[str]] = Field(default=None)
+class WorkingHourSlot(BaseModel):
+    """Un intervalo de tiempo (ej. 09:00 a 13:00)"""
+    start: str
+    end: str
 
+class DayWorkingHours(BaseModel):
+    """Configuración de horarios para un día específico"""
+    enabled: bool = True
+    slots: List[WorkingHourSlot] = []
+
+class ProfessionalWorkingHours(BaseModel):
+    """Horarios semanales completos del profesional (Formato Nexus v7.6)"""
+    monday: DayWorkingHours = Field(default_factory=DayWorkingHours)
+    tuesday: DayWorkingHours = Field(default_factory=DayWorkingHours)
+    wednesday: DayWorkingHours = Field(default_factory=DayWorkingHours)
+    thursday: DayWorkingHours = Field(default_factory=DayWorkingHours)
+    friday: DayWorkingHours = Field(default_factory=DayWorkingHours)
+    saturday: DayWorkingHours = Field(default_factory=DayWorkingHours)
+    sunday: DayWorkingHours = Field(default_factory=DayWorkingHours)
 
 class ProfessionalCreate(BaseModel):
     """Crear un profesional"""
@@ -124,6 +133,7 @@ class ProfessionalCreate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     schedule_json: Optional[ProfessionalSchedule] = None
+    working_hours: Optional[ProfessionalWorkingHours] = None
 
 
 class ProfessionalResponse(BaseModel):
@@ -138,6 +148,7 @@ class ProfessionalResponse(BaseModel):
     phone: Optional[str]
     is_active: bool
     schedule_json: Dict[str, Any]
+    working_hours: Optional[Dict[str, Any]]
     created_at: datetime
     updated_at: datetime
     
