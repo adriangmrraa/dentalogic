@@ -446,58 +446,25 @@ export default function AgendaView() {
       setSocketConnected(false);
     });
 
-    // Listen for NEW_APPOINTMENT events - Real-time sync from AI bot
+    // Listen for NEW_APPOINTMENT events - Real-time omnipresent sync
     socketRef.current.on('NEW_APPOINTMENT', (newAppointment: Appointment) => {
-      console.log('📅 Nuevo turno recibido via WebSocket:', newAppointment);
+      console.log('📅 Real-time: Nuevo turno detectado', newAppointment);
 
-      setAppointments(prevAppointments => {
-        const updated = [...prevAppointments, newAppointment];
-        eventsRef.current = updated;
-        return updated;
-      });
-
-      // Add event directly to calendar without refetching
+      // Trigger complete re-fetch from sources (DB + GCal blocks)
       if (calendarRef.current) {
         const calendarApi = calendarRef.current.getApi();
-        calendarApi.addEvent({
-          id: newAppointment.id,
-          title: `${newAppointment.patient_name} - ${newAppointment.appointment_type}`,
-          start: newAppointment.appointment_datetime,
-          end: newAppointment.end_datetime || undefined,
-          backgroundColor: getSourceColor(newAppointment.source),
-          borderColor: getSourceColor(newAppointment.source),
-          extendedProps: { ...newAppointment, eventType: 'appointment' },
-        });
+        calendarApi.refetchEvents();
       }
     });
 
-    // Listen for APPOINTMENT_UPDATED events
+    // Listen for APPOINTMENT_UPDATED events - Real-time updates
     socketRef.current.on('APPOINTMENT_UPDATED', (updatedAppointment: Appointment) => {
-      console.log('🔄 Turno actualizado via WebSocket:', updatedAppointment);
+      console.log('🔄 Real-time: Turno actualizado', updatedAppointment);
 
-      setAppointments(prevAppointments => {
-        const updated = prevAppointments.map(apt =>
-          apt.id === updatedAppointment.id ? updatedAppointment : apt
-        );
-        eventsRef.current = updated;
-        return updated;
-      });
-
-
-      // Update event in calendar
+      // Trigger complete re-fetch for consistency
       if (calendarRef.current) {
         const calendarApi = calendarRef.current.getApi();
-        const existingEvent = calendarApi.getEventById(updatedAppointment.id);
-        if (existingEvent) {
-          existingEvent.setProp('title', `${updatedAppointment.patient_name} - ${updatedAppointment.appointment_type}`);
-          existingEvent.setStart(updatedAppointment.appointment_datetime);
-          if (updatedAppointment.end_datetime) {
-            existingEvent.setEnd(updatedAppointment.end_datetime);
-          }
-          existingEvent.setProp('backgroundColor', getSourceColor(updatedAppointment.source));
-          existingEvent.setProp('borderColor', getSourceColor(updatedAppointment.source));
-          existingEvent.setExtendedProp('extendedProps', { ...updatedAppointment, eventType: 'appointment' });
-        }
+        calendarApi.refetchEvents();
       }
     });
 
@@ -758,18 +725,7 @@ export default function AgendaView() {
               </span>
             </div>
 
-            {/* Sync Now Button */}
-            <button
-              onClick={() => handleSyncNow(false)}
-              disabled={syncStatus.syncing}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-xs font-medium ${syncStatus.syncing
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-primary text-white hover:bg-primary-dark shadow-sm'
-                }`}
-            >
-              <RefreshCw size={14} className={syncStatus.syncing ? 'animate-spin' : ''} />
-              <span>GCal Sync</span>
-            </button>
+
             <button
               onClick={fetchData}
               className="p-1.5 text-gray-600 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
