@@ -206,8 +206,21 @@ psql -U postgres -h postgres -d nexus_db
 SELECT * FROM tenants;
 
 # Ver tabla de conversaciones (debe estar vacía inicialmente)
-SELECT COUNT(*) FROM chat_conversations;
-```
+### 4.5 Configuración de Google Calendar (Service Account)
+
+Para que el sistema sincronice eventos, es **CRÍTICO** compartir cada calendario con la Service Account:
+
+1.  **Obtener Email de Service Account**:
+    - Desde Google Cloud Console > IAM & Admin > Service Accounts.
+    - Copiar el email (ej: `dental-bot@project-id.iam.gserviceaccount.com`).
+2.  **Compartir Calendario**:
+    - Ir a Google Calendar (dueño del calendario).
+    - Configuración > "Integrar el calendario" o "Compartir con personas específicas".
+    - Agregar el email de la Service Account.
+    - Permisos: **"Hacer cambios en eventos"** (Make changes to events).
+3.  **Obtener Calendar ID**:
+    - Copiar el "ID de calendario" (normalmente el email del dueño o un string largo `...group.calendar.google.com`).
+    - Asignar este ID al profesional correspondiente en el panel admin (`/admin/professionals`).
 
 ## 5. Variables de Entorno en EasyPanel
 

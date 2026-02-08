@@ -28,7 +28,12 @@ El agente de IA sigue un protocolo estricto para evitar "basura" en la base de d
         - DNI
         - Obra Social (o confirmar "Particular")
     - *Regla de Oro:* No se ejecuta `book_appointment` hasta tener estos 4 datos.
-4.  **Reserva y Activación:**
+4.  **Verificación de Disponibilidad (JIT):**
+    - Antes de confirmar, el sistema ejecuta una **Sincronización Just-In-Time**:
+        - Limpia el nombre del profesional (ignora 'Dra.', 'Dr.').
+        - Consulta Google Calendar en tiempo real.
+        - Filtra bloqueos que ya son citas del sistema para evitar falsos negativos.
+5.  **Reserva y Activación:**
     - Al llamar a `book_appointment(..., first_name, last_name, dni, insurance_provider)`, el sistema:
         1.  Valida que los campos no estén vacíos.
         2.  Actualiza el registro del paciente con los nuevos datos.

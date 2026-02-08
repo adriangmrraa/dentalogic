@@ -31,30 +31,30 @@ docker-compose up --build
 
 ---
 
-## 📚 Documentación Completa
+### 📚 Documentación Completa
 
 ### ⚙️ [01. Arquitectura de Microservicios](docs/01_architecture.md)
 - Estructura de servicios (Backend, Frontend, Database)
-- Flujo de mensajes y triaje de urgencias
-- **Dentalogic:** Herramientas clínicas embebidas
+- **Smart Availability:** Lógica JIT y limpieza de nombres.
 
-### 🔑 [02. Variables de Envorno](docs/02_environment_variables.md)
+### 🔑 [02. Variables de Entorno](docs/02_environment_variables.md)
 - Credenciales de Google Calendar, OpenAI y YCloud.
 
 ### ☁️ [03. Guía de Despliegue](docs/03_deployment_guide.md)
-- Instrucciones para EasyPanel y Docker.
+- Instrucciones EasyPanel y configuración de Service Accounts.
 
 ### 🧠 [04. Lógica del Agente Dental](docs/04_agent_logic_and_persona.md)
 - Persona: Asistente Clínico Profesional.
 - Tools: `check_availability`, `book_appointment`, `triage_urgency`.
-- Mecanismo de silencio de 24 horas.
 
-### 📊 [11. Análisis de Gaps (Nexus vs Dentalogic)](docs/11_gap_analysis_nexus_to_dental.md)
+### 🔀 [13. Flujo Lead -> Paciente](docs/13_lead_patient_workflow.md)
+- Protocolo de conversión de contactos nuevos a pacientes activos.
+
+### 🔌 [API Reference](docs/API_REFERENCE.md)
+- Endpoints administrativos: Tratamientos, Pacientes, Profesionales.
+
+### 📊 [11. Análisis de Gaps](docs/11_gap_analysis_nexus_to_dental.md)
 - Estado actual de la implementación vs requerimientos finales.
-
-### 🕵️ [Audit Report (Latest)](C:\Users\Asus\.gemini\antigravity\brain\d01b6032-f575-4ca0-8860-f5ec951011d8\audit_report.md)
-- Detección de spec drift y validación de documentación.
-- Última auditoría: 2026-02-05.
 
 ---
 
@@ -88,12 +88,13 @@ graph TD
 ## ⚡ Características Principales
 
 ✅ **Coordinador Clínico:** Gestión automatizada de turnos vía WhatsApp.  
+✅ **Smart Availability:** Sincronización JIT con Google Calendar y limpieza de nombres.  
+✅ **Gestión de Tratamientos:** CRUD administrativo completo con precios y duraciones dinámicas.  
 ✅ **Triaje Inteligente:** Clasificación de urgencias por IA.  
 ✅ **Historias Clínicas:** Registro automático de evoluciones y anamnesis.  
-✅ **Sincronización de Agenda:** Vista espejo con Google Calendar.  
 ✅ **Transcripción Whisper:** Soporte completo para síntomas enviados por audio.  
 ✅ **Lockout de 24h:** Silencio automático ante intervención humana.
 
 ---
 
-*Sistema Dentalogic © 2026. Optimizado para la Dra. Laura Delgado.*
+*Sistema Dentalogic © 2026.*

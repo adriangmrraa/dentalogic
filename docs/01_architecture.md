@@ -61,10 +61,11 @@ AgendaView / Odontograma
 **Función:** Procesamiento de lenguaje natural, clasificación de urgencias y gestión de agenda.
 
 **Tools Clínicas Integradas:**
-- `check_availability(date)`: Implementa lógica **Just-in-Time (JIT)**.
-  1. Consulta eventos en vivo a Google Calendar API (Mirroring).
-  2. Actualiza caché local `google_calendar_blocks`.
-  3. Calcula huecos libres combinando `appointments` + `google_calendar_blocks`.
+- `check_availability(date)`: Implementa lógica **Just-in-Time (JIT)** v2.
+  1. **Limpieza de Identidad:** Normaliza nombres de profesionales (elimina títulos como "Dr."/"Dra.").
+  2. **Mirroring en Vivo:** Consulta eventos a Google Calendar API en tiempo real.
+  3. **Deduping Inteligente:** Filtra eventos de GCal que ya son citas del sistema (`appointments`).
+  4. **Cálculo de Huecos:** Combina `appointments` locales + bloqueos externos de GCal.
 - `book_appointment(...)`: 
   - Valida datos obligatorios para leads (DNI, Obra Social).
   - Registra turno en PG + GCal.
