@@ -79,4 +79,22 @@ En despliegues iniciales, el sistema auto-activa al primer `ceo` registrado para
 ---
 
 *Guía de Desarrolladores Dentalogic © 2026*
+
+---
+
+## 20. Agenda Móvil: Rangos y Scroll (2026-02-08)
+
+### 20.1 Cálculo de Rango sin FullCalendar
+En móvil, el componente `FullCalendar` no se renderiza. Esto rompe la lógica de `fetchData` que intenta acceder a `activeStart/End` vía `calendarRef`.
+- **Solución**: Se implementó un fallback que calcula un rango de `+/- 7 días` basado en el estado `selectedDate`.
+
+### 20.2 Scroll Isolation en Flexbox
+Para que un componente hijo (`MobileAgenda`) tenga un scroll independiente dentro de un padre con `overflow-hidden`:
+1. El contenedor padre debe ser `flex flex-col h-screen overflow-hidden`.
+2. El contenedor intermedio debe ser `flex-1 min-h-0`.
+3. El componente hijo debe ser `flex-1 min-h-0` con un área interna de `overflow-y-auto`.
+- **Nota**: El `min-h-0` es mandatorio en Chrome y Safari para permitir que el hijo se contraiga y active su propio scrollbar.
+
+### 20.3 Normalización de Fechas
+Se recomienda el uso de `format(parseISO(...), 'yyyy-MM-dd')` de `date-fns` para todas las comparaciones de UI, evitando inconsistencias de huso horario entre el backend (UTC) y los dispositivos móviles.
 泛

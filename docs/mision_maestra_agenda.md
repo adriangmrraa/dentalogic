@@ -106,7 +106,32 @@ Para el cierre del hito de refactorización, se deben validar los siguientes pun
 * [x] SQL Check: Verificación de parámetros LIMIT y OFFSET en todos los endpoints de listado.
 * [x] Sovereign Check: Confirmación de que el tenant_id se propaga en todas las llamadas al gcal_service.
 
-## 8. Cierre de Proyecto (2026-02-08)
+### Evolución a Optimización Móvil v4 (2026-02-08)
+
+La última fase de optimización se centró en la robustez de la experiencia móvil y el aislamiento de scroll nativo.
+
+**Cambios Implementados:**
+
+1. **Resolución de "Blackouts" de Datos (Intelligent Fetch Range)**
+   - **Antes**: La carga de datos dependía de la vista activa de FullCalendar. En móvil, al no estar montado el calendario, el sistema pedía rangos nulos, mostrando pantallas vacías.
+   - **Ahora**: En móvil, el sistema solicita automáticamente un rango de **+/- 7 días** alrededor de la fecha seleccionada.
+   - **Gatillo de Recarga**: Se implementó un re-fetch automático al cambiar la fecha en móvil para asegurar frescura de datos.
+
+2. **Aislamiento de Scroll Móvil (Scroll Isolation)**
+   - Se aplicó el patrón `flex-1 min-h-0` tanto en el wrapper de `AgendaView.tsx` como en la raíz de `MobileAgenda.tsx`.
+   - Esto permite que la lista de turnos sea scrolleable independientemente, manteniendo el selector de fechas superior siempre visible y evitando que el contenido se corte por el desborde del `h-screen`.
+
+3. **Normalización con date-fns**
+   - Se estandarizó el uso de `format(parseISO(date), 'yyyy-MM-dd')` para comparaciones de fechas, eliminando inconsistencias de zonas horarias en dispositivos móviles.
+
+**Impacto UX:**
+- Navegación fluida de 15 días sin tiempos de espera entre saltos de día.
+- Scroll nativo 1:1 en móvil, eliminando la sensación de "página cortada".
+- Visualización unificada de turnos clínicos y bloqueos de Google Calendar en una sola lista cronológica.
+
+---
+
+## 9. Cierre de Proyecto (2026-02-08)
 
 La refactorización de la Agenda Inteligente 2.0 ha concluido con éxito, alcanzando el estado de **SaaS Ready**. El sistema no solo cumple con los requisitos funcionales de gestión clínica, sino que establece un nuevo estándar de excelencia visual (Sovereign Glass) y operativa (Omnipresencia v3) para la plataforma Dentalogic.
 

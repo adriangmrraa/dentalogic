@@ -19,7 +19,8 @@ Implementar el patrón **"Sovereign Glass"** que combina:
 ### KPIs
 - ✅ **Percepción Visual**: El cliente debe decir "wow" al abrir la agenda
 - ✅ **Zero Global Scroll**: El sidebar/topbar nunca deben moverse con el contenido
-- ✅ **Mobile Perfecto**: Experiencia fluida en iPhone SE (375px)
+- ✅ **Mobile Perfecto**: Experiencia fluida en iPhone SE (375px) con scroll independiente.
+- ✅ **Nested Scroll Isolation**: El uso de `min-h-0` en hijos `flex-1` es obligatorio para que el scroll se propague correctamente en navegadores móviles.
 
 ---
 
@@ -66,6 +67,7 @@ interface VisualContract {
 ### Regla 1: Scroll Isolation (Mandatory)
 - **SI** el usuario hace scroll en la agenda **ENTONCES** solo el contenido del calendario se mueve
 - **NUNCA** el sidebar, topbar o root layout deben scrollear
+- **MANDATORIO**: Todo hijo directo de un contenedor `flex-1` que pretenda scrollear debe tener `min-h-0` (para Chrome/Safari behavior).
 
 ### Regla 2: Glassmorphism Hierarchy
 - **SOLO** el contenedor del calendario debe tener glassmorphism

@@ -61,7 +61,7 @@ export default function MobileAgenda({
     };
 
     return (
-        <div className="flex flex-col h-full bg-gray-50">
+        <div className="flex flex-col flex-1 min-h-0 bg-gray-50">
             {/* Date Strip Navigation */}
             <DateStrip selectedDate={selectedDate} onDateSelect={onDateChange} />
 
@@ -83,8 +83,8 @@ export default function MobileAgenda({
                                 }
                             })}
                             className={`bg-white rounded-xl shadow-sm p-4 border-l-4 ${evt.uiType === 'block'
-                                    ? 'border-l-gray-400 bg-gray-50/50'
-                                    : getStatusColor(evt.status)
+                                ? 'border-l-gray-400 bg-gray-50/50'
+                                : getStatusColor(evt.status)
                                 } active:scale-[0.98] transition-transform touch-manipulation`}
                         >
                             <div className="flex justify-between items-start mb-2">
