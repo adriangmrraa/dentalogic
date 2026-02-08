@@ -53,5 +53,14 @@ Para agilizar la recepción, el panel administrativo permite un "Alta Express":
 
 ## 4. Filtrado en Dashboard
 
-- La vista de **Pacientes** (`/admin/patients`) filtra por defecto a los `status='active'`.
 - Los Leads (`guest`) no ensucian la lista principal de pacientes hasta que concretan su primer turno.
+
+## 5. Visibilidad en Chats (Contexto Clínico)
+
+Para facilitar la atención humana, la vista de **Chats** integra un panel de **Contexto Clínico** que se sincroniza en tiempo real:
+
+- **Detección Automática**: Al seleccionar una conversación, el sistema busca el perfil del paciente por número de teléfono.
+- **Diferenciación Visual**:
+    - **Leads**: Muestran "Sin citas programadas" y "Sin plan de tratamiento".
+    - **Pacientes**: Muestran detalles de la última visita (incluyendo duración y profesional) y próximas citas agendadas.
+- **Soberanía**: La información mostrada está estrictamente aislada por el `tenant_id` de la clínica actual.

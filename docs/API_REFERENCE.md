@@ -102,14 +102,34 @@ Almacena tokens de OAuth para cada tenant de forma segura.
 Crea una ficha médica administrativamente. Incluye triaje inicial.
 
 **Payload:**
-```json
-{
-  "first_name": "Juan",
-  "last_name": "Perez",
-  "dni": "12345678",
-  "phone_number": "+54911...",
   "insurance_provider": "OSDE",
   "urgency_level": "medium"
+}
+```
+
+### Contexto Clínico del Paciente
+`GET /admin/patients/phone/{phone}/context`
+
+Retorna información consolidada para la vista de chat (Última cita, próxima cita, plan de tratamiento). Aislado por `tenant_id`.
+
+**Response:**
+```json
+{
+  "patient": { "id": 1, "first_name": "Juan", ... },
+  "last_appointment": {
+    "date": "2026-02-01T10:00:00",
+    "type": "Limpieza",
+    "duration_minutes": 30,
+    "professional_name": "Dr. Smith"
+  },
+  "upcoming_appointment": {
+    "date": "2026-02-15T15:00:00",
+    "type": "Control",
+    "duration_minutes": 20,
+    "professional_name": "Dra. Gomez"
+  },
+  "treatment_plan": "Blanqueamiento dental en 3 sesiones",
+  "is_guest": false
 }
 ```
 

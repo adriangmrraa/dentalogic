@@ -111,4 +111,7 @@ El endpoint `/admin/stats/summary` requiere el parámetro `range` (`weekly` | `m
 
 ### 21.3 Conteo de Conversaciones (Threads vs Messages)
 Para evitar inflación de métricas, el conteo de conversaciones **debe** usar `DISTINCT from_number`. Un paciente puede intercambiar 200 mensajes, pero el Dashboard lo reportará como **1 conversación** para medir alcance real, no volumen de tokens.
+
+### 21.4 Mapeo de Contexto Clínico (Frontend Compatibility)
+En el endpoint `/admin/patients/phone/{phone}/context`, el backend realiza un alias explícito: `appointment_datetime AS date`. Esto es necesario porque el componente `ChatsView.tsx` consume el campo `date` para uniformidad con otros dashboards de la plataforma. Cualquier cambio en el esquema de Citas debe mantener este alias para evitar errores de "Invalid Date".
 泛
