@@ -114,4 +114,16 @@ Para evitar inflación de métricas, el conteo de conversaciones **debe** usar `
 
 ### 21.4 Mapeo de Contexto Clínico (Frontend Compatibility)
 En el endpoint `/admin/patients/phone/{phone}/context`, el backend realiza un alias explícito: `appointment_datetime AS date`. Esto es necesario porque el componente `ChatsView.tsx` consume el campo `date` para uniformidad con otros dashboards de la plataforma. Cualquier cambio en el esquema de Citas debe mantener este alias para evitar errores de "Invalid Date".
+
+### 21.5 Robustez en Sincronización JIT (GCal Blocks)
+Para evitar que fallos en un solo calendario bloqueen todo el sistema de disponibilidad, se implementó `ON CONFLICT (google_event_id) DO NOTHING` en las inserciones de `google_calendar_blocks`. Esto permite que agendas sugeridas o compartidas entre profesionales no generen duplicados ni errores 500 durante la consulta JIT.
+
+### 21.6 Validación de Horarios Universales (Locale Isolation)
+Se ha migrado la validación de `working_hours` del uso de nombres de días (`strftime("%A")`) a índices numéricos de Python (`target_date.weekday()`). 
+*   **Razón**: El locale del servidor (Inglés vs Español) puede alterar los nombres de los días, rompiendo el mapeo con el JSONB de la base de datos. Usar `0-6` garantiza que el sistema funcione en cualquier entorno de despliegue (Local, Render, VPS).
+
+### 21.7 Lógica "Service-First" en Agente IA
+El protocolo de agendamiento se ha reestructurado para que el agente indague el servicio clínico **antes** de solicitar datos personales (DNI, Nombre).
+*   **Objetivo**: Obtener la duración del tratamiento (`treatment_types`) de forma inmediata para que `check_availability` devuelva slots precisos.
+*   **Sugerencia Contextual**: Si el paciente es vago, la IA sugiere tratamientos típicos según la especialidad del tenant.
 泛

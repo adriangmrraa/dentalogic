@@ -67,6 +67,7 @@ AgendaView / Odontograma
   3. **Deduping Inteligente:** Filtra eventos de GCal que ya son citas del sistema (`appointments`).
   4. **Cálculo de Huecos:** Combina `appointments` locales + bloqueos externos de GCal.
 - `book_appointment(...)`: 
+  - **Protocolo Service-First (2026-02-08)**: La IA indaga el servicio clínico antes de los datos del paciente para garantizar que la duración del turno sea correcta.
   - Valida datos obligatorios para leads (DNI, Obra Social).
   - Registra turno en PG + GCal.
   - Emite eventos WebSocket (`NEW_APPOINTMENT`) para actualizar UI.

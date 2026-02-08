@@ -19,15 +19,14 @@ El agente de IA sigue un protocolo estricto para evitar "basura" en la base de d
 
 ### Protocolo de Agendamiento
 
-1.  **Lead solicita turno:** El usuario dice "quiero un turno".
-2.  **Verificación de Estado:** El sistema detecta que es `guest`.
-3.  **Solicitud de Datos (Mandatoria):**
-    - La IA **DEBE** solicitar:
-        - Nombre
-        - Apellido
-        - DNI
-        - Obra Social (o confirmar "Particular")
-    - *Regla de Oro:* No se ejecuta `book_appointment` hasta tener estos 4 datos.
+1.  **Lead solicita turno:** El usuario dice "quiero un turno" o saluda.
+2.  **Indagación de Servicio (Etapa Crítica - JIT):** 
+    - El agente **DEBE** preguntar el tratamiento o consulta deseada antes de solicitar datos personales.
+    - Esto permite calcular la **duración exacta del turno** (ej. 30 min para Limpieza vs 60 min para Endodoncia) y consultar disponibilidad real.
+3.  **Verificación de Estado:** El sistema detecta si el usuario es `guest`.
+4.  **Solicitud de Datos (Solo tras confirmación de interés):**
+    - La IA solicita: Nombre, Apellido, DNI, Obra Social.
+    - *Regla de Oro:* No se ejecuta `book_appointment` hasta tener los 4 datos y el horario elegido.
 4.  **Verificación de Disponibilidad (JIT):**
     - Antes de confirmar, el sistema ejecuta una **Sincronización Just-In-Time**:
         - Limpia el nombre del profesional (ignora 'Dra.', 'Dr.').
