@@ -105,35 +105,13 @@ export default function DashboardView() {
     const loadDashboardData = async () => {
       try {
         setLoading(true);
-        // En un escenario real, llamaríamos a /admin/analytics/stats
-        const response = await api.get('/admin/stats/summary');
-
-        // Mock data for Recharts (as specified in logic "Gala")
-        const mockGrowth = [
-          { date: 'Lun', ia_referrals: 12, completed_appointments: 8 },
-          { date: 'Mar', ia_referrals: 18, completed_appointments: 12 },
-          { date: 'Mie', ia_referrals: 15, completed_appointments: 14 },
-          { date: 'Jue', ia_referrals: 25, completed_appointments: 20 },
-          { date: 'Vie', ia_referrals: 22, completed_appointments: 18 },
-          { date: 'Sab', ia_referrals: 10, completed_appointments: 6 },
-          { date: 'Dom', ia_referrals: 5, completed_appointments: 2 },
-        ];
-
-        setStats({
-          ia_conversations: (response.data.total_patients || 0) * 4,
-          ia_appointments: response.data.appointments_today || 0,
-          active_urgencies: response.data.active_urgencies || 0,
-          total_revenue: 12500,
-          growth_data: mockGrowth
-        });
-
-        // Mock Urgencies for Bottom Row
-        setUrgencies([
-          { id: '1', patient_name: 'Juan Pérez', phone: '+54 11 2345-6789', urgency_level: 'CRITICAL', reason: 'Dolor agudo persistente', timestamp: '10:30 AM' },
-          { id: '2', patient_name: 'María García', phone: '+54 11 9876-5432', urgency_level: 'HIGH', reason: 'Absceso dental', timestamp: '11:15 AM' },
-          { id: '3', patient_name: 'Carlos López', phone: '+54 11 5555-1234', urgency_level: 'NORMAL', reason: 'Control post-operatorio', timestamp: '12:00 PM' },
-          { id: '4', patient_name: 'Ana Smith', phone: '+1 555 123 4567', urgency_level: 'NORMAL', reason: 'Consulta estética', timestamp: '12:45 PM' },
+        const [statsRes, urgenciesRes] = await Promise.all([
+          api.get('/admin/stats/summary'),
+          api.get('/admin/chat/urgencies')
         ]);
+
+        setStats(statsRes.data);
+        setUrgencies(urgenciesRes.data);
 
       } catch (error) {
         console.error('Error loading analytics:', error);
@@ -197,7 +175,7 @@ export default function DashboardView() {
             color="bg-rose-500"
           />
           <KPICard
-            title="Ingresos (Gala)"
+            title="Ingresos"
             value={`$${stats?.total_revenue?.toLocaleString()}`}
             icon={DollarSign}
             color="bg-amber-500"
@@ -206,8 +184,8 @@ export default function DashboardView() {
         </div>
 
         {/* MIDDLE ROW: CHARTS */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+        <div className="grid grid-cols-1 gap-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-lg font-semibold text-slate-800">Eficiencia de IA (Derivaciones vs Concretadas)</h2>
               <div className="hidden sm:flex gap-4 text-xs font-medium text-slate-500">
@@ -241,33 +219,6 @@ export default function DashboardView() {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden flex flex-col justify-between">
-            <div className="relative z-10">
-              <h2 className="text-lg font-semibold mb-1 text-blue-400">Strategic Insights</h2>
-              <p className="text-slate-400 text-xs mb-6 uppercase tracking-widest">Sovereign Protocol v8.0</p>
-
-              <div className="space-y-4">
-                <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
-                  <span className="text-sm text-slate-300">Latencia RAG</span>
-                  <span className="text-sm font-mono text-emerald-400">142ms</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
-                  <span className="text-sm text-slate-300">Isolation Mode</span>
-                  <span className="text-sm font-mono text-blue-400">Active</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
-                  <span className="text-sm text-slate-300">Security Layers</span>
-                  <span className="text-sm font-mono text-amber-400">Triple</span>
-                </div>
-              </div>
-            </div>
-
-            <button className="z-10 w-full mt-6 py-4 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold transition-all transform hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-2 shadow-lg min-h-[44px]">
-              Ver Informe Maestro <ArrowUpRight size={18} />
-            </button>
-
-            <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl"></div>
-          </div>
         </div>
 
         {/* BOTTOM ROW: RECENT URGENCIES TABLE */}

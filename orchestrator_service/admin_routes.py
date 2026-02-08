@@ -619,10 +619,14 @@ async def get_dashboard_stats():
             WHERE urgency_level IN ('high', 'emergency') AND status NOT IN ('cancelled', 'completed')
         """) or 0
         
-        # 4. Ingresos Totales (Solo CEOs)
+        # 4. Ingresos Totales (Solo por turnos con asistencia confirmada)
         total_revenue = await db.pool.fetchval("""
-            SELECT COALESCE(SUM(amount), 0) FROM accounting_transactions 
-            WHERE transaction_type = 'payment' AND status = 'completed'
+            SELECT COALESCE(SUM(at.amount), 0) 
+            FROM accounting_transactions at
+            JOIN appointments a ON at.appointment_id = a.id
+            WHERE at.transaction_type = 'payment' 
+            AND at.status = 'completed'
+            AND a.status IN ('completed', 'attended')
         """) or 0
 
         # 5. Datos de crecimiento (Últimos 7 días)
@@ -630,7 +634,7 @@ async def get_dashboard_stats():
             SELECT 
                 DATE(appointment_datetime) as date,
                 COUNT(*) FILTER (WHERE source = 'ai') as ia_referrals,
-                COUNT(*) FILTER (WHERE status IN ('confirmed', 'completed', 'attended')) as completed_appointments
+                COUNT(*) FILTER (WHERE status IN ('completed', 'attended')) as completed_appointments
             FROM appointments
             WHERE appointment_datetime >= CURRENT_DATE - INTERVAL '7 days'
             GROUP BY DATE(appointment_datetime)
