@@ -88,6 +88,12 @@ class ChatRequest(BaseModel):
     def final_name(self) -> str:
         return self.customer_name or self.name or "Paciente"
 
+def to_json_safe(obj: Any) -> Any:
+    """Helper para serializar objetos datetime/date para JSON/SocketIO."""
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    return obj
+
 # --- HELPERS PARA PARSING DE FECHAS ---
 
 def get_next_weekday(target_weekday: int) -> date:
@@ -272,25 +278,30 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
     Devuelve: Horarios disponibles
     """
     try:
-        # 0. A) Obtener profesionales activos
-        query = "SELECT id, first_name, google_calendar_id FROM professionals WHERE is_active = true"
-        params = []
+        # 0. A) Limpiar nombre y obtener profesionales activos
+        clean_name = professional_name
         if professional_name:
-            query += " AND (first_name ILIKE $1 OR last_name ILIKE $1)"
-            params.append(f"%{professional_name}%")
+            # Remover títulos comunes y normalizar
+            clean_name = re.sub(r'^(dr|dra|doctor|doctora)\.?\s+', '', professional_name, flags=re.IGNORECASE).strip()
+        
+        query = "SELECT id, first_name, last_name, google_calendar_id FROM professionals WHERE is_active = true"
+        params = []
+        if clean_name:
+            query += " AND (first_name ILIKE $1 OR last_name ILIKE $1 OR (first_name || ' ' || last_name) ILIKE $1)"
+            params.append(f"%{clean_name}%")
         
         active_professionals = await db.pool.fetch(query, *params)
-        if not active_professionals:
-            return f"❌ No encontré al profesional '{professional_name}' o no está activo."
+        if not active_professionals and professional_name:
+            return f"❌ No encontré al profesional '{professional_name}'. ¿Querés consultar disponibilidad general?"
 
         target_date = parse_date(date_query)
+        # ... (rest of date validation)
         if target_date.weekday() == 6:
             return f"Lo siento, el {date_query} es domingo y la clínica está cerrada. Atendemos Lunes a Sábados."
 
         # 0. B) Obtener duración del tratamiento
         duration = 30 # Default
         if treatment_name:
-            # Búsqueda difusa de tratamiento por nombre
             t_data = await db.pool.fetchrow("""
                 SELECT default_duration_minutes FROM treatment_types 
                 WHERE (name ILIKE $1 OR code ILIKE $1) AND is_available_for_booking = true
@@ -300,6 +311,10 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
                 duration = t_data['default_duration_minutes']
         
         # --- JIT VALIDATION: Fetch Real-Time Events from Google ---
+        # Obtener IDs de citas ya existentes para evitar duplicados como "bloques"
+        existing_apt_gids = await db.pool.fetch("SELECT google_calendar_event_id FROM appointments WHERE google_calendar_event_id IS NOT NULL")
+        apt_gids_set = {row['google_calendar_event_id'] for row in existing_apt_gids}
+
         for prof in active_professionals:
             prof_id = prof['id']
             cal_id = prof['google_calendar_id']
@@ -310,6 +325,7 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
                 start_day = datetime.combine(target_date, datetime.min.time(), tzinfo=ARG_TZ)
                 end_day = datetime.combine(target_date, datetime.max.time(), tzinfo=ARG_TZ)
                 
+                # Limpiar bloques viejos para este día y profesional antes de re-insertar
                 await db.pool.execute("""
                     DELETE FROM google_calendar_blocks 
                     WHERE professional_id = $1 AND (start_datetime < $3 AND end_datetime > $2)
@@ -317,6 +333,9 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
                 
                 for event in g_events:
                     g_id = event['id']
+                    if g_id in apt_gids_set:
+                        continue # Ya es una cita controlada por nosotros
+                        
                     summary = event.get('summary', 'Ocupado (GCal)')
                     description = event.get('description', '')
                     start = event['start'].get('dateTime') or event['start'].get('date')
@@ -464,15 +483,23 @@ async def book_appointment(date_time: str, treatment_reason: str,
             patient_id = row['id']
 
         # 3. Encontrar profesional disponible
-        p_query = "SELECT id, first_name, google_calendar_id FROM professionals WHERE is_active = true"
-        p_params = []
+        clean_p_name = professional_name
         if professional_name:
-            p_query += " AND (first_name ILIKE $1 OR last_name ILIKE $1)"
-            p_params.append(f"%{professional_name}%")
+            clean_p_name = re.sub(r'^(dr|dra|doctor|doctora)\.?\s+', '', professional_name, flags=re.IGNORECASE).strip()
+
+        p_query = "SELECT id, first_name, last_name, google_calendar_id FROM professionals WHERE is_active = true"
+        p_params = []
+        if clean_p_name:
+            p_query += " AND (first_name ILIKE $1 OR last_name ILIKE $1 OR (first_name || ' ' || last_name) ILIKE $1)"
+            p_params.append(f"%{clean_p_name}%")
         
         candidates = await db.pool.fetch(p_query, *p_params)
         if not candidates:
-            return f"❌ No encontré al profesional '{professional_name or ''}' disponible."
+            return f"❌ No encontré al profesional '{professional_name or ''}' disponible. ¿Querés agendar con otro profesional?"
+
+        # Obtener IDs de citas para evitar duplicados en el bloque JIT
+        existing_apt_gids = await db.pool.fetch("SELECT google_calendar_event_id FROM appointments WHERE google_calendar_event_id IS NOT NULL")
+        apt_gids_set = {row['google_calendar_event_id'] for row in existing_apt_gids}
 
         target_prof = None
         for cand in candidates:
@@ -481,14 +508,24 @@ async def book_appointment(date_time: str, treatment_reason: str,
                 g_events = gcal_service.get_events_for_day(calendar_id=cand['google_calendar_id'], date_obj=apt_datetime.date())
                 day_start = datetime.combine(apt_datetime.date(), datetime.min.time(), tzinfo=ARG_TZ)
                 day_end = datetime.combine(apt_datetime.date(), datetime.max.time(), tzinfo=ARG_TZ)
+                
+                # Limpieza de bloques previos para este día/profesional
                 await db.pool.execute("DELETE FROM google_calendar_blocks WHERE professional_id = $1 AND start_datetime < $3 AND end_datetime > $2", cand['id'], day_start, day_end)
+                
                 for event in g_events:
+                    g_id = event['id']
+                    if g_id in apt_gids_set:
+                        continue # Ya es una cita controlada
+                        
+                    start = event['start'].get('dateTime') or event['start'].get('date')
+                    end = event['end'].get('dateTime') or event['end'].get('date')
+                    dt_start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                    dt_end = datetime.fromisoformat(end.replace('Z', '+00:00'))
+
                     await db.pool.execute("""
-                        INSERT INTO google_calendar_blocks (tenant_id, google_event_id, title, start_datetime, end_datetime, professional_id)
-                        VALUES (1, $1, $2, $3, $4, $5) ON CONFLICT DO NOTHING
-                    """, event['id'], event.get('summary','Ocupado'), 
-                       datetime.fromisoformat(event['start'].get('dateTime','').replace('Z','+00:00')),
-                       datetime.fromisoformat(event['end'].get('dateTime','').replace('Z','+00:00')), cand['id'])
+                        INSERT INTO google_calendar_blocks (tenant_id, google_event_id, title, start_datetime, end_datetime, professional_id, sync_status)
+                        VALUES (1, $1, $2, $3, $4, $5, 'synced') ON CONFLICT DO NOTHING
+                    """, g_id, event.get('summary','Ocupado'), dt_start, dt_end, cand['id'])
             except: pass
 
             # Verificación de colisión

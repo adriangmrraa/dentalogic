@@ -42,6 +42,22 @@ export default function TreatmentsView() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Partial<TreatmentType>>({});
   const [saving, setSaving] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newForm, setNewForm] = useState<Partial<TreatmentType>>({
+    code: '',
+    name: '',
+    description: '',
+    default_duration_minutes: 30,
+    min_duration_minutes: 15,
+    max_duration_minutes: 60,
+    complexity_level: 'medium',
+    category: 'restorative',
+    requires_multiple_sessions: false,
+    session_gap_days: 0,
+    is_active: true,
+    is_available_for_booking: true,
+    internal_notes: ''
+  });
 
   const fetchTreatments = async () => {
     try {
@@ -71,30 +87,65 @@ export default function TreatmentsView() {
 
   const handleSave = async (code: string) => {
     if (!editForm.code) return;
-    
+
     try {
       setSaving(true);
-      await api.put(`/admin/treatment-types/${code}`, {
-        name: editForm.name,
-        description: editForm.description,
-        default_duration_minutes: editForm.default_duration_minutes,
-        min_duration_minutes: editForm.min_duration_minutes,
-        max_duration_minutes: editForm.max_duration_minutes,
-        complexity_level: editForm.complexity_level,
-        category: editForm.category,
-        requires_multiple_sessions: editForm.requires_multiple_sessions,
-        session_gap_days: editForm.session_gap_days,
-        is_active: editForm.is_active,
-        is_available_for_booking: editForm.is_available_for_booking,
-        internal_notes: editForm.internal_notes,
-      });
-      
+      await api.put(`/admin/treatment-types/${code}`, editForm);
       await fetchTreatments();
       setEditingId(null);
       setEditForm({});
     } catch (error) {
       console.error('Error saving treatment:', error);
       alert('Error al guardar cambios');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreate = async () => {
+    if (!newForm.code || !newForm.name) {
+      alert('Código y Nombre son obligatorios');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await api.post('/admin/treatment-types', newForm);
+      await fetchTreatments();
+      setIsCreating(false);
+      setNewForm({
+        code: '',
+        name: '',
+        description: '',
+        default_duration_minutes: 30,
+        min_duration_minutes: 15,
+        max_duration_minutes: 60,
+        complexity_level: 'medium',
+        category: 'restorative',
+        requires_multiple_sessions: false,
+        session_gap_days: 0,
+        is_active: true,
+        is_available_for_booking: true,
+        internal_notes: ''
+      });
+    } catch (error: any) {
+      console.error('Error creating treatment:', error);
+      alert(error.response?.data?.detail || 'Error al crear tratamiento');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (code: string) => {
+    if (!confirm(`¿Estás seguro de eliminar el tratamiento ${code}?`)) return;
+
+    try {
+      setSaving(true);
+      await api.delete(`/admin/treatment-types/${code}`);
+      await fetchTreatments();
+    } catch (error) {
+      console.error('Error deleting treatment:', error);
+      alert('Error al eliminar');
     } finally {
       setSaving(false);
     }
@@ -118,11 +169,20 @@ export default function TreatmentsView() {
   }, {} as Record<string, TreatmentType[]>);
 
   return (
-    <div className="p-6">
+    <div className="h-[calc(100vh-64px)] overflow-y-auto p-6 bg-gray-50/50">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Configuración de Tratamientos</h1>
-        <p className="text-gray-500">Definir duraciones y complejidad para agENDAMIENTO inteligente</p>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Tratamientos y Servicios</h1>
+          <p className="text-gray-500">Configura la lógica de agendamiento inteligente</p>
+        </div>
+        <button
+          onClick={() => setIsCreating(true)}
+          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-all flex items-center gap-2 shadow-sm"
+        >
+          <Zap size={18} />
+          Nuevo Servicio
+        </button>
       </div>
 
       {/* Quick Reference */}
@@ -144,22 +204,129 @@ export default function TreatmentsView() {
         </div>
       </div>
 
+      {/* Create Form Modal Style */}
+      {isCreating && (
+        <div className="mb-8 bg-white p-6 rounded-xl shadow-lg border-2 border-primary/20 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold text-gray-800">Crear Nuevo Tratamiento</h3>
+            <button onClick={() => setIsCreating(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+              <input
+                type="text"
+                value={newForm.name || ''}
+                onChange={(e) => setNewForm({ ...newForm, name: e.target.value })}
+                placeholder="Ej: Limpieza Profunda"
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Código (Único)</label>
+              <input
+                type="text"
+                value={newForm.code || ''}
+                onChange={(e) => setNewForm({ ...newForm, code: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                placeholder="ej: limpieza_profunda"
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+              <select
+                value={newForm.category || 'restorative'}
+                onChange={(e) => setNewForm({ ...newForm, category: e.target.value })}
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 outline-none"
+              >
+                <option value="prevention">Prevención / Higiene</option>
+                <option value="restorative">Operatoria / Restauración</option>
+                <option value="surgical">Cirugía</option>
+                <option value="orthodontics">Ortodoncia</option>
+                <option value="emergency">Urgencia</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+              <textarea
+                value={newForm.description || ''}
+                onChange={(e) => setNewForm({ ...newForm, description: e.target.value })}
+                className="w-full px-4 py-2 border rounded-lg outline-none"
+                rows={2}
+              ></textarea>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Duración (min)</label>
+                <input
+                  type="number"
+                  value={newForm.default_duration_minutes || ''}
+                  onChange={(e) => setNewForm({ ...newForm, default_duration_minutes: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Complejidad</label>
+                <select
+                  value={newForm.complexity_level || 'medium'}
+                  onChange={(e) => setNewForm({ ...newForm, complexity_level: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  <option value="low">Baja</option>
+                  <option value="medium">Media</option>
+                  <option value="high">Alta</option>
+                </select>
+              </div>
+              <div className="flex items-center pt-6">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newForm.requires_multiple_sessions || false}
+                    onChange={(e) => setNewForm({ ...newForm, requires_multiple_sessions: e.target.checked })}
+                  />
+                  <span className="text-xs">Múltiples Sesiones</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end gap-3">
+            <button onClick={() => setIsCreating(false)} className="px-4 py-2 text-gray-600 font-medium">Cancelar</button>
+            <button
+              onClick={handleCreate}
+              disabled={saving}
+              className="px-6 py-2 bg-primary text-white rounded-lg font-bold shadow hover:bg-primary-dark"
+            >
+              {saving ? 'Guardando...' : 'Crear Tratamiento'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Treatments by Category */}
       {loading ? (
-        <div className="p-8 text-center text-gray-500">
-          <div className="animate-spin inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full mb-4 mx-auto"></div>
-          <p>Cargando configuraciones...</p>
+        <div className="p-12 text-center text-gray-400">
+          <div className="animate-spin inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full mb-4"></div>
+          <p className="font-medium">Sincronizando con base de datos...</p>
         </div>
       ) : (
         <div className="space-y-6">
           {Object.entries(groupedTreatments).map(([category, categoryTreatments]) => (
-            <div key={category} className="bg-white rounded-lg shadow">
-              <div className="p-4 border-b bg-gray-50 flex items-center gap-2">
-                {categoryIcons[category] || <Stethoscope size={16} className="text-gray-600" />}
-                <h2 className="font-semibold text-gray-700 capitalize">{category}</h2>
-                <span className="text-sm text-gray-500">({categoryTreatments.length} tratamientos)</span>
+            <div key={category} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="p-4 border-b bg-gray-50/50 flex items-center gap-3 sticky top-0 z-10 backdrop-blur-sm">
+                <div className="p-2 bg-white rounded-lg shadow-sm border border-gray-100">
+                  {categoryIcons[category] || <Stethoscope size={20} className="text-gray-600" />}
+                </div>
+                <div>
+                  <h2 className="font-bold text-gray-800 capitalize leading-none mb-1">{category}</h2>
+                  <span className="text-xs text-gray-500 font-medium uppercase tracking-wider">{categoryTreatments.length} servicios definidos</span>
+                </div>
               </div>
-              
+
               <div className="divide-y">
                 {categoryTreatments.map((treatment) => (
                   <div key={treatment.id} className="p-4">
@@ -315,11 +482,11 @@ export default function TreatmentsView() {
                               </span>
                             )}
                           </div>
-                          
+
                           {treatment.description && (
                             <p className="text-sm text-gray-600 mb-3">{treatment.description}</p>
                           )}
-                          
+
                           <div className="flex items-center gap-6 text-sm">
                             <div className="flex items-center gap-2">
                               <Clock size={14} className="text-gray-400" />
@@ -340,28 +507,35 @@ export default function TreatmentsView() {
                               </>
                             )}
                           </div>
-                          
+
                           <div className="flex items-center gap-4 mt-3">
-                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${
-                              treatment.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                            }`}>
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${treatment.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                              }`}>
                               {treatment.is_active ? 'Activo' : 'Inactivo'}
                             </span>
-                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${
-                              treatment.is_available_for_booking ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
-                            }`}>
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${treatment.is_available_for_booking ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+                              }`}>
                               {treatment.is_available_for_booking ? 'Disponible' : 'No disponible'}
                             </span>
                           </div>
                         </div>
-                        
-                        <button
-                          onClick={() => handleEdit(treatment)}
-                          className="p-2 text-gray-500 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors"
-                          title="Editar configuración"
-                        >
-                          <Edit2 size={18} />
-                        </button>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEdit(treatment)}
+                            className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
+                            title="Editar"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(treatment.code)}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Eliminar"
+                          >
+                            <X size={18} />
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

@@ -267,6 +267,35 @@ class ProfessionalUpdate(BaseModel):
     is_active: bool
     availability: Dict[str, Any]
 
+class TreatmentTypeCreate(BaseModel):
+    code: str
+    name: str
+    description: Optional[str] = ""
+    default_duration_minutes: int = 30
+    min_duration_minutes: int = 15
+    max_duration_minutes: int = 60
+    complexity_level: str = "medium"
+    category: str = "restorative"
+    requires_multiple_sessions: bool = False
+    session_gap_days: int = 0
+    is_active: bool = True
+    is_available_for_booking: bool = True
+    internal_notes: Optional[str] = ""
+
+class TreatmentTypeUpdate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    default_duration_minutes: int
+    min_duration_minutes: int
+    max_duration_minutes: int
+    complexity_level: str
+    category: str
+    requires_multiple_sessions: bool
+    session_gap_days: int
+    is_active: bool
+    is_available_for_booking: bool
+    internal_notes: Optional[str] = ""
+
 
 class ChatSendMessage(BaseModel):
     phone: str
@@ -1651,6 +1680,31 @@ async def get_treatment_type(code: str):
     return dict(row)
 
 
+@router.post("/treatment-types", dependencies=[Depends(verify_admin_token)])
+async def create_treatment_type(treatment: TreatmentTypeCreate):
+    """Crear un nuevo tipo de tratamiento."""
+    try:
+        await db.pool.execute("""
+            INSERT INTO treatment_types (
+                tenant_id, code, name, description, default_duration_minutes,
+                min_duration_minutes, max_duration_minutes, complexity_level,
+                category, requires_multiple_sessions, session_gap_days,
+                is_active, is_available_for_booking, internal_notes, created_at
+            ) VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+        """, treatment.code, treatment.name, treatment.description, treatment.default_duration_minutes,
+            treatment.min_duration_minutes, treatment.max_duration_minutes,
+            treatment.complexity_level, treatment.category, treatment.requires_multiple_sessions,
+            treatment.session_gap_days, treatment.is_active, treatment.is_available_for_booking,
+            treatment.internal_notes)
+        
+        return {"status": "created", "code": treatment.code}
+    except asyncpg.UniqueViolationError:
+        raise HTTPException(status_code=400, detail=f"El código de tratamiento '{treatment.code}' ya existe.")
+    except Exception as e:
+        logger.error(f"Error creating treatment type: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.put("/treatment-types/{code}", dependencies=[Depends(verify_admin_token)])
 async def update_treatment_type(code: str, treatment: TreatmentTypeUpdate):
     """Actualizar configuración de un tipo de tratamiento."""
@@ -1680,6 +1734,23 @@ async def update_treatment_type(code: str, treatment: TreatmentTypeUpdate):
         raise HTTPException(status_code=404, detail="Tipo de tratamiento no encontrado")
     
     return {"status": "updated", "code": code}
+
+
+@router.delete("/treatment-types/{code}", dependencies=[Depends(verify_admin_token)])
+async def delete_treatment_type(code: str):
+    """Eliminar (o desactivar) un tipo de tratamiento."""
+    # En lugar de borrar físicamente (que podría romper integridad con citas pasadas),
+    # verificamos si tiene citas. Si no tiene, borramos. Si tiene, desactivamos.
+    has_appointments = await db.pool.fetchval("SELECT EXISTS(SELECT 1 FROM appointments WHERE appointment_type = $1)", code)
+    
+    if has_appointments:
+        await db.pool.execute("UPDATE treatment_types SET is_active = false, is_available_for_booking = false WHERE code = $1", code)
+        return {"status": "deactivated", "code": code, "message": "Tratamiento desactivado por tener citas asociadas."}
+    else:
+        result = await db.pool.execute("DELETE FROM treatment_types WHERE code = $1", code)
+        if result == "DELETE 0":
+            raise HTTPException(status_code=404, detail="Tipo de tratamiento no encontrado")
+        return {"status": "deleted", "code": code}
 
 
 @router.get("/treatment-types/{code}/duration", dependencies=[Depends(verify_admin_token)])
@@ -1731,12 +1802,7 @@ async def get_treatment_duration(code: str, urgency_level: str = "normal"):
     }
 
 
-@router.get('/treatment-types')
-async def list_treatment_types():
-    "Retorna la lista de tipos de tratamientos disponibles."
-    query = "SELECT code, name, description, category FROM treatment_types WHERE is_active = true ORDER BY name"
-    rows = await db.pool.fetch(query)
-    return [dict(row) for row in rows]
+# Analytics endpoints already handle below
 
 # ==================== ENDPOINTS ANALYTICS ====================
 
