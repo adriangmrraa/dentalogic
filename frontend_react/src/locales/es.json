@@ -108,5 +108,12 @@
   },
   "profile": {
     "title": "Mi Perfil"
+  },
+  "layout": {
+    "app_title": "Sistema Dental",
+    "branch": "Sucursal",
+    "branch_principal": "Principal",
+    "notification_handoff": "Derivación Humana",
+    "click_to_open_chat": "Click para abrir chat"
   }
 }

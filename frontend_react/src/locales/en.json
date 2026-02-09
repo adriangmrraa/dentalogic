@@ -108,5 +108,12 @@
   },
   "profile": {
     "title": "My Profile"
+  },
+  "layout": {
+    "app_title": "Dental System",
+    "branch": "Branch",
+    "branch_principal": "Main",
+    "notification_handoff": "Human handoff",
+    "click_to_open_chat": "Click to open chat"
   }
 }

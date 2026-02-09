@@ -2,6 +2,7 @@ import React, { type ReactNode, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { useAuth } from '../context/AuthContext';
+import { useTranslation } from '../context/LanguageContext';
 import { io, Socket } from 'socket.io-client';
 import { BACKEND_URL } from '../api/axios';
 import { AlertCircle, X } from 'lucide-react';
@@ -14,6 +15,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const socketRef = useRef<Socket | null>(null);
 
@@ -120,15 +122,15 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               </div>
             </button>
             <h1 className="text-lg lg:text-xl font-semibold text-medical-900 truncate max-w-[150px] md:max-w-none">
-              Sistema Dental
+              {t('layout.app_title')}
             </h1>
           </div>
 
           <div className="flex items-center gap-2 lg:gap-4">
             {/* Tenant Selector - Hidden on small mobile */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg text-sm">
-              <span className="text-gray-500">Sucursal:</span>
-              <span className="font-medium text-medical-900">Principal</span>
+              <span className="text-gray-500">{t('layout.branch')}:</span>
+              <span className="font-medium text-medical-900">{t('layout.branch_principal')}</span>
             </div>
 
             {/* User Menu */}
@@ -161,12 +163,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               <AlertCircle className="h-6 w-6 text-orange-500" />
             </div>
             <div className="flex-1">
-              <h3 className="text-sm font-medium text-gray-900">🔔 Derivación Humana</h3>
+              <h3 className="text-sm font-medium text-gray-900">🔔 {t('layout.notification_handoff')}</h3>
               <p className="mt-1 text-sm text-gray-500 line-clamp-2">
                 {notification.phone}: {notification.reason}
               </p>
               <div className="mt-2 text-xs text-orange-600 font-medium">
-                Click para abrir chat
+                {t('layout.click_to_open_chat')}
               </div>
             </div>
             <button

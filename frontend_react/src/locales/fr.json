@@ -108,5 +108,12 @@
   },
   "profile": {
     "title": "Mon profil"
+  },
+  "layout": {
+    "app_title": "Système dentaire",
+    "branch": "Succursale",
+    "branch_principal": "Principal",
+    "notification_handoff": "Dérivation humaine",
+    "click_to_open_chat": "Cliquer pour ouvrir le chat"
   }
 }

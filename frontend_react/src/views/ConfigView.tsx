@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Settings, Globe, Loader2, CheckCircle2 } from 'lucide-react';
 import api from '../api/axios';
+import { useTranslation } from '../context/LanguageContext';
 
 type UiLanguage = 'es' | 'en' | 'fr';
 
@@ -12,13 +13,14 @@ interface ClinicSettings {
     ui_language: UiLanguage;
 }
 
-const LANGUAGE_OPTIONS: { value: UiLanguage; label: string }[] = [
-    { value: 'es', label: 'Español' },
-    { value: 'en', label: 'English' },
-    { value: 'fr', label: 'Français' },
+const LANGUAGE_OPTIONS: { value: UiLanguage; labelKey: string }[] = [
+    { value: 'es', labelKey: 'config.language_es' },
+    { value: 'en', labelKey: 'config.language_en' },
+    { value: 'fr', labelKey: 'config.language_fr' },
 ];
 
 export default function ConfigView() {
+    const { t, setLanguage } = useTranslation();
     const [settings, setSettings] = useState<ClinicSettings | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -37,7 +39,7 @@ export default function ConfigView() {
             setSettings(res.data);
             setSelectedLang((res.data.ui_language as UiLanguage) || 'en');
         } catch (err) {
-            setError('No se pudo cargar la configuración.');
+            setError(t('config.load_error'));
         } finally {
             setLoading(false);
         }
@@ -47,13 +49,14 @@ export default function ConfigView() {
         setSelectedLang(value);
         setSuccess(null);
         setError(null);
+        setLanguage(value);
         setSaving(true);
         try {
             await api.patch('/admin/settings/clinic', { ui_language: value });
             setSettings((prev) => (prev ? { ...prev, ui_language: value } : null));
-            setSuccess('Idioma guardado. La plataforma usará este idioma en la próxima fase de traducción.');
+            setSuccess(t('config.saved'));
         } catch (err) {
-            setError('Error al guardar el idioma.');
+            setError(t('config.save_error'));
         } finally {
             setSaving(false);
         }
@@ -74,8 +77,8 @@ export default function ConfigView() {
                     <Settings size={24} />
                 </div>
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
-                    <p className="text-sm text-gray-500">Opciones generales de la plataforma (sede actual)</p>
+                    <h1 className="text-2xl font-bold text-gray-900">{t('config.title')}</h1>
+                    <p className="text-sm text-gray-500">{t('config.subtitle')}</p>
                 </div>
             </div>
 
@@ -84,10 +87,10 @@ export default function ConfigView() {
                     <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
                         <div className="flex items-center gap-2 mb-4">
                             <Globe size={20} className="text-gray-600" />
-                            <h2 className="text-lg font-semibold text-gray-800">Idioma de la plataforma</h2>
+                            <h2 className="text-lg font-semibold text-gray-800">{t('config.language_label')}</h2>
                         </div>
                         <p className="text-sm text-gray-500 mb-4">
-                            El idioma elegido se aplicará a toda la interfaz (menús, títulos, botones) cuando esté activa la traducción completa.
+                            {t('config.language_help')}
                         </p>
                         <div className="flex flex-wrap gap-3">
                             {LANGUAGE_OPTIONS.map((opt) => (
@@ -105,13 +108,13 @@ export default function ConfigView() {
                                     {saving && selectedLang === opt.value ? (
                                         <Loader2 className="w-5 h-5 animate-spin inline-block" />
                                     ) : (
-                                        opt.label
+                                        t(opt.labelKey)
                                     )}
                                 </button>
                             ))}
                         </div>
                         <p className="text-xs text-gray-400 mt-3">
-                            Sede actual: <strong>{settings.name}</strong>
+                            {t('config.current_clinic')}: <strong>{settings.name}</strong>
                         </p>
                     </div>
                 </div>

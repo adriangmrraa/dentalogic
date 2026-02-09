@@ -17,6 +17,7 @@ import {
   X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTranslation } from '../context/LanguageContext';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -28,18 +29,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: <Home size={20} />, path: '/', roles: ['ceo', 'professional', 'secretary'] },
-    { id: 'agenda', label: 'Agenda', icon: <Calendar size={20} />, path: '/agenda', roles: ['ceo', 'professional', 'secretary'] },
-    { id: 'patients', label: 'Pacientes', icon: <Users size={20} />, path: '/pacientes', roles: ['ceo', 'professional', 'secretary'] },
-    { id: 'chats', label: 'Conversaciones', icon: <MessageSquare size={20} />, path: '/chats', roles: ['ceo', 'professional', 'secretary'] },
-    { id: 'approvals', label: 'Personal', icon: <ShieldCheck size={20} />, path: '/aprobaciones', roles: ['ceo'] },
-    { id: 'tenants', label: 'Sedes (Clínicas)', icon: <ShieldCheck size={20} />, path: '/sedes', roles: ['ceo'] },
-    { id: 'analytics', label: 'Estrategia', icon: <BarChart3 size={20} />, path: '/analytics/professionals', roles: ['ceo'] },
-    { id: 'treatments', label: 'Tratamientos', icon: <Clock size={20} />, path: '/tratamientos', roles: ['ceo', 'secretary'] },
-    { id: 'profile', label: 'Mi Perfil', icon: <User size={20} />, path: '/perfil', roles: ['ceo', 'professional', 'secretary'] },
-    { id: 'settings', label: 'Configuración', icon: <Settings size={20} />, path: '/configuracion', roles: ['ceo'] },
+    { id: 'dashboard', labelKey: 'nav.dashboard' as const, icon: <Home size={20} />, path: '/', roles: ['ceo', 'professional', 'secretary'] },
+    { id: 'agenda', labelKey: 'nav.agenda' as const, icon: <Calendar size={20} />, path: '/agenda', roles: ['ceo', 'professional', 'secretary'] },
+    { id: 'patients', labelKey: 'nav.patients' as const, icon: <Users size={20} />, path: '/pacientes', roles: ['ceo', 'professional', 'secretary'] },
+    { id: 'chats', labelKey: 'nav.chats' as const, icon: <MessageSquare size={20} />, path: '/chats', roles: ['ceo', 'professional', 'secretary'] },
+    { id: 'approvals', labelKey: 'nav.staff' as const, icon: <ShieldCheck size={20} />, path: '/aprobaciones', roles: ['ceo'] },
+    { id: 'tenants', labelKey: 'nav.clinics' as const, icon: <ShieldCheck size={20} />, path: '/sedes', roles: ['ceo'] },
+    { id: 'analytics', labelKey: 'nav.strategy' as const, icon: <BarChart3 size={20} />, path: '/analytics/professionals', roles: ['ceo'] },
+    { id: 'treatments', labelKey: 'nav.treatments' as const, icon: <Clock size={20} />, path: '/tratamientos', roles: ['ceo', 'secretary'] },
+    { id: 'profile', labelKey: 'nav.profile' as const, icon: <User size={20} />, path: '/perfil', roles: ['ceo', 'professional', 'secretary'] },
+    { id: 'settings', labelKey: 'nav.settings' as const, icon: <Settings size={20} />, path: '/configuracion', roles: ['ceo'] },
   ];
 
   const filteredItems = menuItems.filter(item => user && item.roles.includes(user.role));
@@ -58,7 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
             <Stethoscope size={18} className="text-white" />
           </div>
           {(!collapsed || onCloseMobile) && (
-            <span className="font-semibold text-lg truncate whitespace-nowrap">Dental Clinic</span>
+            <span className="font-semibold text-lg truncate whitespace-nowrap">{t('nav.app_name')}</span>
           )}
         </div>
 
@@ -67,7 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
           <button
             onClick={onCloseMobile}
             className="lg:hidden p-2 ml-auto text-gray-400 hover:text-white transition-colors"
-            aria-label="Cerrar menú"
+            aria-label={t('nav.close_menu')}
           >
             <X size={24} />
           </button>
@@ -79,7 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
         <button
           onClick={onToggle}
           className="hidden lg:flex absolute -right-3 top-20 w-6 h-6 bg-white rounded-full shadow-lg items-center justify-center text-medical-900 hover:bg-gray-100 transition-all z-20"
-          aria-label={collapsed ? "Expandir" : "Contraer"}
+          aria-label={collapsed ? t('nav.expand') : t('nav.collapse')}
         >
           {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
@@ -98,20 +100,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
               ? 'bg-white/10 text-white'
               : 'text-gray-400 hover:bg-white/5 hover:text-white'
               }`}
-            title={collapsed && !onCloseMobile ? item.label : undefined}
+            title={collapsed && !onCloseMobile ? t(item.labelKey) : undefined}
           >
             <span className="flex-shrink-0 group-hover:scale-110 transition-transform">{item.icon}</span>
-            {(!collapsed || onCloseMobile) && <span className="font-medium text-sm truncate">{item.label}</span>}
+            {(!collapsed || onCloseMobile) && <span className="font-medium text-sm truncate">{t(item.labelKey)}</span>}
           </button>
         ))}
 
         <button
           onClick={logout}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 mt-4 text-red-400 hover:bg-red-500/10 group`}
-          title={collapsed && !onCloseMobile ? 'Cerrar Sesión' : undefined}
+          title={collapsed && !onCloseMobile ? t('nav.logout') : undefined}
         >
           <LogOut size={20} className="group-hover:rotate-12 transition-transform" />
-          {(!collapsed || onCloseMobile) && <span className="font-medium text-sm">Cerrar Sesión</span>}
+          {(!collapsed || onCloseMobile) && <span className="font-medium text-sm">{t('nav.logout')}</span>}
         </button>
       </nav>
 

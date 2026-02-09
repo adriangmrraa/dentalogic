@@ -66,9 +66,6 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
       .finally(() => setIsLoading(false));
   }, []);
 
-  // Efecto inmediato: cualquier componente que llame setLanguage actualiza toda la UI al instante
-  // sin esperar al PATCH; el PATCH solo persiste en el servidor.
-
   const t = useCallback(
     (key: string): string => {
       const value = getNested(translations[language], key);
