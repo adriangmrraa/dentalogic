@@ -13,9 +13,9 @@ export interface Clinica {
     updated_at?: string;
 }
 
-const CALENDAR_PROVIDER_OPTIONS: { value: 'local' | 'google'; label: string }[] = [
-    { value: 'local', label: 'Local (sin sincronización externa)' },
-    { value: 'google', label: 'Google Calendar' },
+const CALENDAR_PROVIDER_OPTIONS = (t: (k: string) => string) => [
+    { value: 'local' as const, label: t('clinics.calendar_local') },
+    { value: 'google' as const, label: t('clinics.calendar_google') },
 ];
 
 export default function ClinicsView() {
@@ -106,7 +106,7 @@ export default function ClinicsView() {
     };
 
     const calendarProviderLabel = (cp: string) =>
-        CALENDAR_PROVIDER_OPTIONS.find(o => o.value === cp)?.label ?? cp;
+        CALENDAR_PROVIDER_OPTIONS(t).find(o => o.value === cp)?.label ?? cp;
 
     if (loading) {
         return (
@@ -183,7 +183,7 @@ export default function ClinicsView() {
 
                             <div className="pt-4 border-t border-medical-50 flex justify-between items-center text-xs text-medical-400">
                                 <span>ID: {clinica.id}</span>
-                                <span>Desde: {new Date(clinica.created_at).toLocaleDateString()}</span>
+                                <span>{t('common.since')}: {new Date(clinica.created_at).toLocaleDateString()}</span>
                             </div>
                         </div>
                     </div>
@@ -196,7 +196,7 @@ export default function ClinicsView() {
                         <div className="p-6 border-b">
                             <h2 className="text-xl font-bold flex items-center gap-2">
                                 {editingClinica ? <Edit className="text-medical-600" /> : <Plus className="text-medical-600" />}
-                                {editingClinica ? 'Editar Clínica' : 'Crear Nueva Clínica'}
+                                {editingClinica ? t('clinics.edit_clinic') : t('clinics.create_clinic')}
                             </h2>
                         </div>
 
@@ -208,11 +208,11 @@ export default function ClinicsView() {
                             )}
 
                             <div className="space-y-2">
-                                <label className="text-sm font-semibold text-medical-700">Nombre de la Clínica</label>
+                                <label className="text-sm font-semibold text-medical-700">{t('clinics.clinic_name_label')}</label>
                                 <input
                                     required
                                     type="text"
-                                    placeholder="Ej: Dentalogic Centro"
+                                    placeholder={t('clinics.clinic_name_placeholder')}
                                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-medical-500 outline-none transition-all"
                                     value={formData.clinic_name}
                                     onChange={(e) => setFormData({ ...formData, clinic_name: e.target.value })}
@@ -220,37 +220,37 @@ export default function ClinicsView() {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-semibold text-medical-700">Teléfono Bot (YCloud)</label>
+                                <label className="text-sm font-semibold text-medical-700">{t('clinics.bot_phone_label')}</label>
                                 <input
                                     required
                                     type="text"
-                                    placeholder="Ej: 5491100000000"
+                                    placeholder={t('clinics.bot_phone_placeholder')}
                                     className="w-full px-4 py-2 border rounded-lg font-mono focus:ring-2 focus:ring-medical-500 outline-none transition-all"
                                     value={formData.bot_phone_number}
                                     onChange={(e) => setFormData({ ...formData, bot_phone_number: e.target.value })}
                                 />
                                 <p className="text-[10px] text-medical-400 italic">
-                                    Debe coincidir con el número que YCloud envía al webhook.
+                                    {t('clinics.bot_phone_help')}
                                 </p>
                             </div>
 
                             <div className="space-y-2">
                                 <label className="text-sm font-semibold text-medical-700 flex items-center gap-2">
-                                    <Calendar size={14} /> Proveedor de calendario
+                                    <Calendar size={14} /> {t('clinics.calendar_provider_label')}
                                 </label>
                                 <select
                                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-medical-500 outline-none"
                                     value={formData.calendar_provider}
                                     onChange={(e) => setFormData({ ...formData, calendar_provider: e.target.value as 'local' | 'google' })}
                                 >
-                                    {CALENDAR_PROVIDER_OPTIONS.map((opt) => (
+                                    {CALENDAR_PROVIDER_OPTIONS(t).map((opt) => (
                                         <option key={opt.value} value={opt.value}>
                                             {opt.label}
                                         </option>
                                     ))}
                                 </select>
                                 <p className="text-[10px] text-medical-400 italic">
-                                    Local: solo agenda interna. Google: sincronización con Google Calendar.
+                                    {t('clinics.calendar_help')}
                                 </p>
                             </div>
 
@@ -260,14 +260,14 @@ export default function ClinicsView() {
                                     onClick={() => setIsModalOpen(false)}
                                     className="flex-1 py-2 text-medical-700 font-medium hover:bg-medical-50 rounded-lg transition-all"
                                 >
-                                    Cancelar
+                                    {t('common.cancel')}
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={saving}
                                     className="flex-1 py-2 bg-medical-600 text-white font-bold rounded-lg hover:bg-medical-700 transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
-                                    {saving ? <Loader2 className="animate-spin" size={20} /> : 'Guardar'}
+                                    {saving ? <Loader2 className="animate-spin" size={20} /> : t('common.save')}
                                 </button>
                             </div>
                         </form>

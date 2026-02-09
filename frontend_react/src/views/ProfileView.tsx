@@ -98,7 +98,7 @@ const ProfileView: React.FC = () => {
                             </div>
                             <div className="flex items-center gap-3 text-sm text-gray-600">
                                 <Calendar size={16} className="text-medical-500" />
-                                <span>Registrado en: {new Date().toLocaleDateString()}</span>
+                                <span>{t('profile.registered_at')}: {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : new Date().toLocaleDateString()}</span>
                             </div>
                         </div>
                     </div>
@@ -110,7 +110,7 @@ const ProfileView: React.FC = () => {
                         <form onSubmit={handleSave} className="space-y-6">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Nombre</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('profile.first_name')}</label>
                                     <input
                                         type="text"
                                         value={firstName}
@@ -121,7 +121,7 @@ const ProfileView: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Apellido</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('profile.last_name')}</label>
                                     <input
                                         type="text"
                                         value={lastName}
@@ -175,7 +175,7 @@ const ProfileView: React.FC = () => {
                                     className="flex items-center gap-2 px-8 py-3 bg-medical-600 text-white rounded-xl font-semibold shadow-md hover:bg-medical-700 active:transform active:scale-95 transition-all disabled:opacity-50"
                                 >
                                     {saving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-                                    Guardar Cambios
+                                    {t('common.save_changes')}
                                 </button>
                             </div>
                         </form>

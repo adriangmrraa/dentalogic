@@ -166,9 +166,9 @@ export default function AppointmentForm({
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white/50">
                     <div>
                         <h2 className="text-xl font-bold text-slate-800">
-                            {isEditing ? 'Editar Turno' : 'Nuevo Turno'}
+                            {isEditing ? t('agenda.form_edit_appointment') : t('agenda.form_new_appointment')}
                         </h2>
-                        <p className="text-xs text-slate-500">Inspector Clínico</p>
+                        <p className="text-xs text-slate-500">{t('agenda.clinical_inspector')}</p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600 transition-colors">
                         <X size={20} />
@@ -176,9 +176,9 @@ export default function AppointmentForm({
                 </div>
 
                 <div className="flex border-b border-gray-100 bg-white/50">
-                    {renderTabButton('general', 'General', FileText)}
-                    {renderTabButton('anamnesis', 'Anamnesis', Activity)}
-                    {renderTabButton('billing', 'Facturación', DollarSign)}
+                    {renderTabButton('general', t('agenda.tab_general'), FileText)}
+                    {renderTabButton('anamnesis', t('agenda.tab_anamnesis'), Activity)}
+                    {renderTabButton('billing', t('agenda.tab_billing'), DollarSign)}
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -192,7 +192,7 @@ export default function AppointmentForm({
                     {activeTab === 'general' && (
                         <div className="space-y-5">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Paciente</label>
+                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('agenda.patient')}</label>
                                 <div className="relative">
                                     <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                     <select
@@ -201,7 +201,7 @@ export default function AppointmentForm({
                                         onChange={(e) => handleChange('patient_id', e.target.value)}
                                         disabled={isEditing}
                                     >
-                                        <option value="">Seleccionar Paciente</option>
+                                        <option value="">{t('agenda.select_patient')}</option>
                                         {patients.map(p => (
                                             <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
                                         ))}
@@ -210,7 +210,7 @@ export default function AppointmentForm({
                             </div>
 
                             <div className="space-y-1.5">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Profesional</label>
+                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('agenda.professional')}</label>
                                 <div className="relative">
                                     <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                     <select
@@ -218,7 +218,7 @@ export default function AppointmentForm({
                                         value={formData.professional_id}
                                         onChange={(e) => handleChange('professional_id', e.target.value)}
                                     >
-                                        <option value="">Seleccionar Profesional</option>
+                                        <option value="">{t('agenda.select_professional')}</option>
                                         {professionals.map(p => (
                                             <option key={p.id} value={p.id}>Dr. {p.first_name} {p.last_name}</option>
                                         ))}
@@ -228,7 +228,7 @@ export default function AppointmentForm({
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Fecha y Hora</label>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('agenda.date_time')}</label>
                                     <div className="relative">
                                         <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                         <input
@@ -240,7 +240,7 @@ export default function AppointmentForm({
                                     </div>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Duración (min)</label>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('agenda.duration_min')}</label>
                                     <div className="relative">
                                         <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                         <select
@@ -267,7 +267,7 @@ export default function AppointmentForm({
                             )}
 
                             <div className="space-y-1.5">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tipo de Turno</label>
+                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('agenda.appointment_type')}</label>
                                 <div className="grid grid-cols-3 gap-2">
                                     {['checkup', 'cleaning', 'ortho', 'surgery', 'emergency'].map(type => (
                                         <button
@@ -286,10 +286,10 @@ export default function AppointmentForm({
                             </div>
 
                             <div className="space-y-1.5">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Notas</label>
+                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('agenda.notes')}</label>
                                 <textarea
                                     className="w-full p-3 bg-gray-50 border border-transparent rounded-lg focus:bg-white focus:border-blue-500 focus:ring-0 transition-all text-sm min-h-[100px]"
-                                    placeholder="Notas adicionales..."
+                                    placeholder={t('agenda.notes_placeholder')}
                                     value={formData.notes}
                                     onChange={(e) => handleChange('notes', e.target.value)}
                                 />
@@ -329,7 +329,7 @@ export default function AppointmentForm({
                             onClick={onClose}
                             className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                         >
-                            Cancelar
+                            {t('common.cancel')}
                         </button>
                         <button
                             type="button"
@@ -339,7 +339,7 @@ export default function AppointmentForm({
                                 }`}
                         >
                             {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Check size={16} />}
-                            {isEditing ? 'Guardar Cambios' : 'Agendar Turno'}
+                            {isEditing ? t('common.save_changes') : t('agenda.schedule_appointment')}
                         </button>
                     </div>
                 </div>

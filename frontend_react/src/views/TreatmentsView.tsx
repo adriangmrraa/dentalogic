@@ -172,14 +172,14 @@ export default function TreatmentsView() {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-2xl font-bold text-slate-800 tracking-tight">{t('treatments.title')}</h1>
-            <p className="text-slate-500 font-medium">Configura la lógica de agendamiento inteligente</p>
+            <p className="text-slate-500 font-medium">{t('treatments.subtitle')}</p>
           </div>
           <button
             onClick={() => setIsCreating(true)}
             className="px-5 py-2.5 bg-medical-600 text-white rounded-xl hover:bg-medical-700 transition-all flex items-center gap-2 shadow-lg shadow-medical-900/20 active:scale-95"
           >
             <Zap size={18} fill="currentColor" />
-            <span className="font-semibold text-sm">Nuevo Servicio</span>
+            <span className="font-semibold text-sm">{t('treatments.new_service')}</span>
           </button>
         </div>
 
@@ -187,7 +187,7 @@ export default function TreatmentsView() {
         <div className="mb-10 p-6 bg-white/40 backdrop-blur-xl border border-white/40 rounded-3xl shadow-soft">
           <h3 className="font-bold text-slate-800 mb-5 flex items-center gap-2">
             <Clock size={20} className="text-medical-600" />
-            Duraciones Recomendadas
+            {t('treatments.recommended_durations')}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
             <div className="flex items-center gap-4 p-4 bg-white/60 rounded-2xl border border-white/40 hover:border-medical-200 transition-colors">
@@ -195,7 +195,7 @@ export default function TreatmentsView() {
                 <Clock size={20} />
               </div>
               <div className="flex flex-col">
-                <span className="text-slate-500 font-medium uppercase text-[10px] tracking-wider">Consulta Urgente</span>
+                <span className="text-slate-500 font-medium uppercase text-[10px] tracking-wider">{t('treatments.urgency_consult')}</span>
                 <span className="text-slate-900 font-bold text-lg">15 min</span>
               </div>
             </div>
@@ -204,7 +204,7 @@ export default function TreatmentsView() {
                 <Clock size={20} />
               </div>
               <div className="flex flex-col">
-                <span className="text-slate-500 font-medium uppercase text-[10px] tracking-wider">Limpieza Profunda</span>
+                <span className="text-slate-500 font-medium uppercase text-[10px] tracking-wider">{t('treatments.deep_cleaning')}</span>
                 <span className="text-slate-900 font-bold text-lg">30 min</span>
               </div>
             </div>
@@ -213,7 +213,7 @@ export default function TreatmentsView() {
                 <Clock size={20} />
               </div>
               <div className="flex flex-col">
-                <span className="text-slate-500 font-medium uppercase text-[10px] tracking-wider">Tratamiento Complejo</span>
+                <span className="text-slate-500 font-medium uppercase text-[10px] tracking-wider">{t('treatments.complex_treatment')}</span>
                 <span className="text-slate-900 font-bold text-lg">60 min</span>
               </div>
             </div>
@@ -228,7 +228,7 @@ export default function TreatmentsView() {
                 <div className="p-3 bg-medical-50 text-medical-600 rounded-2xl">
                   <Stethoscope size={24} />
                 </div>
-                <h3 className="text-xl font-bold text-slate-800 tracking-tight">Crear Nuevo Tratamiento</h3>
+                <h3 className="text-xl font-bold text-slate-800 tracking-tight">{t('treatments.create_new_treatment')}</h3>
               </div>
               <button
                 onClick={() => setIsCreating(false)}
@@ -245,12 +245,12 @@ export default function TreatmentsView() {
                   type="text"
                   value={newForm.name || ''}
                   onChange={(e) => setNewForm({ ...newForm, name: e.target.value })}
-                  placeholder="Ej: Limpieza Profunda"
+                  placeholder={t('treatments.placeholder_name')}
                   className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-medical-500/10 focus:border-medical-500 outline-none transition-all placeholder:text-slate-300 font-medium"
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 ml-1">Código (Único)</label>
+                <label className="block text-sm font-semibold text-slate-700 ml-1">{t('treatments.code_unique')}</label>
                 <input
                   type="text"
                   value={newForm.code || ''}
@@ -260,18 +260,18 @@ export default function TreatmentsView() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 ml-1">Categoría</label>
+                <label className="block text-sm font-semibold text-slate-700 ml-1">{t('treatments.category')}</label>
                 <div className="relative">
                   <select
                     value={newForm.category || 'restorative'}
                     onChange={(e) => setNewForm({ ...newForm, category: e.target.value })}
                     className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-medical-500/10 focus:border-medical-500 outline-none transition-all appearance-none cursor-pointer font-medium text-slate-700"
                   >
-                    <option value="prevention">Prevención / Higiene</option>
-                    <option value="restorative">Operatoria / Restauración</option>
-                    <option value="surgical">Cirugía</option>
-                    <option value="orthodontics">Ortodoncia</option>
-                    <option value="emergency">Urgencia</option>
+                    <option value="prevention">{t('treatments.category_prevention')}</option>
+                    <option value="restorative">{t('treatments.category_restorative')}</option>
+                    <option value="surgical">{t('treatments.category_surgical')}</option>
+                    <option value="orthodontics">{t('treatments.category_orthodontics')}</option>
+                    <option value="emergency">{t('treatments.emergency')}</option>
                   </select>
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                     <Activity size={18} />
@@ -282,17 +282,17 @@ export default function TreatmentsView() {
 
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 ml-1">Descripción</label>
+                <label className="block text-sm font-semibold text-slate-700 ml-1">{t('treatments.description')}</label>
                 <textarea
                   value={newForm.description || ''}
                   onChange={(e) => setNewForm({ ...newForm, description: e.target.value })}
-                  placeholder="Describe brevemente el procedimiento..."
+                  placeholder={t('treatments.placeholder_description')}
                   className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-medical-500/10 focus:border-medical-500 outline-none transition-all placeholder:text-slate-300 resize-none font-medium h-[116px]"
                 ></textarea>
               </div>
               <div className="grid grid-cols-3 gap-6">
                 <div className="space-y-2">
-                  <label className="block text-[10px] font-bold text-slate-400 ml-1 uppercase tracking-widest">Duración (min)</label>
+                  <label className="block text-[10px] font-bold text-slate-400 ml-1 uppercase tracking-widest">{t('treatments.duration_min')}</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -304,15 +304,15 @@ export default function TreatmentsView() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-[10px] font-bold text-slate-400 ml-1 uppercase tracking-widest">Complejidad</label>
+                  <label className="block text-[10px] font-bold text-slate-400 ml-1 uppercase tracking-widest">{t('treatments.complexity')}</label>
                   <select
                     value={newForm.complexity_level || 'medium'}
                     onChange={(e) => setNewForm({ ...newForm, complexity_level: e.target.value })}
                     className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-medical-500/10 focus:border-medical-500 outline-none transition-all appearance-none cursor-pointer font-bold text-slate-700"
                   >
-                    <option value="low">Baja</option>
-                    <option value="medium">Media</option>
-                    <option value="high">Alta</option>
+                    <option value="low">{t('treatments.low')}</option>
+                    <option value="medium">{t('treatments.medium')}</option>
+                    <option value="high">{t('treatments.high')}</option>
                   </select>
                 </div>
                 <div className="flex items-center pt-8">
@@ -326,7 +326,7 @@ export default function TreatmentsView() {
                       />
                       <CheckCircle className="absolute hidden h-4 w-4 text-white peer-checked:block left-1" />
                     </div>
-                    <span className="text-xs font-bold text-slate-500 group-hover:text-medical-600 transition-colors">Sesiones Múltiples</span>
+                    <span className="text-xs font-bold text-slate-500 group-hover:text-medical-600 transition-colors">{t('treatments.multiple_sessions')}</span>
                   </label>
                 </div>
               </div>
@@ -337,7 +337,7 @@ export default function TreatmentsView() {
                 onClick={() => setIsCreating(false)}
                 className="px-6 py-3 text-slate-500 font-bold hover:bg-slate-100 rounded-2xl transition-all"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleCreate}
@@ -347,7 +347,7 @@ export default function TreatmentsView() {
                 {saving ? (
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : <Save size={20} />}
-                {saving ? 'Guardando...' : 'Crear Tratamiento'}
+                {saving ? t('common.saving') : t('treatments.create_treatment')}
               </button>
             </div>
           </div>
@@ -357,7 +357,7 @@ export default function TreatmentsView() {
         {loading ? (
           <div className="p-20 text-center flex flex-col items-center">
             <div className="w-16 h-16 border-4 border-medical-100 border-t-medical-600 rounded-full animate-spin mb-6"></div>
-            <p className="font-bold text-slate-400 text-lg">Sincronizando servicios médicos...</p>
+            <p className="font-bold text-slate-400 text-lg">{t('treatments.syncing_services')}</p>
           </div>
         ) : (
           <div className="space-y-12 pb-20">
@@ -369,8 +369,8 @@ export default function TreatmentsView() {
                       {categoryIcons[category] || <Stethoscope size={24} className="text-slate-600" />}
                     </div>
                     <div>
-                      <h2 className="font-bold text-slate-800 text-xl capitalize tracking-tight">{category}</h2>
-                      <span className="text-[10px] text-medical-600 font-bold uppercase tracking-widest">{categoryTreatments.length} Servicios Activos</span>
+                      <h2 className="font-bold text-slate-800 text-xl capitalize tracking-tight">{t('treatments.category_' + category) || category}</h2>
+                      <span className="text-[10px] text-medical-600 font-bold uppercase tracking-widest">{categoryTreatments.length} {t('treatments.active_services')}</span>
                     </div>
                   </div>
                 </div>
@@ -383,7 +383,7 @@ export default function TreatmentsView() {
                         <div className="space-y-6 bg-white/60 p-6 rounded-3xl border border-medical-100 shadow-sm animate-in fade-in zoom-in-95 duration-300">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                              <label className="block text-xs font-bold text-slate-500 ml-1 uppercase">Nombre del Servicio</label>
+                              <label className="block text-xs font-bold text-slate-500 ml-1 uppercase">{t('treatments.service_name_label')}</label>
                               <input
                                 type="text"
                                 value={editForm.name || ''}
@@ -392,7 +392,7 @@ export default function TreatmentsView() {
                               />
                             </div>
                             <div className="space-y-2">
-                              <label className="block text-xs font-bold text-slate-500 ml-1 uppercase">Código de Referencia</label>
+                              <label className="block text-xs font-bold text-slate-500 ml-1 uppercase">{t('treatments.code_reference')}</label>
                               <input
                                 type="text"
                                 value={editForm.code || ''}
@@ -403,7 +403,7 @@ export default function TreatmentsView() {
                           </div>
 
                           <div className="space-y-2">
-                            <label className="block text-xs font-bold text-slate-500 ml-1 uppercase">Descripción Clínica</label>
+                            <label className="block text-xs font-bold text-slate-500 ml-1 uppercase">{t('treatments.clinical_description')}</label>
                             <textarea
                               value={editForm.description || ''}
                               onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
@@ -416,11 +416,11 @@ export default function TreatmentsView() {
                           <div className="p-6 bg-medical-50/50 rounded-2xl border border-medical-100/50">
                             <h4 className="text-xs font-bold text-medical-800 mb-4 flex items-center gap-2 uppercase tracking-widest">
                               <Clock size={14} />
-                              Configuración de Tiempos (Minutos)
+                              {t('treatments.time_config_minutes')}
                             </h4>
                             <div className="grid grid-cols-3 gap-6">
                               <div className="space-y-1">
-                                <label className="block text-[10px] font-bold text-medical-600 uppercase">Mínima</label>
+                                <label className="block text-[10px] font-bold text-medical-600 uppercase">{t('treatments.min_label')}</label>
                                 <input
                                   type="number"
                                   value={editForm.min_duration_minutes || ''}
@@ -429,7 +429,7 @@ export default function TreatmentsView() {
                                 />
                               </div>
                               <div className="space-y-1">
-                                <label className="block text-[10px] font-bold text-medical-700 uppercase">Default</label>
+                                <label className="block text-[10px] font-bold text-medical-700 uppercase">{t('treatments.default_label')}</label>
                                 <input
                                   type="number"
                                   value={editForm.default_duration_minutes || ''}
@@ -438,7 +438,7 @@ export default function TreatmentsView() {
                                 />
                               </div>
                               <div className="space-y-1">
-                                <label className="block text-[10px] font-bold text-medical-600 uppercase">Máxima</label>
+                                <label className="block text-[10px] font-bold text-medical-600 uppercase">{t('treatments.max_label')}</label>
                                 <input
                                   type="number"
                                   value={editForm.max_duration_minutes || ''}
@@ -451,16 +451,16 @@ export default function TreatmentsView() {
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="space-y-2">
-                              <label className="block text-xs font-bold text-slate-500 ml-1 uppercase">Nivel de Complejidad</label>
+                              <label className="block text-xs font-bold text-slate-500 ml-1 uppercase">{t('treatments.complexity_level_label')}</label>
                               <select
                                 value={editForm.complexity_level || 'medium'}
                                 onChange={(e) => setEditForm({ ...editForm, complexity_level: e.target.value })}
                                 className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-medical-500/10 focus:border-medical-500 outline-none appearance-none font-bold text-slate-700"
                               >
-                                <option value="low">Baja</option>
-                                <option value="medium">Media</option>
-                                <option value="high">Alta</option>
-                                <option value="emergency">Urgencia</option>
+                                <option value="low">{t('treatments.low')}</option>
+                                <option value="medium">{t('treatments.medium')}</option>
+                                <option value="high">{t('treatments.high')}</option>
+                                <option value="emergency">{t('treatments.emergency')}</option>
                               </select>
                             </div>
 
@@ -475,7 +475,7 @@ export default function TreatmentsView() {
                                   />
                                   <CheckCircle className="absolute hidden h-4 w-4 text-white peer-checked:block left-1" />
                                 </div>
-                                <span className="text-sm font-bold text-slate-500 group-hover:text-purple-600 transition-colors">Sesiones Múltiples</span>
+                                <span className="text-sm font-bold text-slate-500 group-hover:text-purple-600 transition-colors">{t('treatments.multiple_sessions')}</span>
                               </label>
 
                               <label className="flex items-center gap-3 cursor-pointer group">
@@ -488,7 +488,7 @@ export default function TreatmentsView() {
                                   />
                                   <CheckCircle className="absolute hidden h-4 w-4 text-white peer-checked:block left-1" />
                                 </div>
-                                <span className="text-sm font-bold text-slate-500 group-hover:text-green-600 transition-colors">Activo</span>
+                                <span className="text-sm font-bold text-slate-500 group-hover:text-green-600 transition-colors">{t('treatments.active')}</span>
                               </label>
 
                               <label className="flex items-center gap-3 cursor-pointer group">
@@ -501,7 +501,7 @@ export default function TreatmentsView() {
                                   />
                                   <CheckCircle className="absolute hidden h-4 w-4 text-white peer-checked:block left-1" />
                                 </div>
-                                <span className="text-sm font-bold text-slate-500 group-hover:text-blue-600 transition-colors">En Catálogo</span>
+                                <span className="text-sm font-bold text-slate-500 group-hover:text-blue-600 transition-colors">{t('treatments.in_catalog')}</span>
                               </label>
                             </div>
                           </div>
@@ -511,7 +511,7 @@ export default function TreatmentsView() {
                               onClick={handleCancel}
                               className="px-6 py-2.5 text-slate-500 font-bold hover:bg-slate-100 rounded-xl transition-all"
                             >
-                              Cancelar
+                              {t('common.cancel')}
                             </button>
                             <button
                               onClick={() => handleSave(treatment.code)}
@@ -521,7 +521,7 @@ export default function TreatmentsView() {
                               {saving ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                               ) : <Save size={18} />}
-                              {saving ? 'Sincronizando...' : 'Actualizar Servicio'}
+                              {saving ? t('common.saving') : t('treatments.update_service')}
                             </button>
                           </div>
                         </div>
@@ -535,17 +535,17 @@ export default function TreatmentsView() {
                                 treatment.complexity_level === 'medium' ? 'bg-amber-50 text-amber-600 border-amber-100' :
                                   'bg-green-50 text-green-600 border-green-100'
                                 }`}>
-                                {treatment.complexity_level}
+                                {t('treatments.' + (treatment.complexity_level || 'medium'))}
                               </span>
                               {treatment.requires_multiple_sessions && (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-purple-50 text-purple-600 border border-purple-100">
                                   <CheckCircle size={10} />
-                                  Múltiples Sesiones
+                                  {t('treatments.multiple_sessions')}
                                 </span>
                               )}
                               {!treatment.is_active && (
                                 <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-100 text-slate-400 border border-slate-200">
-                                  Inactivo
+                                  {t('treatments.inactive')}
                                 </span>
                               )}
                             </div>
@@ -560,18 +560,18 @@ export default function TreatmentsView() {
                                   <Clock size={14} />
                                 </div>
                                 <span className="text-slate-600 text-sm font-semibold">
-                                  <strong className="text-slate-900 text-base">{treatment.default_duration_minutes}</strong> min <span className="text-slate-400 font-medium">estándar</span>
+                                  <strong className="text-slate-900 text-base">{treatment.default_duration_minutes}</strong> min <span className="text-slate-400 font-medium">{t('treatments.min_standard')}</span>
                                 </span>
                               </div>
                               <div className="h-4 w-px bg-slate-200 hidden sm:block"></div>
                               <div className="flex items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-tight">
-                                <span>Min: <span className="text-slate-700">{treatment.min_duration_minutes}m</span></span>
-                                <span>Max: <span className="text-slate-700">{treatment.max_duration_minutes}m</span></span>
+                                <span>{t('treatments.min_short')}: <span className="text-slate-700">{treatment.min_duration_minutes}m</span></span>
+                                <span>{t('treatments.max_short')}: <span className="text-slate-700">{treatment.max_duration_minutes}m</span></span>
                               </div>
                               {treatment.session_gap_days > 0 && (
                                 <div className="flex items-center gap-2 text-xs font-bold text-purple-500 uppercase tracking-tight">
                                   <Activity size={12} />
-                                  <span>{treatment.session_gap_days} días de gap</span>
+                                  <span>{treatment.session_gap_days} {t('treatments.session_gap_days')}</span>
                                 </div>
                               )}
                             </div>

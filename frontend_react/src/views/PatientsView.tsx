@@ -247,14 +247,14 @@ export default function PatientsView() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">{t('patients.title')}</h1>
-          <p className="text-sm text-gray-500">Gestiona los pacientes de la clínica</p>
+          <p className="text-sm text-gray-500">{t('patients.subtitle')}</p>
         </div>
         <button
           onClick={openCreateModal}
           className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition-colors text-sm"
         >
           <Plus size={20} />
-          Nuevo Paciente
+          {t('patients.new_patient')}
         </button>
       </div>
 
@@ -295,7 +295,7 @@ export default function PatientsView() {
           <div className="p-8 text-center text-gray-500">Cargando pacientes...</div>
         ) : filteredPatients.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            No se encontraron pacientes
+            {t('patients.no_patients_found')}
           </div>
         ) : (
           <>
@@ -310,16 +310,16 @@ export default function PatientsView() {
                       Contacto
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      DNI / Obra Social
+                      {t('patients.dni_obra_social')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Salud
+                      {t('patients.health')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Fecha Alta
+                      {t('patients.date_added')}
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Acciones
+                      {t('patients.actions')}
                     </th>
                   </tr>
                 </thead>
@@ -458,7 +458,7 @@ export default function PatientsView() {
           <div className="bg-white rounded-lg w-full max-w-2xl mx-4 my-8">
             <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
               <h2 className="text-xl font-bold">
-                {editingPatient ? 'Editar Paciente' : 'Nuevo Paciente'}
+                {editingPatient ? t('patients.edit_patient') : t('patients.new_patient')}
               </h2>
               <button onClick={closeModal} className="text-gray-500 hover:text-gray-700">
                 <X size={24} />
@@ -473,12 +473,12 @@ export default function PatientsView() {
                 <div>
                   <h3 className="text-lg font-medium text-gray-800 mb-4 flex items-center gap-2">
                     <User size={18} />
-                    Datos Personales
+                    {t('patients.personal_data')}
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Nombre *
+                        {t('patients.first_name_req')}
                       </label>
                       <input
                         type="text"
@@ -490,7 +490,7 @@ export default function PatientsView() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Apellido *
+                        {t('patients.last_name_req')}
                       </label>
                       <input
                         type="text"
@@ -502,7 +502,7 @@ export default function PatientsView() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Teléfono *
+                        {t('patients.phone_req')}
                       </label>
                       <input
                         type="tel"
@@ -514,7 +514,7 @@ export default function PatientsView() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        DNI
+                        {t('patients.dni')}
                       </label>
                       <input
                         type="text"
@@ -525,7 +525,7 @@ export default function PatientsView() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Email
+                        {t('patients.email')}
                       </label>
                       <input
                         type="email"
@@ -536,14 +536,14 @@ export default function PatientsView() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Obra Social
+                        {t('patients.obra_social')}
                       </label>
                       <input
                         type="text"
                         value={formData.obra_social}
                         onChange={(e) => setFormData({ ...formData, obra_social: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                        placeholder="Ej: OSDE, Swiss Medical, Particular"
+                        placeholder={t('patients.obra_social_placeholder')}
                       />
                     </div>
                   </div>
@@ -554,12 +554,12 @@ export default function PatientsView() {
                   <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                     <h3 className="text-lg font-medium text-gray-800 mb-4 flex items-center gap-2">
                       <Calendar size={18} />
-                      Agendar Primer Turno (Opcional)
+                      {t('patients.schedule_first_appointment')}
                     </h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Tratamiento / Servicio
+                          {t('patients.treatment_service')}
                         </label>
                         <div className="relative">
                           <Stethoscope className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
@@ -568,7 +568,7 @@ export default function PatientsView() {
                             onChange={(e) => setAppointmentData({ ...appointmentData, treatment_code: e.target.value })}
                             className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                           >
-                            <option value="">Seleccionar tratamiento...</option>
+                            <option value="">{t('patients.select_treatment')}</option>
                             {treatments.map(t => (
                               <option key={t.code} value={t.code}>{t.name} ({t.category})</option>
                             ))}
@@ -577,7 +577,7 @@ export default function PatientsView() {
                       </div>
                       <div className="col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Profesional
+                          {t('agenda.professional')}
                         </label>
                         <div className="relative">
                           <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
@@ -586,7 +586,7 @@ export default function PatientsView() {
                             onChange={(e) => setAppointmentData({ ...appointmentData, professional_id: e.target.value })}
                             className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                           >
-                            <option value="">Seleccionar profesional...</option>
+                            <option value="">{t('patients.select_professional')}</option>
                             {professionals.map(p => (
                               <option key={p.id} value={p.id}>{p.name}</option>
                             ))}
@@ -595,7 +595,7 @@ export default function PatientsView() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Fecha
+                          {t('patients.date')}
                         </label>
                         <input
                           type="date"
@@ -606,7 +606,7 @@ export default function PatientsView() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Hora
+                          {t('patients.time')}
                         </label>
                         <div className="relative">
                           <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
@@ -629,13 +629,13 @@ export default function PatientsView() {
                   onClick={closeModal}
                   className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-2 text-white bg-primary rounded-lg hover:bg-primary-dark transition-colors"
                 >
-                  {editingPatient ? 'Guardar Cambios' : 'Crear Paciente'}
+                  {editingPatient ? t('common.save_changes') : t('patients.create_patient')}
                 </button>
               </div>
             </form>

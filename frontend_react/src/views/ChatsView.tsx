@@ -877,7 +877,7 @@ export default function ChatsView() {
             {/* Desktop Context Header */}
             <div className="hidden xl:flex p-4 border-b items-center gap-2">
               <Activity size={18} className="text-primary" />
-              <h3 className="font-medium">Contexto Clínico</h3>
+              <h3 className="font-medium">{t('chats.clinical_context')}</h3>
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -893,7 +893,7 @@ export default function ChatsView() {
                     <Activity size={16} className="text-green-600" />
                   )}
                   <span className="font-medium text-sm">
-                    Estado del Bot
+                    {t('chats.bot_status')}
                   </span>
                 </div>
                 <p className="text-sm text-gray-600">
@@ -901,7 +901,7 @@ export default function ChatsView() {
                     ? 'Atendido por persona'
                     : selectedSession.status === 'silenced'
                       ? 'Silenciado (24h override)'
-                      : 'IA activa'}
+                      : t('chats.ia_active')}
                 </p>
                 {selectedSession.human_override_until && (
                   <p className="text-xs text-gray-500 mt-1">
@@ -921,16 +921,16 @@ export default function ChatsView() {
                     <div className={`p-3 rounded-lg ${hasAppointments ? 'bg-gray-50' : 'bg-amber-50 border border-amber-200'}`}>
                       {hasAppointments ? (
                         <>
-                          <h4 className="text-xs font-medium text-gray-500 mb-2">PACIENTE</h4>
+                          <h4 className="text-xs font-medium text-gray-500 mb-2">{t('chats.patient_label')}</h4>
                           <p className="font-medium">{displayName}</p>
                           <p className="text-sm text-gray-500">{selectedSession.phone_number}</p>
                         </>
                       ) : (
                         <>
-                          <h4 className="text-xs font-medium text-amber-700 mb-2">CONTACTO / SIN TURNOS</h4>
+                          <h4 className="text-xs font-medium text-amber-700 mb-2">{t('chats.contact_no_appointments')}</h4>
                           <p className="font-medium">{displayName}</p>
                           <p className="text-sm text-gray-500">{selectedSession.phone_number}</p>
-                          <p className="text-xs text-amber-700 mt-2">Este contacto aún no tiene turnos. El historial se mostrará cuando reserve.</p>
+                          <p className="text-xs text-amber-700 mt-2">{t('chats.no_appointments_yet')}</p>
                         </>
                       )}
                     </div>
@@ -940,7 +940,7 @@ export default function ChatsView() {
                         {/* Last Appointment */}
                         <div className="p-3 bg-gray-50 rounded-lg">
                           <h4 className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
-                            <Calendar size={12} /> ÚLTIMA CITA
+                            <Calendar size={12} /> {t('chats.last_appointment')}
                           </h4>
                           {patientContext?.last_appointment ? (
                             <div className="space-y-1">
@@ -952,18 +952,18 @@ export default function ChatsView() {
                                 )}
                               </div>
                               <p className="text-[11px] text-gray-400">
-                                Profesional: {patientContext.last_appointment.professional_name}
+                                {t('chats.professional_label')}: {patientContext.last_appointment.professional_name}
                               </p>
                             </div>
                           ) : (
-                            <p className="text-sm text-gray-400">Sin citas previas</p>
+                            <p className="text-sm text-gray-400">{t('chats.no_previous_appointments')}</p>
                           )}
                         </div>
 
                         {/* Upcoming Appointment */}
                         <div className="p-3 bg-gray-50 rounded-lg">
                           <h4 className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
-                            <Clock size={12} /> PRÓXIMA CITA
+                            <Clock size={12} /> {t('chats.upcoming_appointment')}
                           </h4>
                           {patientContext?.upcoming_appointment ? (
                             <div className="space-y-1">
@@ -975,17 +975,17 @@ export default function ChatsView() {
                                 )}
                               </div>
                               <p className="text-[11px] text-gray-400">
-                                Profesional: {patientContext.upcoming_appointment.professional_name}
+                                {t('chats.professional_label')}: {patientContext.upcoming_appointment.professional_name}
                               </p>
                             </div>
                           ) : (
-                            <p className="text-sm text-gray-400">Sin citas programadas</p>
+                            <p className="text-sm text-gray-400">{t('chats.no_scheduled_appointments')}</p>
                           )}
                         </div>
 
                         {/* Treatment Plan */}
                         <div className="p-3 bg-gray-50 rounded-lg">
-                          <h4 className="text-xs font-medium text-gray-500 mb-2">TRATAMIENTO ACTUAL</h4>
+                          <h4 className="text-xs font-medium text-gray-500 mb-2">{t('chats.current_treatment')}</h4>
                           {patientContext?.treatment_plan ? (
                             <div className="text-sm bg-medical-50 p-2 rounded border border-medical-100 text-medical-800 italic">
                               {typeof patientContext.treatment_plan === 'string'
@@ -993,13 +993,13 @@ export default function ChatsView() {
                                 : JSON.stringify(patientContext.treatment_plan, null, 2)}
                             </div>
                           ) : (
-                            <p className="text-sm text-gray-400 italic">Sin plan de tratamiento</p>
+                            <p className="text-sm text-gray-400 italic">{t('chats.no_treatment_plan')}</p>
                           )}
                         </div>
                       </>
                     ) : (
                       <div className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-500 italic">Sin historial clínico (contacto sin turnos)</p>
+                        <p className="text-sm text-gray-500 italic">{t('chats.no_clinical_history')}</p>
                       </div>
                     )}
                   </>
@@ -1011,8 +1011,8 @@ export default function ChatsView() {
       ) : (
         <div className="hidden lg:flex flex-1 items-center justify-center bg-gray-50 flex-col gap-4">
           <MessageCircle size={64} className="opacity-20" />
-          <p className="text-lg font-medium text-gray-400">Selecciona una conversación</p>
-          <p className="text-sm text-gray-400">para comenzar a chatear</p>
+          <p className="text-lg font-medium text-gray-400">{t('chats.select_conversation')}</p>
+          <p className="text-sm text-gray-400">{t('chats.to_start_chatting')}</p>
         </div>
       )}
 

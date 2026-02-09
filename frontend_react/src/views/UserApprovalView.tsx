@@ -488,7 +488,7 @@ const UserApprovalView: React.FC = () => {
                                             <span className="truncate">{selectedStaff.email}</span>
                                         </p>
                                         <p className="text-xs text-gray-500 mt-1">
-                                            Miembro desde: {new Date(selectedStaff.created_at).toLocaleDateString()}
+                                            {t('approvals.member_since')}: {new Date(selectedStaff.created_at).toLocaleDateString()}
                                         </p>
                                     </div>
                                 </div>
@@ -560,11 +560,11 @@ const UserApprovalView: React.FC = () => {
                                     <div className="flex gap-2">
                                         <button type="submit" disabled={linkFormSubmitting} className="btn-icon-labeled success">
                                             <Save size={18} />
-                                            {linkFormSubmitting ? 'Guardando...' : 'Guardar y vincular'}
+                                            {linkFormSubmitting ? t('common.saving') : t('approvals.save_and_link')}
                                         </button>
                                         <button type="button" onClick={() => { setShowLinkForm(false); setLinkFormData({ tenant_id: null, phone: '', specialty: '', license_number: '' }); }} className="btn-icon-labeled">
-                                            Cancelar
-                                        </button>
+{t('common.cancel')}
+                                            </button>
                                     </div>
                                 </form>
                             )}
@@ -829,10 +829,10 @@ const UserApprovalView: React.FC = () => {
                             </div>
                             <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-5 border-t border-gray-100 bg-gray-50/50 flex flex-col-reverse sm:flex-row gap-3 justify-end rounded-b-3xl shrink-0">
                                 <button type="button" onClick={closeEditProfileModal} className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-xl border border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-50 touch-manipulation">
-                                    Cancelar
-                                </button>
+{t('common.cancel')}
+                                            </button>
                                 <button type="submit" disabled={editFormSubmitting} className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 touch-manipulation">
-                                    {editFormSubmitting ? 'Guardando...' : 'Guardar Cambios'}
+                                    {editFormSubmitting ? t('common.saving') : t('common.save_changes')}
                                 </button>
                             </div>
                         </form>
@@ -1009,7 +1009,7 @@ const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardCl
                     {user.email}
                 </div>
                 <div className="text-xs text-secondary mt-1">
-                    {isRequest ? 'Solicitado: ' : 'Miembro desde: '} {new Date(user.created_at).toLocaleDateString()}
+                    {isRequest ? t('approvals.requested_at') + ': ' : t('approvals.member_since') + ': '} {new Date(user.created_at).toLocaleDateString()}
                 </div>
             </div>
         </div>
@@ -1038,7 +1038,7 @@ const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardCl
             ) : (
                 user.status === 'active' ? (
                     <button onClick={() => onAction(user.id, 'suspended')} className="btn-icon-labeled warning">
-                        <Lock size={18} /> Suspender Acceso
+                        <Lock size={18} /> {t('approvals.suspend')}
                     </button>
                 ) : (
                     <button onClick={() => onAction(user.id, 'active')} className="btn-icon-labeled success">
