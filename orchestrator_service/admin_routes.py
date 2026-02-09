@@ -337,6 +337,7 @@ class ProfessionalCreate(BaseModel):
     is_active: bool = True
     availability: Dict[str, Any] = {}
     working_hours: Optional[Dict[str, Any]] = None
+    tenant_id: Optional[int] = None  # Clínica a la que se vincula; si viene y está permitido, se usa; si no, contexto
 
 class ProfessionalUpdate(BaseModel):
     name: str
@@ -1167,9 +1168,19 @@ async def list_patients(
 @router.post("/professionals", dependencies=[Depends(verify_admin_token)])
 async def create_professional(
     professional: ProfessionalCreate,
-    tenant_id: int = Depends(get_resolved_tenant_id),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+    allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
 ):
-    """Crear un nuevo profesional. Soberanía: se asocia al tenant_id del contexto."""
+    """
+    Crear un nuevo profesional. Soberanía: se asocia a la clínica elegida.
+    Si el body trae tenant_id y el usuario tiene acceso a esa clínica, se usa; si no, la del contexto.
+    Así el agente y el sistema saben a qué clínica pertenece el profesional.
+    """
+    tenant_id = (
+        professional.tenant_id
+        if professional.tenant_id is not None and professional.tenant_id in allowed_ids
+        else resolved_tenant_id
+    )
     try:
         # 1. Crear usuario asociado
         user_id = uuid.uuid4()
@@ -1184,7 +1195,7 @@ async def create_professional(
             VALUES ($1, $2, $3, 'professional', $4, 'active', NOW())
         """, user_id, email, "hash_placeholder", first_name)
 
-        # 2. Crear profesional (esquema: tenant_id, user_id, first_name, last_name, email, phone_number, specialty, matrícula, is_active, working_hours)
+        # 2. Crear profesional (tenant_id = clínica elegida en el modal)
         wh = professional.working_hours or generate_default_working_hours()
         matricula = professional.license_number  # payload usa license_number; BD puede tener registration_id o license_number
         params = [tenant_id, user_id, first_name, last_name or " ", email, professional.phone,

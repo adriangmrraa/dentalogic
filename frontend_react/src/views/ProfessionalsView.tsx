@@ -59,8 +59,14 @@ const SPECIALTIES = [
   'Estética Dental',
 ];
 
+interface ClinicOption {
+  id: number;
+  clinic_name: string;
+}
+
 export default function ProfessionalsView() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [clinics, setClinics] = useState<ClinicOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
   const [expandedDays, setExpandedDays] = useState<Record<number, string[]>>({});
@@ -73,6 +79,7 @@ export default function ProfessionalsView() {
     license_number: '',
     is_active: true,
     working_hours: createDefaultWorkingHours(),
+    tenant_id: null as number | null,
   });
 
   function createDefaultWorkingHours(): WorkingHours {
@@ -89,6 +96,19 @@ export default function ProfessionalsView() {
   useEffect(() => {
     fetchProfessionals();
   }, []);
+
+  useEffect(() => {
+    api.get<ClinicOption[]>('/admin/chat/tenants').then((res) => {
+      setClinics(res.data || []);
+    }).catch(() => setClinics([]));
+  }, []);
+
+  // Al crear: si hay clínicas y aún no eligió una, preseleccionar la primera
+  useEffect(() => {
+    if (editingProfessional?.id === 0 && clinics.length > 0 && formData.tenant_id == null) {
+      setFormData((prev) => ({ ...prev, tenant_id: clinics[0].id }));
+    }
+  }, [editingProfessional?.id, clinics, formData.tenant_id]);
 
   const fetchProfessionals = async () => {
     try {
@@ -112,7 +132,9 @@ export default function ProfessionalsView() {
       if (editingProfessional && editingProfessional.id) {
         await api.put(`/admin/professionals/${editingProfessional.id}`, formData);
       } else {
-        await api.post('/admin/professionals', formData);
+        const payload: Record<string, unknown> = { ...formData };
+        if (formData.tenant_id != null) payload.tenant_id = formData.tenant_id;
+        await api.post('/admin/professionals', payload);
       }
       fetchProfessionals();
       closeModal();
@@ -167,6 +189,7 @@ export default function ProfessionalsView() {
       license_number: '',
       is_active: true,
       working_hours: createDefaultWorkingHours(),
+      tenant_id: clinics.length > 0 ? clinics[0].id : null,
     });
     setExpandedDays({});
   };
@@ -499,6 +522,26 @@ export default function ProfessionalsView() {
                     </h3>
 
                     <div className="space-y-4">
+                      {!editingProfessional.id && clinics.length > 0 && (
+                        <div className="group">
+                          <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
+                            Clínica / Sucursal <span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            required
+                            value={formData.tenant_id ?? ''}
+                            onChange={(e) => setFormData({ ...formData, tenant_id: e.target.value ? parseInt(e.target.value, 10) : null })}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none text-sm font-semibold text-gray-800 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%236b7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.25rem_1.25rem] bg-[right_0.75rem_center] bg-no-repeat"
+                          >
+                            <option value="">Seleccionar clínica...</option>
+                            {clinics.map((c) => (
+                              <option key={c.id} value={c.id}>{c.clinic_name}</option>
+                            ))}
+                          </select>
+                          <p className="text-[11px] text-gray-400 mt-1 ml-1">Vincular este profesional a la clínica elegida (turnos y agente por sede).</p>
+                        </div>
+                      )}
+
                       <div className="group">
                         <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
                           Nombre y Apellido <span className="text-red-500">*</span>
