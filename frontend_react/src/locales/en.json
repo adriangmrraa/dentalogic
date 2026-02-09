@@ -193,6 +193,7 @@
     "treatment_service": "Treatment / service",
     "select_treatment": "Select treatment...",
     "select_professional": "Select professional...",
+    "professional": "Professional",
     "date": "Date",
     "time": "Time",
     "create_patient": "Create patient",

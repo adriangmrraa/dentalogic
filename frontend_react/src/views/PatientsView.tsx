@@ -26,7 +26,9 @@ interface TreatmentType {
 
 interface Professional {
   id: number;
-  name: string;
+  first_name: string;
+  last_name?: string;
+  specialty?: string;
   is_active: boolean;
 }
 
@@ -111,7 +113,7 @@ export default function PatientsView() {
         api.get('/admin/professionals')
       ]);
       setTreatments(treatResponse.data);
-      setProfessionals(profResponse.data.filter((p: Professional) => p.is_active));
+      setProfessionals((profResponse.data || []).filter((p: Professional) => p.is_active));
     } catch (error) {
       console.error('Error fetching resources:', error);
     }
@@ -588,7 +590,9 @@ export default function PatientsView() {
                           >
                             <option value="">{t('patients.select_professional')}</option>
                             {professionals.map(p => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
+                              <option key={p.id} value={p.id}>
+                                {[p.first_name, p.last_name].filter(Boolean).join(' ') || t('patients.professional')}
+                              </option>
                             ))}
                           </select>
                         </div>

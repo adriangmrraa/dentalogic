@@ -1226,6 +1226,32 @@ async def get_patient_insurance_status(patient_id: int):
 
 # ==================== ENDPOINTS PACIENTES ====================
 
+@router.post("/patients", dependencies=[Depends(verify_admin_token)])
+async def create_patient(
+    p: PatientCreate,
+    tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """Crear un paciente nuevo en la sede actual. Aislado por tenant_id (Regla de Oro)."""
+    try:
+        row = await db.pool.fetchrow("""
+            INSERT INTO patients (tenant_id, first_name, last_name, phone_number, email, dni, insurance_provider, status, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', NOW())
+            RETURNING id
+        """,
+            tenant_id,
+            (p.first_name or "").strip() or "Sin nombre",
+            (p.last_name or "").strip() or "",
+            (p.phone_number or "").strip(),
+            (p.email or "").strip() or None,
+            (p.dni or "").strip() or None,
+            (p.insurance or "").strip() or None,
+        )
+        return {"id": row["id"]}
+    except Exception as e:
+        logger.error(f"Error creating patient: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/patients", dependencies=[Depends(verify_admin_token)])
 async def list_patients(
     search: str = None,
@@ -2086,11 +2112,13 @@ async def list_professionals(
     Lista profesionales. CEO ve todos los de sus sedes; secretary/professional solo los de su clínica.
     Así un profesional creado en cualquier sede aparece en la página Profesionales para el CEO.
     """
+    # Solo listar profesionales dentales (excluir secretarias: u.role = 'professional').
+    base_join = "FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional'"
     # CEO (varias sedes): listar profesionales de todas las sedes permitidas
     if len(allowed_ids) > 1:
         try:
             rows = await db.pool.fetch(
-                "SELECT id, first_name, last_name, specialty, is_active, tenant_id FROM professionals WHERE tenant_id = ANY($1::int[])",
+                f"SELECT p.id, p.first_name, p.last_name, p.specialty, p.is_active, p.tenant_id {base_join} WHERE p.tenant_id = ANY($1::int[])",
                 allowed_ids,
             )
             return [dict(row) for row in rows]
@@ -2099,7 +2127,7 @@ async def list_professionals(
             if "last_name" in err_str or "tenant_id" in err_str:
                 try:
                     rows = await db.pool.fetch(
-                        "SELECT id, first_name, specialty, is_active, tenant_id FROM professionals WHERE tenant_id = ANY($1::int[])",
+                        f"SELECT p.id, p.first_name, p.specialty, p.is_active, p.tenant_id {base_join} WHERE p.tenant_id = ANY($1::int[])",
                         allowed_ids,
                     )
                     return [dict(r) | {"last_name": ""} for r in rows]
@@ -2107,16 +2135,15 @@ async def list_professionals(
                     pass
             try:
                 rows = await db.pool.fetch(
-                    "SELECT id, first_name, last_name, specialty, is_active FROM professionals WHERE tenant_id = ANY($1::int[])",
+                    "SELECT p.id, p.first_name, p.last_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' WHERE p.tenant_id = ANY($1::int[])",
                     allowed_ids,
                 )
                 return [dict(row) for row in rows]
             except Exception:
                 pass
-        # Fallback sin tenant_id en SELECT por BD antigua
         try:
             rows = await db.pool.fetch(
-                "SELECT id, first_name, last_name, specialty, is_active FROM professionals"
+                "SELECT p.id, p.first_name, p.last_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional'"
             )
             return [dict(row) for row in rows]
         except Exception as e2:
@@ -2124,37 +2151,34 @@ async def list_professionals(
             return []
 
     tenant_id = resolved_tenant_id
-    # 1) Query completa (tenant_id + last_name)
     try:
         rows = await db.pool.fetch(
-            "SELECT id, first_name, last_name, specialty, is_active FROM professionals WHERE tenant_id = $1",
+            f"SELECT p.id, p.first_name, p.last_name, p.specialty, p.is_active {base_join} WHERE p.tenant_id = $1",
             tenant_id,
         )
         return [dict(row) for row in rows]
     except Exception as e:
         logger.warning(f"list_professionals primary query failed: {e}")
 
-    # 2) Sin last_name (BD antigua)
     try:
         rows = await db.pool.fetch(
-            "SELECT id, first_name, specialty, is_active FROM professionals WHERE tenant_id = $1",
+            "SELECT p.id, p.first_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' WHERE p.tenant_id = $1",
             tenant_id,
         )
         return [dict(r) | {"last_name": ""} for r in rows]
     except Exception as e:
         logger.warning(f"list_professionals fallback (no last_name) failed: {e}")
 
-    # 3) Sin tenant_id (BD muy antigua sin parche)
     try:
         rows = await db.pool.fetch(
-            "SELECT id, first_name, last_name, specialty, is_active FROM professionals"
+            "SELECT p.id, p.first_name, p.last_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional'"
         )
         return [dict(row) for row in rows]
     except Exception as e:
         logger.warning(f"list_professionals fallback (no tenant) failed: {e}")
     try:
         rows = await db.pool.fetch(
-            "SELECT id, first_name, specialty, is_active FROM professionals"
+            "SELECT p.id, p.first_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional'"
         )
         return [dict(r) | {"last_name": ""} for r in rows]
     except Exception as e:

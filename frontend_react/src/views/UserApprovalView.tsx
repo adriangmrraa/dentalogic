@@ -982,26 +982,26 @@ interface UserCardProps {
 const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardClick, onConfigClick }) => {
     const { t } = useTranslation();
     return (
-    <div className="glass p-5 flex items-center justify-between animate-fadeIn">
+    <div className="glass p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fadeIn">
         <div
-            className={`flex items-center gap-4 flex-1 min-w-0 ${onCardClick ? 'cursor-pointer hover:opacity-90' : ''}`}
+            className={`flex items-start sm:items-center gap-4 flex-1 min-w-0 ${onCardClick ? 'cursor-pointer hover:opacity-90' : ''}`}
             onClick={onCardClick}
             role={onCardClick ? 'button' : undefined}
         >
-            <div className={`role-badge ${user.status === 'suspended' ? 'opacity-40' : ''}`} data-role={user.role}>
+            <div className={`role-badge shrink-0 ${user.status === 'suspended' ? 'opacity-40' : ''}`} data-role={user.role}>
                 {user.role.toUpperCase()}
             </div>
-            <div>
-                <div className={`font-medium flex items-center gap-2 ${user.status === 'suspended' ? 'text-secondary line-through' : ''}`}>
-                    <User size={14} className="opacity-50" />
-                    {user.first_name || t('approvals.no_name')} {user.last_name || ''}
+            <div className="min-w-0 flex-1">
+                <div className={`font-medium flex items-center gap-2 flex-wrap ${user.status === 'suspended' ? 'text-secondary line-through' : ''}`}>
+                    <User size={14} className="opacity-50 shrink-0" />
+                    <span className="truncate">{user.first_name || t('approvals.no_name')} {user.last_name || ''}</span>
                     {user.status === 'suspended' && (
-                        <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full uppercase ml-2">{t('approvals.suspended')}</span>
+                        <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full uppercase shrink-0">{t('approvals.suspended')}</span>
                     )}
                 </div>
-                <div className="text-sm flex items-center gap-2 opacity-70">
-                    <Mail size={12} />
-                    {user.email}
+                <div className="text-sm flex items-center gap-2 opacity-70 truncate">
+                    <Mail size={12} className="shrink-0" />
+                    <span className="truncate">{user.email}</span>
                 </div>
                 <div className="text-xs text-secondary mt-1">
                     {isRequest ? t('approvals.requested_at') + ': ' : t('approvals.member_since') + ': '} {new Date(user.created_at).toLocaleDateString()}
@@ -1009,7 +1009,7 @@ const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardCl
             </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-end sm:justify-start gap-2 shrink-0 flex-wrap" onClick={(e) => e.stopPropagation()}>
             {!isRequest && onConfigClick && (
                 <button
                     type="button"
