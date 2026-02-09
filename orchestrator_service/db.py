@@ -270,6 +270,18 @@ class Database:
             END $$;
             CREATE INDEX IF NOT EXISTS idx_professionals_tenant ON professionals(tenant_id);
             """,
+            # Parche 12b: registration_id en professionals (matrícula; BD puede tener license_number)
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'professionals' AND column_name = 'registration_id') THEN
+                    ALTER TABLE professionals ADD COLUMN registration_id VARCHAR(50);
+                    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'professionals' AND column_name = 'license_number') THEN
+                        UPDATE professionals SET registration_id = license_number WHERE license_number IS NOT NULL;
+                    END IF;
+                END IF;
+            END $$;
+            """,
             # Parche 13: tenant_id, source y google_calendar_event_id en appointments (idempotente)
             """
             DO $$

@@ -908,72 +908,101 @@ export default function ChatsView() {
                 )}
               </div>
 
-              {/* Patient Info */}
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <h4 className="text-xs font-medium text-gray-500 mb-2">PACIENTE</h4>
-                <p className="font-medium">{patientContext?.patient_name || selectedSession.patient_name}</p>
-                <p className="text-sm text-gray-500">{selectedSession.phone_number}</p>
-              </div>
-
-              {/* Last Appointment */}
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <h4 className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
-                  <Calendar size={12} /> ÚLTIMA CITA
-                </h4>
-                {patientContext?.last_appointment ? (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">{patientContext.last_appointment.type}</p>
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span>{new Date(patientContext.last_appointment.date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                      {patientContext.last_appointment.duration_minutes && (
-                        <span className="bg-gray-200 px-1.5 rounded-sm">{patientContext.last_appointment.duration_minutes} min</span>
+              {/* Patient / Contact Info — Lead vs Paciente (solo con turno = ficha con historial) */}
+              {(() => {
+                const hasAppointments = !!(patientContext?.last_appointment || patientContext?.upcoming_appointment);
+                const apiPatient = (patientContext as { patient?: { first_name?: string; last_name?: string } })?.patient;
+                const nameFromApi = apiPatient ? [apiPatient.first_name, apiPatient.last_name].filter(Boolean).join(' ').trim() : '';
+                const displayName = (patientContext as any)?.patient_name || nameFromApi || selectedSession.patient_name || selectedSession.phone_number;
+                return (
+                  <>
+                    <div className={`p-3 rounded-lg ${hasAppointments ? 'bg-gray-50' : 'bg-amber-50 border border-amber-200'}`}>
+                      {hasAppointments ? (
+                        <>
+                          <h4 className="text-xs font-medium text-gray-500 mb-2">PACIENTE</h4>
+                          <p className="font-medium">{displayName}</p>
+                          <p className="text-sm text-gray-500">{selectedSession.phone_number}</p>
+                        </>
+                      ) : (
+                        <>
+                          <h4 className="text-xs font-medium text-amber-700 mb-2">CONTACTO / SIN TURNOS</h4>
+                          <p className="font-medium">{displayName}</p>
+                          <p className="text-sm text-gray-500">{selectedSession.phone_number}</p>
+                          <p className="text-xs text-amber-700 mt-2">Este contacto aún no tiene turnos. El historial se mostrará cuando reserve.</p>
+                        </>
                       )}
                     </div>
-                    <p className="text-[11px] text-gray-400">
-                      Profesional: {patientContext.last_appointment.professional_name}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-400">Sin citas previas</p>
-                )}
-              </div>
 
-              {/* Upcoming Appointment */}
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <h4 className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
-                  <Clock size={12} /> PRÓXIMA CITA
-                </h4>
-                {patientContext?.upcoming_appointment ? (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">{patientContext.upcoming_appointment.type}</p>
-                    <div className="flex items-center gap-2 text-xs text-primary font-medium">
-                      <span>{new Date(patientContext.upcoming_appointment.date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                      {patientContext.upcoming_appointment.duration_minutes && (
-                        <span className="bg-medical-100 px-1.5 rounded-sm">{patientContext.upcoming_appointment.duration_minutes} min</span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-gray-400">
-                      Profesional: {patientContext.upcoming_appointment.professional_name}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-400">Sin citas programadas</p>
-                )}
-              </div>
+                    {hasAppointments ? (
+                      <>
+                        {/* Last Appointment */}
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                          <h4 className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
+                            <Calendar size={12} /> ÚLTIMA CITA
+                          </h4>
+                          {patientContext?.last_appointment ? (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium">{patientContext.last_appointment.type}</p>
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                <span>{new Date(patientContext.last_appointment.date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                {patientContext.last_appointment.duration_minutes && (
+                                  <span className="bg-gray-200 px-1.5 rounded-sm">{patientContext.last_appointment.duration_minutes} min</span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-gray-400">
+                                Profesional: {patientContext.last_appointment.professional_name}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-400">Sin citas previas</p>
+                          )}
+                        </div>
 
-              {/* Treatment Plan */}
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <h4 className="text-xs font-medium text-gray-500 mb-2">TRATAMIENTO ACTUAL</h4>
-                {patientContext?.treatment_plan ? (
-                  <div className="text-sm bg-medical-50 p-2 rounded border border-medical-100 text-medical-800 italic">
-                    {typeof patientContext.treatment_plan === 'string'
-                      ? patientContext.treatment_plan
-                      : JSON.stringify(patientContext.treatment_plan, null, 2)}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-400 italic">Sin plan de tratamiento</p>
-                )}
-              </div>
+                        {/* Upcoming Appointment */}
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                          <h4 className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
+                            <Clock size={12} /> PRÓXIMA CITA
+                          </h4>
+                          {patientContext?.upcoming_appointment ? (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium">{patientContext.upcoming_appointment.type}</p>
+                              <div className="flex items-center gap-2 text-xs text-primary font-medium">
+                                <span>{new Date(patientContext.upcoming_appointment.date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                {patientContext.upcoming_appointment.duration_minutes && (
+                                  <span className="bg-medical-100 px-1.5 rounded-sm">{patientContext.upcoming_appointment.duration_minutes} min</span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-gray-400">
+                                Profesional: {patientContext.upcoming_appointment.professional_name}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-400">Sin citas programadas</p>
+                          )}
+                        </div>
+
+                        {/* Treatment Plan */}
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                          <h4 className="text-xs font-medium text-gray-500 mb-2">TRATAMIENTO ACTUAL</h4>
+                          {patientContext?.treatment_plan ? (
+                            <div className="text-sm bg-medical-50 p-2 rounded border border-medical-100 text-medical-800 italic">
+                              {typeof patientContext.treatment_plan === 'string'
+                                ? patientContext.treatment_plan
+                                : JSON.stringify(patientContext.treatment_plan, null, 2)}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-400 italic">Sin plan de tratamiento</p>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-500 italic">Sin historial clínico (contacto sin turnos)</p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </>

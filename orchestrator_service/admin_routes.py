@@ -1180,17 +1180,33 @@ async def create_professional(
             VALUES ($1, $2, $3, 'professional', $4, 'active', NOW())
         """, user_id, email, "hash_placeholder", first_name)
 
-        # 2. Crear profesional (esquema: tenant_id, user_id, first_name, last_name, email, phone_number, specialty, registration_id, is_active, working_hours)
+        # 2. Crear profesional (esquema: tenant_id, user_id, first_name, last_name, email, phone_number, specialty, matrícula, is_active, working_hours)
         wh = professional.working_hours or generate_default_working_hours()
-        await db.pool.execute("""
-            INSERT INTO professionals (
-                tenant_id, user_id, first_name, last_name, email, phone_number,
-                specialty, registration_id, is_active, working_hours, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, NOW(), NOW())
-        """, tenant_id, user_id, first_name, last_name, email, professional.phone,
-             professional.specialty, professional.license_number, professional.is_active, json.dumps(wh))
+        matricula = professional.license_number  # payload usa license_number; BD puede tener registration_id o license_number
+        params = [tenant_id, user_id, first_name, last_name or " ", email, professional.phone,
+                  professional.specialty, matricula, professional.is_active, json.dumps(wh)]
+        try:
+            await db.pool.execute("""
+                INSERT INTO professionals (
+                    tenant_id, user_id, first_name, last_name, email, phone_number,
+                    specialty, registration_id, is_active, working_hours, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, NOW(), NOW())
+            """, *params)
+        except asyncpg.UndefinedColumnError as e:
+            if "registration_id" in str(e):
+                # BD antigua con license_number en lugar de registration_id
+                await db.pool.execute("""
+                    INSERT INTO professionals (
+                        tenant_id, user_id, first_name, last_name, email, phone_number,
+                        specialty, license_number, is_active, working_hours, created_at, updated_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, NOW(), NOW())
+                """, *params)
+            else:
+                raise
 
         return {"status": "created", "user_id": str(user_id)}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating professional: {e}")
         raise HTTPException(status_code=500, detail=str(e))
