@@ -292,6 +292,15 @@ class Database:
                 END IF;
             END $$;
             """,
+            # Parche 12d: phone_number en professionals (esquemas antiguos pueden no tenerla)
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'professionals' AND column_name = 'phone_number') THEN
+                    ALTER TABLE professionals ADD COLUMN phone_number VARCHAR(20);
+                END IF;
+            END $$;
+            """,
             # Parche 13: tenant_id, source y google_calendar_event_id en appointments (idempotente)
             """
             DO $$

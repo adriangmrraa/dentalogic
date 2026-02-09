@@ -1262,6 +1262,36 @@ async def create_professional(
                         specialty, registration_id, is_active, working_hours, created_at
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, NOW())
                 """, *params)
+            elif "phone_number" in err_str:
+                # BD antigua sin columna phone_number (solo columnas típicas en esquemas viejos)
+                params_no_phone = [tenant_id, user_id, first_name, last_name, email,
+                                   specialty_val, matricula, professional.is_active, wh_json]
+                try:
+                    await db.pool.execute("""
+                        INSERT INTO professionals (
+                            tenant_id, user_id, first_name, last_name, email,
+                            specialty, registration_id, is_active, working_hours, created_at, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW(), NOW())
+                    """, *params_no_phone)
+                except asyncpg.UndefinedColumnError as e2:
+                    if "updated_at" in str(e2).lower():
+                        await db.pool.execute("""
+                            INSERT INTO professionals (
+                                tenant_id, user_id, first_name, last_name, email,
+                                specialty, registration_id, is_active, working_hours, created_at
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW())
+                        """, *params_no_phone)
+                    else:
+                        raise
+            elif "email" in err_str:
+                params_no_email = [tenant_id, user_id, first_name, last_name, phone_val,
+                                    specialty_val, matricula, professional.is_active, wh_json]
+                await db.pool.execute("""
+                    INSERT INTO professionals (
+                        tenant_id, user_id, first_name, last_name, phone_number,
+                        specialty, registration_id, is_active, working_hours, created_at, updated_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW(), NOW())
+                """, *params_no_email)
             else:
                 logger.exception("create_professional INSERT column error")
                 raise HTTPException(status_code=500, detail=f"Columna no reconocida en professionals: {e}")
@@ -1320,7 +1350,36 @@ async def update_professional(id: int, payload: ProfessionalUpdate):
                       payload.phone, payload.email, payload.is_active, 
                       json.dumps(payload.availability), id]
 
-        await db.pool.execute(sql_update, *params)
+        try:
+            await db.pool.execute(sql_update, *params)
+        except asyncpg.UndefinedColumnError as e:
+            err_str = str(e).lower()
+            if "phone_number" in err_str:
+                # BD sin columna phone_number: actualizar sin ella
+                if current_wh:
+                    await db.pool.execute("""
+                        UPDATE professionals SET
+                            first_name = $1, specialty = $2, license_number = $3,
+                            email = $4, is_active = $5,
+                            availability = $6::jsonb, working_hours = $7::jsonb,
+                            updated_at = NOW()
+                        WHERE id = $8
+                    """, payload.name, payload.specialty, payload.license_number,
+                         payload.email, payload.is_active,
+                         json.dumps(payload.availability), json.dumps(current_wh), id)
+                else:
+                    await db.pool.execute("""
+                        UPDATE professionals SET
+                            first_name = $1, specialty = $2, license_number = $3,
+                            email = $4, is_active = $5,
+                            availability = $6::jsonb,
+                            updated_at = NOW()
+                        WHERE id = $7
+                    """, payload.name, payload.specialty, payload.license_number,
+                         payload.email, payload.is_active,
+                         json.dumps(payload.availability), id)
+            else:
+                raise
              
         return {"id": id, "status": "updated"}
     except HTTPException:
@@ -1898,9 +1957,52 @@ async def get_next_available_slots(
 # ==================== ENDPOINTS PROFESIONALES ====================
 
 @router.get("/professionals", dependencies=[Depends(verify_admin_token)])
-async def list_professionals(tenant_id: int = Depends(get_resolved_tenant_id)):
-    """Lista profesionales de la clínica. Aislado por tenant_id (Regla de Oro)."""
-    err_msg = None
+async def list_professionals(
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+    allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
+):
+    """
+    Lista profesionales. CEO ve todos los de sus sedes; secretary/professional solo los de su clínica.
+    Así un profesional creado en cualquier sede aparece en la página Profesionales para el CEO.
+    """
+    # CEO (varias sedes): listar profesionales de todas las sedes permitidas
+    if len(allowed_ids) > 1:
+        try:
+            rows = await db.pool.fetch(
+                "SELECT id, first_name, last_name, specialty, is_active, tenant_id FROM professionals WHERE tenant_id = ANY($1::int[])",
+                allowed_ids,
+            )
+            return [dict(row) for row in rows]
+        except Exception as e:
+            err_str = str(e).lower()
+            if "last_name" in err_str or "tenant_id" in err_str:
+                try:
+                    rows = await db.pool.fetch(
+                        "SELECT id, first_name, specialty, is_active, tenant_id FROM professionals WHERE tenant_id = ANY($1::int[])",
+                        allowed_ids,
+                    )
+                    return [dict(r) | {"last_name": ""} for r in rows]
+                except Exception:
+                    pass
+            try:
+                rows = await db.pool.fetch(
+                    "SELECT id, first_name, last_name, specialty, is_active FROM professionals WHERE tenant_id = ANY($1::int[])",
+                    allowed_ids,
+                )
+                return [dict(row) for row in rows]
+            except Exception:
+                pass
+        # Fallback sin tenant_id en SELECT por BD antigua
+        try:
+            rows = await db.pool.fetch(
+                "SELECT id, first_name, last_name, specialty, is_active FROM professionals"
+            )
+            return [dict(row) for row in rows]
+        except Exception as e2:
+            logger.warning(f"list_professionals CEO fallback failed: {e2}")
+            return []
+
+    tenant_id = resolved_tenant_id
     # 1) Query completa (tenant_id + last_name)
     try:
         rows = await db.pool.fetch(
@@ -1909,7 +2011,6 @@ async def list_professionals(tenant_id: int = Depends(get_resolved_tenant_id)):
         )
         return [dict(row) for row in rows]
     except Exception as e:
-        err_msg = str(e).lower()
         logger.warning(f"list_professionals primary query failed: {e}")
 
     # 2) Sin last_name (BD antigua)
@@ -1937,7 +2038,6 @@ async def list_professionals(tenant_id: int = Depends(get_resolved_tenant_id)):
         return [dict(r) | {"last_name": ""} for r in rows]
     except Exception as e:
         logger.error(f"list_professionals all fallbacks failed: {e}", exc_info=True)
-        # Devolver lista vacía para que la página cargue; el usuario puede intentar crear profesional
         return []
 
 # ==================== ENDPOINTS GOOGLE CALENDAR ====================
