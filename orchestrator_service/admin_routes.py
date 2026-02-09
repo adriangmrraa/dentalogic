@@ -143,9 +143,13 @@ async def get_resolved_tenant_id(user_data=Depends(verify_admin_token)) -> int:
             return int(tid)
     except (ValueError, TypeError):
         pass
-    # CEO/secretary: no tienen fila en professionals, usar primera clínica
-    first = await db.pool.fetchval("SELECT id FROM tenants ORDER BY id ASC LIMIT 1")
-    return int(first) if first is not None else 1
+    except Exception:
+        pass  # BD sin professionals o sin tenant_id
+    try:
+        first = await db.pool.fetchval("SELECT id FROM tenants ORDER BY id ASC LIMIT 1")
+        return int(first) if first is not None else 1
+    except Exception:
+        return 1  # Fallback para no devolver 500 si tenants no existe
 
 
 async def get_allowed_tenant_ids(user_data=Depends(verify_admin_token)) -> List[int]:
@@ -1827,26 +1831,44 @@ async def get_next_available_slots(
 @router.get("/professionals", dependencies=[Depends(verify_admin_token)])
 async def list_professionals(tenant_id: int = Depends(get_resolved_tenant_id)):
     """Lista profesionales de la clínica. Aislado por tenant_id (Regla de Oro)."""
+    err_msg = None
+    # 1) Query completa (tenant_id + last_name)
     try:
-        # Soporta BD con o sin last_name (parches antiguos)
         rows = await db.pool.fetch(
             "SELECT id, first_name, last_name, specialty, is_active FROM professionals WHERE tenant_id = $1",
             tenant_id,
         )
         return [dict(row) for row in rows]
     except Exception as e:
-        if "last_name" in str(e).lower() or "column" in str(e).lower():
-            try:
-                rows = await db.pool.fetch(
-                    "SELECT id, first_name, specialty, is_active FROM professionals WHERE tenant_id = $1",
-                    tenant_id,
-                )
-                return [dict(r) | {"last_name": ""} for r in rows]
-            except Exception as e2:
-                logger.error(f"list_professionals fallback failed: {e2}")
-                raise HTTPException(status_code=500, detail=f"Error listando profesionales: {e2}")
-        logger.error(f"list_professionals: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error listando profesionales: {e}")
+        err_msg = str(e).lower()
+        logger.warning(f"list_professionals primary query failed: {e}")
+
+    # 2) Sin last_name (BD antigua)
+    try:
+        rows = await db.pool.fetch(
+            "SELECT id, first_name, specialty, is_active FROM professionals WHERE tenant_id = $1",
+            tenant_id,
+        )
+        return [dict(r) | {"last_name": ""} for r in rows]
+    except Exception as e:
+        logger.warning(f"list_professionals fallback (no last_name) failed: {e}")
+
+    # 3) Sin tenant_id (BD muy antigua sin parche)
+    try:
+        rows = await db.pool.fetch(
+            "SELECT id, first_name, last_name, specialty, is_active FROM professionals"
+        )
+        return [dict(row) for row in rows]
+    except Exception as e:
+        logger.warning(f"list_professionals fallback (no tenant) failed: {e}")
+    try:
+        rows = await db.pool.fetch(
+            "SELECT id, first_name, specialty, is_active FROM professionals"
+        )
+        return [dict(r) | {"last_name": ""} for r in rows]
+    except Exception as e:
+        logger.error(f"list_professionals all fallbacks failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error listando profesionales. Revisá que la tabla professionals exista y tenga columnas id, first_name, specialty, is_active. Detalle: {e}")
 
 # ==================== ENDPOINTS GOOGLE CALENDAR ====================
 

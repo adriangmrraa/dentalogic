@@ -109,7 +109,7 @@ export default function ProfessionalsView() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (editingProfessional) {
+      if (editingProfessional && editingProfessional.id) {
         await api.put(`/admin/professionals/${editingProfessional.id}`, formData);
       } else {
         await api.post('/admin/professionals', formData);
@@ -149,7 +149,16 @@ export default function ProfessionalsView() {
   };
 
   const openCreateModal = () => {
-    setEditingProfessional(null);
+    setEditingProfessional({
+      id: 0,
+      name: '',
+      email: '',
+      phone: '',
+      specialty: '',
+      license_number: '',
+      is_active: true,
+      working_hours: createDefaultWorkingHours(),
+    });
     setFormData({
       name: '',
       email: '',
