@@ -133,3 +133,32 @@
 - `orchestrator_service/main.py`: `build_system_prompt`, `detect_message_language`, `chat_endpoint`.
 - `frontend_react/src/views/ConfigView.tsx`: selector de idioma de la plataforma.
 - `tenants.config` (JSONB): `calendar_provider`, `ui_language`.
+
+---
+
+## 10. i18n completado: selector impacta toda la plataforma (2026-02-08)
+
+Tras el fix de idiomas de febrero 2026, el selector de Configuración aplica a **toda** la interfaz. No queda contenido visible sin traducir en las vistas principales ni en los componentes compartidos.
+
+### 10.1 Alcance
+
+- **LanguageProvider** envuelve toda la app en `App.tsx`; el idioma se persiste en `localStorage` y, con sesión, se carga/actualiza desde GET/PATCH `/admin/settings/clinic` (`ui_language`).
+- **Vistas que usan `useTranslation()` y `t('...')`:** LoginView, DashboardView, AgendaView, PatientsView, PatientDetail, ChatsView, ProfessionalAnalyticsView, UserApprovalView, ProfileView, TreatmentsView, ClinicsView, ConfigView, Layout, Sidebar, ProtectedRoute, AppointmentForm, MobileAgenda, AnalyticsFilters.
+- **Archivos de traducción:** `frontend_react/src/locales/es.json`, `en.json`, `fr.json` con namespaces: `nav`, `common`, `config`, `login`, `dashboard`, `analytics`, `agenda`, `patients`, `chats`, `approvals`, `patient_detail`, `professionals`, etc.
+
+### 10.2 Detalle por área (fix aplicado)
+
+| Área | Claves / textos traducidos |
+|------|----------------------------|
+| **Login** | Teléfono, Procesando, Solicitar Registro, Ingresar, especialidades (approvals.*). |
+| **ProfessionalAnalyticsView** | Títulos, KPIs (tasa retención, realización, ingresos), tabla, insights, estados vacíos (no_tags, no_data). |
+| **PatientDetail** | Botones Cancelar y Guardar Registro (common.cancel, patient_detail.save_record). |
+| **ChatsView** | Silenciado/Manual, Sin mensajes, Sin nombre, Silenciado 24h override, badge de estado. |
+| **PatientsView** | Eliminar (common.delete). |
+| **ProfessionalsView** | General (fallback especialidad), Editar Perfil, Ver Horarios (tooltips/títulos). |
+| **AgendaView** | Leyenda de origen: IA, Manual, GCal (`agenda.source_ai`, `source_manual`, `source_gcalendar`); tooltip "Origen" con `getSourceLabel(source, t)`. |
+| **AnalyticsFilters** | Hint "Ctrl+Click para selección múltiple" (`chats.ctrl_click_multiple`). |
+
+### 10.3 Criterio de verificación
+
+- Al cambiar el idioma en Configuración, todas las pantallas listadas (y menús, botones, mensajes de error, placeholders) se muestran en el idioma elegido sin recargar manualmente. Los tres idiomas (es, en, fr) tienen las claves necesarias en los tres JSON de locales.
