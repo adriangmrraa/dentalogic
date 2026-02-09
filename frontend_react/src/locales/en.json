@@ -114,6 +114,30 @@
     "success_rate": "Success rate",
     "responses_generated": "Responses generated"
   },
+  "analytics": {
+    "strategic_title": "Strategic Analytics",
+    "strategic_subtitle": "High-level view of professional performance (CEO View)",
+    "realtime_data": "Real-time data",
+    "estimated_revenue": "Estimated revenue",
+    "total_period": "Total for period",
+    "total_appointments": "Total appointments",
+    "unique_patients": "{{count}} unique patients",
+    "completion_rate": "Completion rate",
+    "avg_overall": "Overall average",
+    "active_professionals": "Active professionals",
+    "comparative_performance": "Comparative performance",
+    "retention_rate": "Retention rate",
+    "insights": "Insights",
+    "no_tags": "No tags",
+    "no_data": "No data to display",
+    "operational_detail": "Operational detail",
+    "professional": "Professional",
+    "appointments": "Appointments",
+    "completion": "Completion",
+    "retention": "Retention",
+    "revenue_est": "Est. revenue",
+    "tags": "Tags"
+  },
   "agenda": {
     "title": "Agenda",
     "subtitle": "Appointments and scheduling",
@@ -144,7 +168,11 @@
     "schedule_appointment": "Schedule appointment",
     "no_appointments_today": "No appointments for this day",
     "medical_history_coming": "Medical history available soon",
-    "billing_coming": "Billing module available soon"
+    "billing_coming": "Billing module available soon",
+    "source_ai": "AI",
+    "source_manual": "Manual",
+    "source_gcalendar": "GCalendar",
+    "origin": "Origin"
   },
   "patients": {
     "title": "Patients",
@@ -206,6 +234,7 @@
     "select_conversation": "Select a conversation",
     "to_start_chatting": "to start chatting",
     "professional_label": "Professional",
+    "ctrl_click_multiple": "Ctrl+Click for multiple selection",
     "error_connection_title": "Connection error",
     "error_connection_message": "Could not load conversations. Check your connection to the server.",
     "view_clinical_chart": "View clinical chart",
@@ -214,6 +243,10 @@
     "window_24h_closed": "24h window closed: You cannot send manual messages until the patient writes again.",
     "auto_handoff": "Automatic handoff",
     "patient_profile_title": "Patient profile",
+    "silenced": "Silenced",
+    "no_messages": "No messages",
+    "no_name": "No name",
+    "silenced_24h": "Silenced (24h override)",
     "handoff_banner": "Automatic handoff: The bot handed off this chat at {{time}}",
     "remove_silence": "Remove silence",
     "manual_mode_active": "Manual mode active. The assistant will not respond."
@@ -429,7 +462,8 @@
     "placeholder_temp": "36.5",
     "add_evolution": "Add evolution",
     "loading": "Loading patient data...",
-    "not_found": "Patient not found"
+    "not_found": "Patient not found",
+    "save_record": "Save record"
   },
   "professionals": {
     "title": "Professionals",
@@ -469,7 +503,10 @@
     "add_time_block": "Add time block",
     "close": "Close",
     "save_changes": "Save changes",
-    "sign_medical_alta": "Sign medical onboarding"
+    "sign_medical_alta": "Sign medical onboarding",
+    "general_fallback": "General",
+    "view_schedules": "View schedules",
+    "edit_profile": "Edit profile"
   },
   "layout": {
     "app_title": "Dental System",

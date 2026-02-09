@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import { useTranslation } from '../../context/LanguageContext';
 
 interface Professional {
     id: number;
@@ -11,6 +12,7 @@ interface AnalyticsFiltersProps {
 }
 
 const AnalyticsFilters: React.FC<AnalyticsFiltersProps> = ({ onFilterChange }) => {
+    const { t } = useTranslation();
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [selectedProfs, setSelectedProfs] = useState<number[]>([]);
@@ -78,7 +80,7 @@ const AnalyticsFilters: React.FC<AnalyticsFiltersProps> = ({ onFilterChange }) =
                         <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                 </select>
-                <p className="text-[10px] text-gray-400 mt-1">Ctrl+Click para selección múltiple</p>
+                <p className="text-[10px] text-gray-400 mt-1">{t('chats.ctrl_click_multiple')}</p>
             </div>
         </div>
     );

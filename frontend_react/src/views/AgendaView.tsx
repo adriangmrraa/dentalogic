@@ -107,8 +107,13 @@ const getSourceColor = (source: string | undefined): string => {
 
 
 
-// Get source label
-const getSourceLabel = (source: string | undefined): string => {
+// Get source label (translated when t is provided)
+const getSourceLabel = (source: string | undefined, t?: (k: string) => string): string => {
+  if (t) {
+    if (!source) return t('agenda.source_ai');
+    const key = 'agenda.source_' + source;
+    return (source === 'ai' || source === 'manual' || source === 'gcalendar') ? t(key) : source.toUpperCase();
+  }
   if (!source) return 'AI';
   return SOURCE_COLORS[source]?.label || source.toUpperCase();
 };
@@ -543,15 +548,15 @@ export default function AgendaView() {
             <div className="flex gap-2 sm:gap-3 bg-white px-3 py-1.5 rounded-full border border-gray-50">
               <div className="flex items-center gap-1">
                 <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
-                <span className="text-[10px] text-gray-600">AI</span>
+                <span className="text-[10px] text-gray-600">{t('agenda.source_ai')}</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                <span className="text-[10px] text-gray-600">Man</span>
+                <span className="text-[10px] text-gray-600">{t('agenda.source_manual')}</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-2.5 h-2.5 rounded-full bg-gray-500"></div>
-                <span className="text-[10px] text-gray-600">GCal</span>
+                <span className="text-[10px] text-gray-600">{t('agenda.source_gcalendar')}</span>
               </div>
             </div>
 
@@ -742,7 +747,7 @@ export default function AgendaView() {
                     } else {
                       const tooltipContent = `
                 ${info.event.title}
-                ${source ? `\n📍 Origen: ${getSourceLabel(source)}` : ''}
+                ${source ? `\n📍 ${t('agenda.origin')}: ${getSourceLabel(source, t)}` : ''}
                 ${patient_phone ? `\n📞 ${patient_phone}` : ''}
                 ${professional_name ? `\n👨‍⚕️ Dr. ${professional_name}` : ''}
                 ${notes ? `\n📝 ${notes}` : ''}

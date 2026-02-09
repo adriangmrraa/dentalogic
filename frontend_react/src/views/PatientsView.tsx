@@ -442,7 +442,7 @@ export default function PatientsView() {
                       onClick={() => handleDelete(patient.id)}
                       className="text-xs text-red-500 font-medium px-2 py-1 hover:bg-red-50 rounded"
                     >
-                      Eliminar
+                      {t('common.delete')}
                     </button>
                   </div>
                 </div>

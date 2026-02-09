@@ -114,6 +114,30 @@
     "success_rate": "Tasa de Éxito",
     "responses_generated": "Respuestas generadas"
   },
+  "analytics": {
+    "strategic_title": "Analytics Estratégico",
+    "strategic_subtitle": "Visión de alto nivel del rendimiento profesional (CEO View)",
+    "realtime_data": "Datos reales en tiempo real",
+    "estimated_revenue": "Ingresos Estimados",
+    "total_period": "Total del periodo",
+    "total_appointments": "Turnos Totales",
+    "unique_patients": "{{count}} pacientes únicos",
+    "completion_rate": "Tasa Completitud",
+    "avg_overall": "Promedio general",
+    "active_professionals": "Profesionales Activos",
+    "comparative_performance": "Rendimiento Comparativo",
+    "retention_rate": "Tasa Retención",
+    "insights": "Insights",
+    "no_tags": "Sin etiquetas",
+    "no_data": "No hay datos para mostrar",
+    "operational_detail": "Detalle Operativo",
+    "professional": "Profesional",
+    "appointments": "Turnos",
+    "completion": "Completitud",
+    "retention": "Retención",
+    "revenue_est": "Ingresos Est.",
+    "tags": "Etiquetas"
+  },
   "agenda": {
     "title": "Agenda",
     "subtitle": "Gestión de turnos y citas",
@@ -144,7 +168,11 @@
     "schedule_appointment": "Agendar Turno",
     "no_appointments_today": "No hay turnos para este día",
     "medical_history_coming": "Historial Médico disponible próximamente",
-    "billing_coming": "Módulo de Facturación disponible próximamente"
+    "billing_coming": "Módulo de Facturación disponible próximamente",
+    "source_ai": "IA",
+    "source_manual": "Manual",
+    "source_gcalendar": "GCal",
+    "origin": "Origen"
   },
   "patients": {
     "title": "Pacientes",
@@ -206,6 +234,7 @@
     "select_conversation": "Selecciona una conversación",
     "to_start_chatting": "para comenzar a chatear",
     "professional_label": "Profesional",
+    "ctrl_click_multiple": "Ctrl+Click para selección múltiple",
     "error_connection_title": "Error de Conexión",
     "error_connection_message": "No se pudieron cargar las conversaciones. Verificá la conexión con el servidor.",
     "view_clinical_chart": "Ver ficha clínica",
@@ -214,6 +243,10 @@
     "window_24h_closed": "Ventana de 24hs cerrada: No puedes enviar mensajes manuales hasta que el paciente te escriba de nuevo.",
     "auto_handoff": "Derivación automática",
     "patient_profile_title": "Perfil del Paciente",
+    "silenced": "Silenciado",
+    "no_messages": "Sin mensajes",
+    "no_name": "Sin nombre",
+    "silenced_24h": "Silenciado (24h override)",
     "handoff_banner": "Derivación Automática: El bot derivó este chat a las {{time}}",
     "remove_silence": "Quitar silencio",
     "manual_mode_active": "Modo Manual Activo. El asistente no responderá."
@@ -429,7 +462,8 @@
     "placeholder_temp": "36.5",
     "add_evolution": "Agregar Evolución",
     "loading": "Cargando datos del paciente...",
-    "not_found": "Paciente no encontrado"
+    "not_found": "Paciente no encontrado",
+    "save_record": "Guardar Registro"
   },
   "professionals": {
     "title": "Profesionales",
@@ -469,7 +503,10 @@
     "add_time_block": "Agregar Bloque Horario",
     "close": "Cerrar",
     "save_changes": "Guardar Cambios",
-    "sign_medical_alta": "Firmar Alta Médica"
+    "sign_medical_alta": "Firmar Alta Médica",
+    "general_fallback": "General",
+    "view_schedules": "Ver Horarios",
+    "edit_profile": "Editar Perfil"
   },
   "layout": {
     "app_title": "Sistema Dental",

@@ -363,7 +363,7 @@ export default function ProfessionalsView() {
                       )}
                     </div>
                     <p className="text-[10px] font-black text-primary bg-primary/5 inline-block px-2 py-0.5 rounded mt-1 uppercase tracking-wider">
-                      {professional.specialty || 'General'}
+                      {professional.specialty || t('professionals.general_fallback')}
                     </p>
                     {/* Mobile Attribute List Format */}
                     <div className="grid grid-cols-2 gap-3 mt-3 sm:hidden">
@@ -410,7 +410,7 @@ export default function ProfessionalsView() {
                     <button
                       onClick={() => openEditModal(professional)}
                       className="p-3 text-gray-500 hover:text-primary hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-200 min-h-[44px] min-w-[44px] flex items-center justify-center"
-                      title="Editar Perfil"
+                      title={t('professionals.edit_profile')}
                     >
                       <Edit size={18} />
                     </button>
@@ -442,7 +442,7 @@ export default function ProfessionalsView() {
                     >
                       <div className="flex items-center gap-2">
                         <Calendar size={14} className="text-gray-400" />
-                        <span>Ver Horarios</span>
+                        <span>{t('professionals.view_schedules')}</span>
                       </div>
                       {(expandedDays[professional.id] || []).includes('toggle') ? (
                         <ChevronUp size={14} />

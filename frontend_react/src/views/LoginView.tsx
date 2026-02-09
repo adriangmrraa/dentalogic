@@ -5,16 +5,16 @@ import { useTranslation } from '../context/LanguageContext';
 import api from '../api/axios';
 import { Lock, Mail, Shield, AlertCircle, CheckCircle } from 'lucide-react';
 
-const SPECIALTIES = [
-  'Odontología General',
-  'Ortodoncia',
-  'Endodoncia',
-  'Periodoncia',
-  'Cirugía Oral',
-  'Prótesis Dental',
-  'Odontopediatría',
-  'Implantología',
-  'Estética Dental',
+const SPECIALTIES: { value: string; key: string }[] = [
+  { value: 'Odontología General', key: 'specialty_general' },
+  { value: 'Ortodoncia', key: 'specialty_orthodontics' },
+  { value: 'Endodoncia', key: 'specialty_endodontics' },
+  { value: 'Periodoncia', key: 'specialty_periodontics' },
+  { value: 'Cirugía Oral', key: 'specialty_oral_surgery' },
+  { value: 'Prótesis Dental', key: 'specialty_prosthodontics' },
+  { value: 'Odontopediatría', key: 'specialty_pediatric' },
+  { value: 'Implantología', key: 'specialty_implantology' },
+  { value: 'Estética Dental', key: 'specialty_aesthetic' },
 ];
 
 interface ClinicOption {
@@ -220,7 +220,7 @@ const LoginView: React.FC = () => {
                 <select value={specialty} onChange={(e) => setSpecialty(e.target.value)}>
                   <option value="">{t('login.select_specialty')}</option>
                   {SPECIALTIES.map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                    <option key={s.value} value={s.value}>{t('approvals.' + s.key)}</option>
                   ))}
                 </select>
               </div>
@@ -262,7 +262,7 @@ const LoginView: React.FC = () => {
 
           {isRegistering && role === 'secretary' && (
             <div className="input-group">
-              <label>Teléfono</label>
+              <label>{t('login.phone')}</label>
               <div className="input-wrapper">
                 <input
                   type="text"
@@ -275,7 +275,7 @@ const LoginView: React.FC = () => {
           )}
 
           <button type="submit" className="btn-primary auth-btn" disabled={loading}>
-            {loading ? 'Procesando...' : (isRegistering ? 'Solicitar Registro' : 'Ingresar')}
+            {loading ? t('login.processing') : (isRegistering ? t('login.submit_register') : t('login.submit_login'))}
           </button>
         </form>
 

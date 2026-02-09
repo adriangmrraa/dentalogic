@@ -504,13 +504,13 @@ export default function PatientDetail() {
                   onClick={() => setShowNoteForm(false)}
                   className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-2 text-white bg-primary rounded-lg hover:bg-primary-dark"
                 >
-                  Guardar Registro
+                  {t('patient_detail.save_record')}
                 </button>
               </div>
             </form>

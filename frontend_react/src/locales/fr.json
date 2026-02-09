@@ -114,6 +114,30 @@
     "success_rate": "Taux de succès",
     "responses_generated": "Réponses générées"
   },
+  "analytics": {
+    "strategic_title": "Analytique stratégique",
+    "strategic_subtitle": "Vue d'ensemble des performances (vue CEO)",
+    "realtime_data": "Données en temps réel",
+    "estimated_revenue": "Revenus estimés",
+    "total_period": "Total sur la période",
+    "total_appointments": "Rendez-vous total",
+    "unique_patients": "{{count}} patients uniques",
+    "completion_rate": "Taux de réalisation",
+    "avg_overall": "Moyenne globale",
+    "active_professionals": "Professionnels actifs",
+    "comparative_performance": "Performance comparative",
+    "retention_rate": "Taux de rétention",
+    "insights": "Analyse",
+    "no_tags": "Aucun tag",
+    "no_data": "Aucune donnée à afficher",
+    "operational_detail": "Détail opérationnel",
+    "professional": "Professionnel",
+    "appointments": "Rendez-vous",
+    "completion": "Réalisation",
+    "retention": "Rétention",
+    "revenue_est": "Revenus est.",
+    "tags": "Tags"
+  },
   "agenda": {
     "title": "Agenda",
     "subtitle": "Gestion des rendez-vous et des créneaux",
@@ -144,7 +168,11 @@
     "schedule_appointment": "Prendre rendez-vous",
     "no_appointments_today": "Aucun rendez-vous ce jour",
     "medical_history_coming": "Historique médical disponible prochainement",
-    "billing_coming": "Module facturation disponible prochainement"
+    "billing_coming": "Module facturation disponible prochainement",
+    "source_ai": "IA",
+    "source_manual": "Manuel",
+    "source_gcalendar": "GCal",
+    "origin": "Origine"
   },
   "patients": {
     "title": "Patients",
@@ -206,6 +234,7 @@
     "select_conversation": "Sélectionnez une conversation",
     "to_start_chatting": "pour commencer à discuter",
     "professional_label": "Professionnel",
+    "ctrl_click_multiple": "Ctrl+Clic pour sélection multiple",
     "error_connection_title": "Erreur de connexion",
     "error_connection_message": "Impossible de charger les conversations. Vérifiez la connexion au serveur.",
     "view_clinical_chart": "Voir fiche clinique",
@@ -214,6 +243,10 @@
     "window_24h_closed": "Fenêtre 24h fermée : vous ne pouvez pas envoyer de messages manuels tant que le patient n'a pas réécrit.",
     "auto_handoff": "Dérivation automatique",
     "patient_profile_title": "Profil du patient",
+    "silenced": "Silencieux",
+    "no_messages": "Aucun message",
+    "no_name": "Sans nom",
+    "silenced_24h": "Silencieux (override 24h)",
     "handoff_banner": "Dérivation automatique : le bot a dérivé ce chat à {{time}}",
     "remove_silence": "Retirer le silence",
     "manual_mode_active": "Mode manuel actif. L'assistant ne répondra pas."
@@ -428,11 +461,15 @@
     "placeholder_temp": "36.5",
     "add_evolution": "Ajouter évolution",
     "loading": "Chargement des données patient...",
-    "not_found": "Patient introuvable"
+    "not_found": "Patient introuvable",
+    "save_record": "Enregistrer l'évolution"
   },
   "professionals": {
     "title": "Professionnels",
     "subtitle": "Gestion du personnel médical et des disponibilités",
+    "general_fallback": "Général",
+    "view_schedules": "Voir horaires",
+    "edit_profile": "Modifier le profil",
     "new_professional": "Nouveau professionnel",
     "total_staff": "Total personnel",
     "active_doctors": "Médecins actifs",

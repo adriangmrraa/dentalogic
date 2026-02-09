@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import api from '../api/axios';
+import { useTranslation } from '../context/LanguageContext';
 import { Zap, Crown, Award, TrendingUp, AlertTriangle } from 'lucide-react';
 import KPICard from '../components/analytics/KPICard';
 import AnalyticsFilters from '../components/analytics/AnalyticsFilters';
@@ -21,6 +22,7 @@ interface MetricData {
 }
 
 export default function ProfessionalAnalyticsView() {
+    const { t } = useTranslation();
     const [data, setData] = useState<MetricData[]>([]);
     const [filters, setFilters] = useState({ startDate: '', endDate: '', professionalIds: [] as number[] });
 
@@ -74,11 +76,11 @@ export default function ProfessionalAnalyticsView() {
         <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800">Analytics Estratégico</h1>
-                    <p className="text-gray-500">Visión de alto nivel del rendimiento profesional (CEO View)</p>
+                    <h1 className="text-2xl font-bold text-gray-800">{t('analytics.strategic_title')}</h1>
+                    <p className="text-gray-500">{t('analytics.strategic_subtitle')}</p>
                 </div>
                 <div className="text-sm text-gray-400 italic">
-                    Datos reales en tiempo real
+                    {t('analytics.realtime_data')}
                 </div>
             </div>
 
@@ -87,28 +89,28 @@ export default function ProfessionalAnalyticsView() {
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <KPICard
-                    title="Ingresos Estimados"
+                    title={t('analytics.estimated_revenue')}
                     value={`$${totalRevenue.toLocaleString()}`}
                     icon="money"
                     color="green"
-                    subtext="Total del periodo"
+                    subtext={t('analytics.total_period')}
                 />
                 <KPICard
-                    title="Turnos Totales"
+                    title={t('analytics.total_appointments')}
                     value={totalAppointments}
                     icon="calendar"
                     color="blue"
-                    subtext={`${totalPatients} pacientes únicos`}
+                    subtext={t('analytics.unique_patients').replace('{{count}}', String(totalPatients))}
                 />
                 <KPICard
-                    title="Tasa Completitud"
+                    title={t('analytics.completion_rate')}
                     value={`${avgCompletion.toFixed(1)}%`}
                     icon="activity"
                     color="purple"
-                    subtext="Promedio general"
+                    subtext={t('analytics.avg_overall')}
                 />
                 <KPICard
-                    title="Profesionales Activos"
+                    title={t('analytics.active_professionals')}
                     value={data.length}
                     icon="users"
                     color="orange"
@@ -120,7 +122,7 @@ export default function ProfessionalAnalyticsView() {
 
                 {/* Chart Section */}
                 <div className="lg:col-span-2 card">
-                    <h3 className="text-lg font-bold text-gray-800 mb-4">Rendimiento Comparativo</h3>
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">{t('analytics.comparative_performance')}</h3>
                     <div className="h-80">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={data} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -130,8 +132,8 @@ export default function ProfessionalAnalyticsView() {
                                 <Tooltip
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
                                 />
-                                <Bar dataKey="completionRate" name="Tasa Completitud" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
-                                <Bar dataKey="retentionRate" name="Tasa Retención" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
+                                <Bar dataKey="completionRate" name={t('analytics.completion_rate')} fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
+                                <Bar dataKey="retentionRate" name={t('analytics.retention_rate')} fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -140,7 +142,7 @@ export default function ProfessionalAnalyticsView() {
                 {/* Top Performers / Strategic Insights */}
                 <div className="card">
                     <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <TrendingUp className="text-blue-500" /> Insights
+                        <TrendingUp className="text-blue-500" /> {t('analytics.insights')}
                     </h3>
                     <div className="space-y-4">
                         {data.slice(0, 5).map((prof) => ( // Show top 5
@@ -152,12 +154,12 @@ export default function ProfessionalAnalyticsView() {
                                     <h4 className="font-medium text-gray-900 text-sm">{prof.name}</h4>
                                     <p className="text-xs text-gray-500 mb-2">{prof.specialty}</p>
                                     <div className="flex flex-wrap gap-1">
-                                        {prof.tags.length > 0 ? prof.tags.map(tag => getTagBadge(tag)) : <span className="text-xs text-gray-400">Sin etiquetas</span>}
+                                        {prof.tags.length > 0 ? prof.tags.map(tag => getTagBadge(tag)) : <span className="text-xs text-gray-400">{t('analytics.no_tags')}</span>}
                                     </div>
                                 </div>
                             </div>
                         ))}
-                        {data.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No hay datos para mostrar</p>}
+                        {data.length === 0 && <p className="text-sm text-gray-400 text-center py-4">{t('analytics.no_data')}</p>}
                     </div>
                 </div>
             </div>
@@ -165,18 +167,18 @@ export default function ProfessionalAnalyticsView() {
             {/* Detailed Table */}
             <div className="card overflow-hidden p-0">
                 <div className="p-6 border-b border-gray-100">
-                    <h3 className="text-lg font-bold text-gray-800">Detalle Operativo</h3>
+                    <h3 className="text-lg font-bold text-gray-800">{t('analytics.operational_detail')}</h3>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Profesional</th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Turnos</th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Completitud</th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Retención</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ingresos Est.</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Etiquetas</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('analytics.professional')}</th>
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">{t('analytics.appointments')}</th>
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">{t('analytics.completion')}</th>
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">{t('analytics.retention')}</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{t('analytics.revenue_est')}</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('analytics.tags')}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">

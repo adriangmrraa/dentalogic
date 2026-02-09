@@ -512,7 +512,7 @@ export default function ChatsView() {
             ) : (
               <User size={12} className="text-orange-500" />
             )}
-            {session.status === 'silenced' ? 'Silenciado' : 'Manual'}
+            {session.status === 'silenced' ? t('chats.silenced') : t('chats.manual')}
           </span>
         ),
         avatarBg: session.urgency_level === 'HIGH' || session.urgency_level === 'CRITICAL'
@@ -654,7 +654,7 @@ export default function ChatsView() {
 
                       <div className="flex justify-between items-center">
                         <p className={`text-sm truncate pr-4 ${session.unread_count > 0 ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
-                          {session.last_message || 'Sin mensajes'}
+                          {session.last_message || t('chats.no_messages')}
                         </p>
                         {session.unread_count > 0 && (
                           <span className="bg-medical-600 text-white text-[10px] font-bold min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center">
@@ -706,7 +706,7 @@ export default function ChatsView() {
                   </div>
                   <div className="min-w-0 flex-1 cursor-pointer" onClick={() => window.innerWidth < 1280 && setShowMobileContext(!showMobileContext)}>
                     <h3 className="font-bold text-gray-900 truncate leading-tight">
-                      {selectedSession.patient_name || 'Sin nombre'}
+                      {selectedSession.patient_name || t('chats.no_name')}
                     </h3>
                     <p className="text-xs text-gray-500 truncate">{selectedSession.phone_number}</p>
                   </div>
@@ -900,7 +900,7 @@ export default function ChatsView() {
                   {selectedSession.status === 'human_handling'
                     ? 'Atendido por persona'
                     : selectedSession.status === 'silenced'
-                      ? 'Silenciado (24h override)'
+                      ? t('chats.silenced_24h')
                       : t('chats.ia_active')}
                 </p>
                 {selectedSession.human_override_until && (
