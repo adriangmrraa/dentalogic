@@ -1190,13 +1190,28 @@ async def create_professional(
     except (TypeError, ValueError):
         tenant_id = resolved_tenant_id
 
-    try:
-        # 1. Crear usuario asociado (first_name puede no existir en BD antigua)
-        user_id = uuid.uuid4()
-        email = (professional.email or "").strip() or f"prof_{uuid.uuid4().hex[:8]}@dentalogic.local"
-        name_part = (professional.name or "").strip()
-        first_name = name_part.split(maxsplit=1)[0] if name_part else "Profesional"
+    email = (professional.email or "").strip() or f"prof_{uuid.uuid4().hex[:8]}@dentalogic.local"
+    name_part = (professional.name or "").strip()
+    first_name = name_part.split(maxsplit=1)[0] if name_part else "Profesional"
+    last_name = name_part.split(maxsplit=1)[1] if name_part and len(name_part.split(maxsplit=1)) > 1 else " "
 
+    # 1. Usuario: crear nuevo o reutilizar si el email ya existe (vincular a esta sede)
+    existing_user = await db.pool.fetchrow("SELECT id FROM users WHERE email = $1", email)
+    if existing_user:
+        user_id = existing_user["id"]
+        # ¿Ya tiene fila en professionals para esta sede? Entonces es duplicado real.
+        already_linked = await db.pool.fetchval(
+            "SELECT 1 FROM professionals WHERE user_id = $1 AND tenant_id = $2",
+            user_id, tenant_id,
+        )
+        if already_linked:
+            raise HTTPException(
+                status_code=409,
+                detail="Ese profesional ya está vinculado a esta sede. Buscalo en la lista de Profesionales.",
+            )
+        # Si no está vinculado a esta sede: creamos la fila en professionals (aparece como activo)
+    else:
+        user_id = uuid.uuid4()
         try:
             await db.pool.execute("""
                 INSERT INTO users (id, email, password_hash, role, first_name, status, created_at)
@@ -1208,7 +1223,7 @@ async def create_professional(
                 VALUES ($1, $2, $3, 'professional', 'active', NOW())
             """, user_id, email, "hash_placeholder")
 
-        last_name = name_part.split(maxsplit=1)[1] if name_part and len(name_part.split(maxsplit=1)) > 1 else " "
+    try:
 
         # 2. Crear profesional (tenant_id = clínica elegida)
         wh = professional.working_hours or generate_default_working_hours()
