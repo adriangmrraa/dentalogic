@@ -1,0 +1,112 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "agenda": "Agenda",
+    "patients": "Pacientes",
+    "chats": "Conversaciones",
+    "staff": "Personal",
+    "clinics": "Sedes (Clínicas)",
+    "strategy": "Estrategia",
+    "treatments": "Tratamientos",
+    "profile": "Mi Perfil",
+    "settings": "Configuración",
+    "logout": "Cerrar Sesión",
+    "close_menu": "Cerrar menú",
+    "expand": "Expandir",
+    "collapse": "Contraer",
+    "app_name": "Dental Clinic"
+  },
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "yes": "Sí",
+    "no": "No",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "add": "Agregar",
+    "search": "Buscar",
+    "filter": "Filtrar"
+  },
+  "config": {
+    "title": "Configuración",
+    "subtitle": "Opciones generales de la plataforma (sede actual)",
+    "language_label": "Idioma de la plataforma",
+    "language_help": "El idioma elegido se aplicará a toda la interfaz (menús, títulos, botones) cuando esté activa la traducción completa.",
+    "current_clinic": "Sede actual",
+    "saved": "Idioma guardado. La plataforma usará este idioma.",
+    "save_error": "Error al guardar el idioma.",
+    "load_error": "No se pudo cargar la configuración.",
+    "language_es": "Español",
+    "language_en": "English",
+    "language_fr": "Français"
+  },
+  "login": {
+    "title": "Dentalogic",
+    "welcome": "Bienvenido de nuevo",
+    "request_access": "Solicitud de acceso a la plataforma",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "login_button": "Iniciar sesión",
+    "register_link": "Solicitar acceso",
+    "back_login": "Volver al inicio de sesión",
+    "request_button": "Enviar solicitud",
+    "first_name": "Nombre",
+    "last_name": "Apellido",
+    "role": "Rol",
+    "clinic": "Sede / Clínica",
+    "clinic_required": "Elegí una sede/clínica para registrarte.",
+    "specialty": "Especialidad",
+    "phone": "Teléfono",
+    "registration_id": "Matrícula",
+    "login_error": "Error al iniciar sesión. Verifique sus credenciales.",
+    "register_error": "Error al registrarse. Intente nuevamente.",
+    "register_success": "Registro solicitado con éxito. Un CEO debe aprobar tu cuenta antes de que puedas ingresar.",
+    "choose_clinic": "Elegir sede",
+    "select_role": "Seleccionar rol",
+    "select_specialty": "Seleccionar (opcional)"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "urgencies": "Urgencias",
+    "conversations": "Conversaciones IA",
+    "appointments": "Turnos",
+    "revenue": "Ingresos"
+  },
+  "agenda": {
+    "title": "Agenda",
+    "new_appointment": "Nuevo turno",
+    "today": "Hoy"
+  },
+  "patients": {
+    "title": "Pacientes",
+    "new_patient": "Nuevo paciente"
+  },
+  "chats": {
+    "title": "Conversaciones",
+    "select_clinic": "Seleccionar clínica",
+    "no_sessions": "Sin conversaciones"
+  },
+  "approvals": {
+    "title": "Personal",
+    "requests": "Solicitudes",
+    "staff": "Personal Activo",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "suspend": "Suspender Acceso"
+  },
+  "clinics": {
+    "title": "Sedes",
+    "new_clinic": "Nueva sede",
+    "clinic_name": "Nombre de la clínica"
+  },
+  "treatments": {
+    "title": "Tratamientos"
+  },
+  "profile": {
+    "title": "Mi Perfil"
+  }
+}

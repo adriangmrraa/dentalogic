@@ -11,13 +11,16 @@ import LoginView from './views/LoginView';
 import UserApprovalView from './views/UserApprovalView';
 import ProfileView from './views/ProfileView';
 import ClinicsView from './views/ClinicsView';
+import ConfigView from './views/ConfigView';
 import { AuthProvider } from './context/AuthContext';
+import { LanguageProvider } from './context/LanguageContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
     <Router>
       <AuthProvider>
+        <LanguageProvider>
         <Routes>
           <Route path="/login" element={<LoginView />} />
 
@@ -48,13 +51,18 @@ function App() {
                       <ClinicsView />
                     </ProtectedRoute>
                   } />
-                  <Route path="configuracion" element={<div className="p-6"><h1 className="text-2xl font-bold">Configuración</h1><p className="text-gray-500">Próximamente...</p></div>} />
+                  <Route path="configuracion" element={
+                    <ProtectedRoute allowedRoles={['ceo']}>
+                      <ConfigView />
+                    </ProtectedRoute>
+                  } />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Layout>
             </ProtectedRoute>
           } />
         </Routes>
+        </LanguageProvider>
       </AuthProvider>
     </Router>
   );

@@ -1,0 +1,112 @@
+{
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "agenda": "Agenda",
+    "patients": "Patients",
+    "chats": "Conversations",
+    "staff": "Personnel",
+    "clinics": "Sites (Cliniques)",
+    "strategy": "Stratégie",
+    "treatments": "Traitements",
+    "profile": "Mon profil",
+    "settings": "Paramètres",
+    "logout": "Déconnexion",
+    "close_menu": "Fermer le menu",
+    "expand": "Développer",
+    "collapse": "Réduire",
+    "app_name": "Clinique dentaire"
+  },
+  "common": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "success": "Succès",
+    "yes": "Oui",
+    "no": "Non",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "add": "Ajouter",
+    "search": "Rechercher",
+    "filter": "Filtrer"
+  },
+  "config": {
+    "title": "Paramètres",
+    "subtitle": "Options générales de la plateforme (site actuel)",
+    "language_label": "Langue de la plateforme",
+    "language_help": "La langue choisie s'appliquera à toute l'interface (menus, titres, boutons).",
+    "current_clinic": "Site actuel",
+    "saved": "Langue enregistrée. La plateforme utilisera cette langue.",
+    "save_error": "Erreur lors de l'enregistrement de la langue.",
+    "load_error": "Impossible de charger les paramètres.",
+    "language_es": "Español",
+    "language_en": "English",
+    "language_fr": "Français"
+  },
+  "login": {
+    "title": "Dentalogic",
+    "welcome": "Bon retour",
+    "request_access": "Demande d'accès à la plateforme",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "login_button": "Se connecter",
+    "register_link": "Demander l'accès",
+    "back_login": "Retour à la connexion",
+    "request_button": "Envoyer la demande",
+    "first_name": "Prénom",
+    "last_name": "Nom",
+    "role": "Rôle",
+    "clinic": "Site / Clinique",
+    "clinic_required": "Veuillez choisir une clinique pour vous inscrire.",
+    "specialty": "Spécialité",
+    "phone": "Téléphone",
+    "registration_id": "N° d'ordre / Matricule",
+    "login_error": "Échec de la connexion. Vérifiez vos identifiants.",
+    "register_error": "Échec de l'inscription. Veuillez réessayer.",
+    "register_success": "Demande envoyée. Un responsable doit approuver votre compte avant que vous puissiez vous connecter.",
+    "choose_clinic": "Choisir une clinique",
+    "select_role": "Choisir le rôle",
+    "select_specialty": "Choisir (optionnel)"
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "urgencies": "Urgences",
+    "conversations": "Conversations IA",
+    "appointments": "Rendez-vous",
+    "revenue": "Revenus"
+  },
+  "agenda": {
+    "title": "Agenda",
+    "new_appointment": "Nouveau rendez-vous",
+    "today": "Aujourd'hui"
+  },
+  "patients": {
+    "title": "Patients",
+    "new_patient": "Nouveau patient"
+  },
+  "chats": {
+    "title": "Conversations",
+    "select_clinic": "Choisir la clinique",
+    "no_sessions": "Aucune conversation"
+  },
+  "approvals": {
+    "title": "Personnel",
+    "requests": "Demandes",
+    "staff": "Personnel actif",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "suspend": "Suspendre l'accès"
+  },
+  "clinics": {
+    "title": "Cliniques",
+    "new_clinic": "Nouvelle clinique",
+    "clinic_name": "Nom de la clinique"
+  },
+  "treatments": {
+    "title": "Traitements"
+  },
+  "profile": {
+    "title": "Mon profil"
+  }
+}

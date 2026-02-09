@@ -1017,16 +1017,71 @@ async def get_deployment_config(request: Request):
     }
 
 @router.get("/settings/clinic", dependencies=[Depends(verify_admin_token)])
-async def get_clinic_settings():
-    """Retorna la configuración operativa de la clínica (horarios, nombre, etc)."""
+async def get_clinic_settings(resolved_tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Retorna la configuración operativa de la clínica (nombre, horarios, ui_language) desde el tenant."""
+    try:
+        row = await db.pool.fetchrow(
+            "SELECT clinic_name, config FROM tenants WHERE id = $1",
+            resolved_tenant_id
+        )
+        if not row:
+            return _fallback_clinic_settings()
+        config = row["config"] or {}
+        ui_lang = (config.get("ui_language") or "en") if isinstance(config, dict) else "en"
+        return {
+            "name": row["clinic_name"] or os.getenv("CLINIC_NAME", "Clínica Dental"),
+            "location": os.getenv("CLINIC_LOCATION", ""),
+            "hours_start": os.getenv("CLINIC_HOURS_START", "08:00"),
+            "hours_end": os.getenv("CLINIC_HOURS_END", "19:00"),
+            "working_days": [0, 1, 2, 3, 4, 5],
+            "time_zone": "America/Argentina/Buenos_Aires",
+            "ui_language": ui_lang,
+        }
+    except Exception as e:
+        logger.warning(f"get_clinic_settings failed: {e}")
+        return _fallback_clinic_settings()
+
+
+def _fallback_clinic_settings():
+    """Config por defecto cuando no hay tenant o falla la consulta."""
     return {
-        "name": os.getenv("CLINIC_NAME", "Consultorio Dental"),
-        "location": os.getenv("CLINIC_LOCATION", "Mercedes, Buenos Aires"),
+        "name": os.getenv("CLINIC_NAME", "Clínica Dental"),
+        "location": os.getenv("CLINIC_LOCATION", ""),
         "hours_start": os.getenv("CLINIC_HOURS_START", "08:00"),
         "hours_end": os.getenv("CLINIC_HOURS_END", "19:00"),
-        "working_days": [0, 1, 2, 3, 4, 5], # 0=Lunes, 5=Sábado
-        "time_zone": "America/Argentina/Buenos_Aires"
+        "working_days": [0, 1, 2, 3, 4, 5],
+        "time_zone": "America/Argentina/Buenos_Aires",
+        "ui_language": "en",
     }
+
+
+class ClinicSettingsUpdate(BaseModel):
+    ui_language: Optional[str] = None  # "es" | "en" | "fr"
+
+
+@router.patch("/settings/clinic", dependencies=[Depends(verify_admin_token)])
+async def update_clinic_settings(
+    payload: ClinicSettingsUpdate,
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """Actualiza configuración de la clínica (ej. idioma de la UI). Solo campos enviados."""
+    if payload.ui_language is not None:
+        if payload.ui_language not in ("es", "en", "fr"):
+            raise HTTPException(status_code=400, detail="ui_language debe ser 'es', 'en' o 'fr'.")
+        try:
+            await db.pool.execute(
+                """
+                UPDATE tenants
+                SET config = jsonb_set(COALESCE(config, '{}'), '{ui_language}', to_jsonb($1::text))
+                WHERE id = $2
+                """,
+                payload.ui_language,
+                resolved_tenant_id,
+            )
+        except Exception as e:
+            logger.error(f"update_clinic_settings failed: {e}")
+            raise HTTPException(status_code=500, detail="Error al guardar la configuración.")
+    return {"status": "ok", "ui_language": getattr(payload, "ui_language", None)}
 
 # ==================== ENDPOINTS BÚSQUEDA SEMÁNTICA ====================
 

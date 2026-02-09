@@ -1,0 +1,112 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "agenda": "Agenda",
+    "patients": "Patients",
+    "chats": "Conversations",
+    "staff": "Staff",
+    "clinics": "Clinics (Locations)",
+    "strategy": "Strategy",
+    "treatments": "Treatments",
+    "profile": "My Profile",
+    "settings": "Settings",
+    "logout": "Log out",
+    "close_menu": "Close menu",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "app_name": "Dental Clinic"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "yes": "Yes",
+    "no": "No",
+    "edit": "Edit",
+    "delete": "Delete",
+    "add": "Add",
+    "search": "Search",
+    "filter": "Filter"
+  },
+  "config": {
+    "title": "Settings",
+    "subtitle": "Platform options (current location)",
+    "language_label": "Platform language",
+    "language_help": "The selected language will apply to the entire interface (menus, titles, buttons).",
+    "current_clinic": "Current location",
+    "saved": "Language saved. The platform will use this language.",
+    "save_error": "Error saving language.",
+    "load_error": "Could not load settings.",
+    "language_es": "Español",
+    "language_en": "English",
+    "language_fr": "Français"
+  },
+  "login": {
+    "title": "Dentalogic",
+    "welcome": "Welcome back",
+    "request_access": "Request platform access",
+    "email": "Email",
+    "password": "Password",
+    "login_button": "Log in",
+    "register_link": "Request access",
+    "back_login": "Back to login",
+    "request_button": "Submit request",
+    "first_name": "First name",
+    "last_name": "Last name",
+    "role": "Role",
+    "clinic": "Clinic / Location",
+    "clinic_required": "Please select a clinic to register.",
+    "specialty": "Specialty",
+    "phone": "Phone",
+    "registration_id": "License / Registration",
+    "login_error": "Login failed. Check your credentials.",
+    "register_error": "Registration failed. Please try again.",
+    "register_success": "Request submitted. A CEO must approve your account before you can log in.",
+    "choose_clinic": "Select clinic",
+    "select_role": "Select role",
+    "select_specialty": "Select (optional)"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "urgencies": "Urgencies",
+    "conversations": "IA Conversations",
+    "appointments": "Appointments",
+    "revenue": "Revenue"
+  },
+  "agenda": {
+    "title": "Agenda",
+    "new_appointment": "New appointment",
+    "today": "Today"
+  },
+  "patients": {
+    "title": "Patients",
+    "new_patient": "New patient"
+  },
+  "chats": {
+    "title": "Conversations",
+    "select_clinic": "Select clinic",
+    "no_sessions": "No conversations"
+  },
+  "approvals": {
+    "title": "Staff",
+    "requests": "Requests",
+    "staff": "Active staff",
+    "approve": "Approve",
+    "reject": "Reject",
+    "suspend": "Suspend access"
+  },
+  "clinics": {
+    "title": "Clinics",
+    "new_clinic": "New clinic",
+    "clinic_name": "Clinic name"
+  },
+  "treatments": {
+    "title": "Treatments"
+  },
+  "profile": {
+    "title": "My Profile"
+  }
+}

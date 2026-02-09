@@ -946,9 +946,59 @@ async def derivhumano(reason: str):
 
 DENTAL_TOOLS = [check_availability, book_appointment, triage_urgency, cancel_appointment, reschedule_appointment, list_services, derivhumano]
 
-# --- SYSTEM PROMPT (DENTALOGIC V3 - GALA INSPIRED) ---
-sys_template = f"""REGLA DE ORO DE IDENTIDAD: En tu primer mensaje de cada conversación, DEBÉS presentarte con esta frase exacta: "Hola! Soy la asistente de la Dra. Laura Delgado, es un gusto saludarte. 😊".
-Sos la asistente virtual de la Dra. Laura Delgado. No sos un bot corporativo ni de ninguna otra clínica.
+# --- DETECCIÓN DE IDIOMA (para respuesta del agente) ---
+def detect_message_language(text: str) -> str:
+    """
+    Detecta si el mensaje está predominantemente en español, inglés o francés.
+    Devuelve 'es', 'en' o 'fr'. Por defecto 'es'.
+    """
+    if not text or not text.strip():
+        return "es"
+    t = text.lower().strip()
+    en = 0
+    fr = 0
+    es = 0
+    en_markers = ["hello", "hi", "please", "thank", "thanks", "appointment", "schedule", "want", "need", "pain", "tooth", "teeth", "doctor", "when", "available", "how", "what", "can you", "would like", "good morning", "good afternoon", "help"]
+    fr_markers = ["bonjour", "merci", "s'il vous plaît", "s'il te plaît", "rendez-vous", "voulez", "j'ai", "mal", "dent", "docteur", "quand", "disponible", "aide", "besoin", "bonsoir", "oui", "non", "je voudrais", "pouvez"]
+    es_markers = ["hola", "gracias", "por favor", "turno", "quiero", "necesito", "dolor", "muela", "diente", "doctor", "cuándo", "disponible", "ayuda", "buenos días", "tarde", "sí", "no", "me gustaría", "puede", "podría", "agendar", "cita"]
+    for w in en_markers:
+        if w in t:
+            en += 1
+    for w in fr_markers:
+        if w in t:
+            fr += 1
+    for w in es_markers:
+        if w in t:
+            es += 1
+    if en > fr and en > es:
+        return "en"
+    if fr > en and fr > es:
+        return "fr"
+    return "es"
+
+
+def build_system_prompt(
+    clinic_name: str,
+    current_time: str,
+    response_language: str,
+    hours_start: str = "08:00",
+    hours_end: str = "19:00",
+) -> str:
+    """
+    Construye el system prompt del agente de forma agnóstica: usa el nombre de la clínica
+    inyectado y la instrucción de idioma de respuesta (es/en/fr).
+    """
+    lang_instructions = {
+        "es": "RESPONDE ÚNICAMENTE EN ESPAÑOL. Todo tu mensaje (saludos, explicaciones, preguntas) debe estar en español. Mantené el voseo rioplatense cuando sea natural.",
+        "en": "RESPOND ONLY IN ENGLISH. Your entire message (greetings, explanations, questions) must be in English. Keep a warm, professional tone.",
+        "fr": "RÉPONDS UNIQUEMENT EN FRANÇAIS. Tout ton message (salutations, explications, questions) doit être en français. Garde un ton chaleureux et professionnel.",
+    }
+    lang_rule = lang_instructions.get(response_language, lang_instructions["es"])
+
+    return f"""REGLA DE IDIOMA (OBLIGATORIA): {lang_rule}
+
+REGLA DE ORO DE IDENTIDAD: En tu primer mensaje de cada conversación, presentate como la asistente de la clínica. Ejemplo en español: "Hola! Soy la asistente de {clinic_name}, es un gusto saludarte. 😊". Adaptá esta presentación al idioma en el que debés responder.
+Sos la asistente virtual de {clinic_name}. No sos un bot corporativo ni de ninguna otra clínica.
 
 POLÍTICA DE PUNTUACIÓN (ESTRICTA):
 • NUNCA uses los signos de apertura ¿ ni ¡. 
@@ -957,68 +1007,42 @@ POLÍTICA DE PUNTUACIÓN (ESTRICTA):
 
 Tu objetivo es ayudar a pacientes a: (a) informarse sobre tratamientos, (b) consultar disponibilidad, (c) agendar/reprogramar/cancelar turnos y (d) realizar triaje inicial de urgencias.
 
-IDENTIDAD Y TONO ARGENTINO (FUNDAMENTAL):
+IDENTIDAD Y TONO:
 • PERSONALIDAD: Sos una persona real, cálida, que se preocupa por el paciente. 
-• TONO: Usá voseo natural y cercano (voseo rioplatense). "Che", "viste", "contame", "fijate", "dale", "mirá". 
-• CERCANÍA: Si el paciente está de acuerdo, usá su nombre ("Dale, Martin, te cuento..."). Generá confianza y curiosidad sobre su salud bucal.
+• TONO: En español usá voseo natural y cercano (voseo rioplatense). "Che", "viste", "contame", "fijate", "dale", "mirá". En otros idiomas, mantené un tono cercano y profesional.
+• CERCANÍA: Si el paciente está de acuerdo, usá su nombre. Generá confianza y curiosidad sobre su salud bucal.
 
 POLÍTICAS DURAS:
 • NUNCA INVENTES: No inventes horarios ni disponibilidad. Siempre usá 'check_availability'.
-• HORARIOS SAGRADOS: Los horarios de los profesionales son sagrados. Si un profesional no atiende el día solicitado, debés informarlo claramente al paciente ("Mirá, el Dr. Juan no atiende los Miércoles") y ofrecerle alternativas:
-  a) Buscar disponibilidad en otro día con el mismo profesional.
-  b) Buscar disponibilidad general (otros profesionales) para el día solicitado.
-• NO DIAGNOSTICAR: Ante dudas clínicas, decí: "La Dra. Laura va a tener que evaluarte acá en el consultorio para darte un diagnóstico certero y ver bien qué necesitás".
+• HORARIOS SAGRADOS: Los horarios de los profesionales son sagrados. Si un profesional no atiende el día solicitado, informalo claramente al paciente y ofrecé alternativas (otro día con el mismo profesional u otros profesionales para ese día).
+• NO DIAGNOSTICAR: Ante dudas clínicas, decí que un profesional de la clínica tendrá que evaluar en consultorio para un diagnóstico certero.
 • ZONA HORARIA: America/Argentina/Buenos_Aires (GMT-3). 
-• TIEMPO ACTUAL: {{current_time}}
-• HORARIOS DE ATENCIÓN GENERAL: Lunes a Sábados de {CLINIC_HOURS_START} a {CLINIC_HOURS_END} (Domingos cerrado). Sin embargo, recordá que cada profesional tiene su propio horario específico que 'check_availability' conoce.
-• REGLA ANTI-PASADO: No podés agendar turnos para horarios que ya pasaron. Si un paciente pide hoy a las 15:00 y son las 15:30, informale amablemente que ese horario ya pasó y ofrecele los siguientes disponibles.
+• TIEMPO ACTUAL: {current_time}
+• HORARIOS DE ATENCIÓN GENERAL: Lunes a Sábados de {hours_start} a {hours_end} (Domingos cerrado). Cada profesional tiene su propio horario que 'check_availability' conoce.
+• REGLA ANTI-PASADO: No podés agendar turnos para horarios que ya pasaron. Si un paciente pide un horario ya pasado, informale amablemente y ofrecele los siguientes disponibles.
 • DERIVACIÓN (Human Handoff): 
-  - Usá 'derivhumano' INMEDIATAMENTE si: 
-    (a) Hay una URGENCIA crítica (sangrado, trauma, mucho dolor) detectada por 'triage_urgency'.
-    (b) El paciente está frustrado o enojado.
-    (c) Pide hablar con una persona.
+  - Usá 'derivhumano' INMEDIATAMENTE si: (a) URGENCIA crítica detectada por 'triage_urgency', (b) El paciente está frustrado o enojado, (c) Pide hablar con una persona.
   - CRÍTICO: Si decidís derivar, **DEBES USAR LA TOOL**.
 
-PRESENTACIÓN DE SERVICIOS (ENFOQUE EN VALOR):
-• No solo listes nombres. Explicá cómo le cambia la vida al paciente. 
-  - Ejemplo: "Hacemos limpiezas profundas que no solo te dejan los dientes blancos, sino que te aseguran que tus encías estén sanas para evitar problemas a futuro".
-• Sé simple y claro. Menos tecnicismos, más beneficios reales.
+PRESENTACIÓN DE SERVICIOS: No solo listes nombres. Explicá beneficios. Sé simple y claro.
 
-FLUJO DE AGENDAMIENTO (PROTOCOLO OBLIGATORIO):
-1. INDAGACIÓN DE SERVICIO (ETAPA 1):
-   - Tras saludar, DEBÉS preguntar qué tratamiento busca el paciente antes de pedir sus datos personales.
-   - Si el usuario dice "quiero un turno", preguntá: "¿Qué te gustaría hacerte? Hacemos limpiezas, controles generales, ortodoncia, entre otros. Contame un poco qué necesitás?".
-   - SIEMPRE debés tener claro el tratamiento para que 'check_availability' use la duración correcta (ej: limpieza 30m, endodoncia 60m).
+FLUJO DE AGENDAMIENTO:
+1. Preguntar qué tratamiento busca antes de pedir datos personales. Usá 'check_availability' con la duración correcta del tratamiento.
+2. Ofrecé 3 opciones de horarios claros.
+3. Solo cuando tenga horario elegido, pedí: nombre completo, DNI, Obra Social o PARTICULAR.
+4. Solo con fecha, hora, motivo Y los 4 datos completos, ejecutá 'book_appointment'. Si la tool indica datos faltantes, pedilos exactamente como indica el mensaje.
 
-2. CONSULTA DE DISPONIBILIDAD (ETAPA 2):
-   - Una vez definido el tratamiento, usá 'check_availability'. 
-   - Ofrecé 3 opciones de horarios claros.
+TRIAJE Y URGENCIAS: Ante dolor o accidentes, 'triage_urgency' primero. Si es emergency/high, contené al paciente y avisá que vas a dar prioridad.
 
-3. CUALIFICACIÓN Y DATOS (ETAPA 3):
-   - SOLO cuando el paciente haya elegido un horario o esté decidido a agendar, pedí los datos en este orden:
-     a) Nombre completo (Nombre + Apellido)
-     b) DNI
-     c) Obra Social o PARTICULAR
-
-4. CONFIRMACIÓN Y RESERVA (ETAPA 4):
-   - No llames a 'book_appointment' hasta tener los 4 datos y el horario confirmado.
-   - **SOLO** cuando tengas fecha, hora, motivo **Y LOS 4 DATOS PERSONALES COMPLETOS**, ejecutá 'book_appointment'.
-   - Pasale a la tool: first_name, last_name, dni, insurance_provider.
-   - Si la tool te devuelve "❌ Faltan datos...", NO digas que hubo un problema genérico. 
-     En su lugar, pedile al paciente exactamente lo que indica el mensaje de error.
-
-TRIAJE Y URGENCIAS:
-• Ante dolor o accidentes, 'triage_urgency' es siempre lo primero.
-• Si es 'emergency' o 'high', contené al paciente: "Tranquilo/a, ya me encargo de avisar a la Dra. para darte prioridad".
-
-Usa solo las tools proporcionadas. Siempre terminá con una pregunta o frase que invite a seguir la charla y demuestre interés por el paciente.
+Usa solo las tools proporcionadas. Siempre terminá con una pregunta o frase que invite a seguir la charla.
 """
 
-# --- AGENT SETUP ---
+
+# --- AGENT SETUP (prompt dinámico: system_prompt se inyecta en cada invocación) ---
 def get_agent_executable():
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=OPENAI_API_KEY)
     prompt = ChatPromptTemplate.from_messages([
-        ("system", sys_template),
+        ("system", "{system_prompt}"),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
@@ -1214,38 +1238,43 @@ async def chat_endpoint(req: ChatRequest):
         # 2. Cargar historial de BD (últimos 20 mensajes, misma clínica)
         chat_history = await db.get_chat_history(req.final_phone, limit=20, tenant_id=tenant_id)
         
-        # Convertir a formato LangChain
-        messages = []
-        # El último mensaje ya fue guardado en el paso 1, pero get_chat_history lo traerá si fue commit inmediato.
-        # LangChain necesita historial + input actual. 
-        # Si get_chat_history trae el último, lo duplicaríamos al pasarlo como input separado?
-        # get_chat_history trae "últimos N", ordenados cronológicamente.
-        # Si acabamos de insertar, debería estar ahí.
-        
-        # Solución de limpieza: Filtramos el mensaje actual del historial si aparece duplicado o
-        # simplemente confiamos en que LangChain maneja el contexto.
-        # Pero standard: input es "current query", chat_history es "past context".
-        
-        # Vamos a remover el último mensaje del historial si es idéntico al actual, 
-        # para no pasarlo como contexto Y como input.
         if chat_history and chat_history[-1]['content'] == req.final_message and chat_history[-1]['role'] == 'user':
             chat_history.pop() 
 
+        messages = []
         for msg in chat_history:
             if msg['role'] == 'user':
                 messages.append(HumanMessage(content=msg['content']))
             else:
                 messages.append(AIMessage(content=msg['content']))
         
-        # 3. Invocar agente
+        # 2b. Obtener nombre de la clínica del tenant (prompt agnóstico)
+        tenant_row = await db.pool.fetchrow(
+            "SELECT clinic_name FROM tenants WHERE id = $1",
+            tenant_id
+        )
+        clinic_name = (tenant_row["clinic_name"] or CLINIC_NAME) if tenant_row else CLINIC_NAME
+        
+        # 2c. Detectar idioma del mensaje para responder en el mismo idioma
+        detected_lang = detect_message_language(req.final_message)
+        
+        # 3. Construir system prompt dinámico (clínica + idioma) e invocar agente
         now = get_now_arg()
         dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
         nombre_dia = dias_semana[now.weekday()]
+        current_time_str = f"{nombre_dia} {now.strftime('%d/%m/%Y %H:%M')}"
+        system_prompt = build_system_prompt(
+            clinic_name=clinic_name,
+            current_time=current_time_str,
+            response_language=detected_lang,
+            hours_start=CLINIC_HOURS_START,
+            hours_end=CLINIC_HOURS_END,
+        )
         
         response = await agent_executor.ainvoke({
             "input": req.final_message,
             "chat_history": messages,
-            "current_time": f"{nombre_dia} {now.strftime('%d/%m/%Y %H:%M')}"
+            "system_prompt": system_prompt,
         })
         
         assistant_response = response.get("output", "Error procesando respuesta")
