@@ -848,6 +848,9 @@ async def get_dashboard_stats(
             "total_revenue": float(total_revenue),
             "growth_data": growth_data
         }
+    except Exception as e:
+        logger.error(f"Error en get_dashboard_stats: {e}")
+        raise HTTPException(status_code=500, detail="Error al cargar estadísticas.")
 
 # --- CLÍNICAS (TENANTS) - CEO ONLY ---
 # Tratamos "Tenant" como "Clínica". config (JSONB) incluye calendar_provider: 'local' | 'google'.
