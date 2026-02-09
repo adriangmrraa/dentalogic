@@ -126,4 +126,35 @@ Se ha migrado la validación de `working_hours` del uso de nombres de días (`st
 El protocolo de agendamiento se ha reestructurado para que el agente indague el servicio clínico **antes** de solicitar datos personales (DNI, Nombre).
 *   **Objetivo**: Obtener la duración del tratamiento (`treatment_types`) de forma inmediata para que `check_availability` devuelva slots precisos.
 *   **Sugerencia Contextual**: Si el paciente es vago, la IA sugiere tratamientos típicos según la especialidad del tenant.
-泛
+
+---
+
+## 22. Internacionalización (i18n) – Cómo añadir y mantener traducciones (2026-02-08)
+
+### 22.1 Alcance
+Toda la interfaz de la plataforma respeta el idioma elegido en **Configuración** (Español, English, Français). El idioma se persiste por sede en `tenants.config.ui_language` y se aplica a login, menús, formularios, agenda, analíticas, chats y componentes compartidos.
+
+### 22.2 Añadir un texto traducido
+1. **Añadir la clave en los tres archivos de locales:** `frontend_react/src/locales/es.json`, `en.json`, `fr.json`. Usar namespaces existentes (ej. `nav`, `common`, `config`, `login`, `agenda`, `chats`, `analytics`, `patient_detail`, `professionals`, `approvals`) o crear uno nuevo.
+2. **En el componente:** Importar `useTranslation` desde `../context/LanguageContext` (o la ruta correcta), llamar `const { t } = useTranslation();` y usar `t('namespace.key')` en lugar del string fijo.
+
+### 22.3 Ejemplo
+```tsx
+import { useTranslation } from '../context/LanguageContext';
+
+function MyView() {
+  const { t } = useTranslation();
+  return <h1>{t('my_section.title')}</h1>;
+}
+```
+En `es.json`: `"my_section": { "title": "Mi Título" }`. Repetir en `en.json` y `fr.json`.
+
+### 22.4 Backend – Rutas admin y auth
+Las rutas administrativas usan la dependencia **`verify_admin_token`** (valida JWT + header `X-Admin-Token` + rol). Para rutas solo CEO se comprueba `user_data.role == 'ceo'`. No usar únicamente `get_current_user` en endpoints que deban restringirse por rol. Ver lista completa de endpoints en `docs/AUDIT_ESTADO_PROYECTO.md` y `docs/API_REFERENCE.md`.
+
+### 22.5 Documentación de contexto para IA
+Para que otra IA tome contexto completo del proyecto en una nueva conversación, usar **`docs/CONTEXTO_AGENTE_IA.md`**: incluye stack, estructura, reglas obligatorias, cómo ejecutar, resumen de API, rutas frontend, base de datos, i18n e índice de documentación.
+
+---
+
+*Guía de Desarrolladores Dentalogic © 2026*

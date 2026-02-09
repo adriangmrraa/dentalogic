@@ -102,6 +102,12 @@ docker-compose up --build
 ### 🌐 [25. Idioma plataforma y agente](docs/25_idioma_plataforma_y_agente.spec.md)
 - Selector de idioma (ES/EN/FR) en Configuración; alcance en toda la UI; detección de idioma del mensaje para el asistente WhatsApp; i18n completado por vista/componente.
 
+### 🤖 [Contexto para agentes IA](docs/CONTEXTO_AGENTE_IA.md)
+- Punto de entrada para que otra IA (en otra conversación) tome contexto completo: stack, estructura, reglas, API, rutas, BD, i18n e índice de documentación.
+
+### 📋 [Prompt completo para IA](docs/PROMPT_CONTEXTO_IA_COMPLETO.md)
+- Bloque de texto listo para copiar y pegar al inicio de una conversación con una IA: contexto global, reglas, workflows, skills y cómo trabajar en fixes o cambios correctamente.
+
 ---
 
 ## 🏗️ Tecnologías Core

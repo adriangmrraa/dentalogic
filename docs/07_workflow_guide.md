@@ -1,6 +1,6 @@
 # Guía de Flujo de Trabajo y Colaboración
 
-Este documento detalla cómo trabajar efectivamente en el proyecto Nexus v3, asegurando éxito, estabilidad y escalabilidad.
+Este documento detalla cómo trabajar efectivamente en el proyecto **Dentalogic** (Nexus v7.6), asegurando éxito, estabilidad y escalabilidad.
 
 ## 1. Ciclo de Vida de una Tarea
 
@@ -66,6 +66,9 @@ git push origin feature/nueva-funcionalidad
 - **Persona/Reglas:** actualiza `docs/04_agent_logic_and_persona.md`
 - **Desarrollo:** actualiza `docs/05_developer_notes.md`
 - **Prompt:** actualiza `docs/06_ai_prompt_template.md`
+- **Estado detallado (endpoints, frontend, BD):** actualiza `docs/AUDIT_ESTADO_PROYECTO.md`
+- **Idioma UI y agente:** actualiza `docs/25_idioma_plataforma_y_agente.spec.md`
+- **Contexto para otra IA:** actualiza `docs/CONTEXTO_AGENTE_IA.md` (punto de entrada para agentes en otra conversación)
 
 ---
 
@@ -148,8 +151,9 @@ Usuario recibe mensajes
 1. Revisa los logs: `docker-compose logs | grep error`
 2. Consulta `docs/03_deployment_guide.md` sección "Troubleshooting"
 3. Revisa `AGENTS.md` para reglas críticas
-4. Lee el código fuente (siempre es la fuente de verdad)
+4. Para contexto completo (otra IA o nueva conversación): lee `docs/CONTEXTO_AGENTE_IA.md`
+5. Lee el código fuente (siempre es la fuente de verdad)
 
 ---
 
-*Guía de Flujo de Trabajo Nexus v3 © 2025*
+*Guía de Flujo de Trabajo Dentalogic © 2026*

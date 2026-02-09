@@ -91,7 +91,7 @@ AgendaView / Odontograma
 - **UUID Serialization Fix (Backend):**
   - Endpoints de actualización de estado (`PUT /admin/appointments/{id}/status`) ahora convierten UUID a string antes de JSON response
   - Eliminado error `TypeError: Object of type UUID is not JSON serializable`
-- **Multi-Tenancy:** Soporte para múltiples consultorios/clínicas.
+- **Multi-Tenancy:** Soporte para múltiples consultorios/clínicas; datos aislados por `tenant_id`. La configuración por sede (idioma de UI, proveedor de calendario) se guarda en `tenants.config` y se expone vía GET/PATCH `/admin/settings/clinic` (`ui_language`: es|en|fr).
 - **Sovereign Analytics Engine (v1 2026-02-08):**
   - **Propósito**: Consolidar métricas operativas y financieras en un dashboard centralizado.
   - **Lógica de Ingresos**: Basada estrictamente en asistencia confirmada (`attended` o `completed`).
@@ -122,19 +122,25 @@ Para optimizar el rendimiento en conversaciones extensas, Dentalogic utiliza un 
     - Botón "Cargar más": Recupera bloques anteriores y los concatena al estado, manteniendo la posición visual.
     - Estado `hasMoreMessages`: Controla la disponibilidad de historial en el servidor.
 
-### C. Frontend React (Puerto 80) - **Centro de Operaciones**
+### C. Frontend React (Puerto 5173 dev / 80 prod) - **Centro de Operaciones**
 
-**Tecnología:** React + Vite + FullCalendar + Socket.IO
+**Tecnología:** React 18 + TypeScript + Vite + Tailwind CSS + FullCalendar + Socket.IO client + Recharts
 
 **Carpeta:** `frontend_react/`
 
+**Rutas principales (App.tsx):** `/login` (LoginView), `/` (DashboardView), `/agenda` (AgendaView), `/pacientes` y `/pacientes/:id` (PatientsView, PatientDetail), `/chats` (ChatsView), `/analytics/professionals` (ProfessionalAnalyticsView, solo CEO), `/tratamientos` (TreatmentsView), `/perfil` (ProfileView), `/aprobaciones` (UserApprovalView – Personal Activo, modal detalle, Vincular a sede, Editar Perfil), `/sedes` (ClinicsView, solo CEO), `/configuracion` (ConfigView – selector de idioma). La ruta `/profesionales` redirige a `/aprobaciones`.
+
+**Idiomas (i18n):** El selector de idioma (Español / English / Français) está en **Configuración** (solo CEO). Se persiste en `tenants.config.ui_language` vía GET/PATCH `/admin/settings/clinic`. `LanguageProvider` envuelve toda la app; todas las vistas y componentes compartidos usan `useTranslation()` y `t('clave')` con archivos `src/locales/es.json`, `en.json`, `fr.json`. El cambio de idioma aplica de inmediato a toda la plataforma.
+
 **Vistas Principales:**
-- **Agenda Inteligente:** Calendario interactivo con sincronización de Google Calendar.
+- **Agenda Inteligente:** Calendario interactivo con sincronización de Google Calendar; leyenda de origen (IA, Manual, GCal) y tooltips traducidos.
 - **Perfil 360° del Paciente:** Acceso a historias clínicas, antecedentes y notas de evolución.
 - **Monitor de Triaje:** Alertas inmediatas cuando la IA detecta una urgencia grave.
-- **Modales IA-Aware:** Los modales de edición (especialmente en `Profesionales`) están sincronizados con la lógica de la IA, permitiendo configurar `working_hours` que el agente respeta estrictamente durante la reserva de turnos.
+- **Modales IA-Aware:** Los modales de edición (especialmente en Personal Activo / Profesionales) están sincronizados con la lógica de la IA, permitiendo configurar `working_hours` que el agente respeta estrictamente durante la reserva de turnos.
 
 ## 3. Base de Datos (PostgreSQL)
+
+**Configuración por sede:** La tabla `tenants` incluye un campo JSONB `config` donde se guardan, entre otros: `ui_language` (es|en|fr) para el idioma de la plataforma, y `calendar_provider` ('local' | 'google') para el tipo de calendario de esa sede. El backend expone `ui_language` en GET/PATCH `/admin/settings/clinic`.
 
 ### Tablas Principales (Esquema Dental)
 
@@ -146,6 +152,8 @@ Para optimizar el rendimiento en conversaciones extensas, Dentalogic utiliza un 
 | **appointments** | Gestión de turnos, estados y sincronización GCalendar. |
 | **accounting_transactions** | Liquidaciones y cobros de prestaciones. |
 | **users** | Credenciales, roles y estado de aprobación. |
+| **tenants** | Sedes/clínicas; `config` (JSONB) con `ui_language`, `calendar_provider`, etc. |
+| **chat_messages** | Mensajes de chat por conversación; incluye `tenant_id` para aislamiento por sede. |
 
 ### 3.2 Maintenance Robot (Self-Healing)
 El sistema utiliza un **Robot de Mantenimiento** integrado en `orchestrator_service/db.py` que garantiza la integridad del esquema en cada arranque:
