@@ -14,7 +14,8 @@ interface Professional {
   license_number?: string;
   is_active: boolean;
   working_hours?: WorkingHours;
-  availability?: any; // Keep for legacy if needed by other views
+  availability?: any;
+  tenant_id?: number; // Sede/clínica a la que pertenece (para mostrar en edición)
 }
 
 interface WorkingHours {
@@ -167,6 +168,7 @@ export default function ProfessionalsView() {
       license_number: professional.license_number || '',
       is_active: professional.is_active,
       working_hours: professional.working_hours || createDefaultWorkingHours(),
+      tenant_id: professional.tenant_id ?? null,
     });
     setExpandedDays({});
   };
@@ -523,7 +525,18 @@ export default function ProfessionalsView() {
                     </h3>
 
                     <div className="space-y-4">
-                      {!editingProfessional.id && clinics.length > 0 && (
+                      {/* Sede/Clínica: selector al crear, solo lectura al editar */}
+                      {editingProfessional.id ? (
+                        <div className="group">
+                          <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
+                            Sede / Clínica
+                          </label>
+                          <div className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-2xl text-sm font-semibold text-gray-800">
+                            {clinics.find((c) => c.id === (editingProfessional.tenant_id ?? formData.tenant_id))?.clinic_name ?? `Sede ${editingProfessional.tenant_id ?? formData.tenant_id ?? '—'}`}
+                          </div>
+                          <p className="text-[11px] text-gray-400 mt-1 ml-1">Perfil vinculado a esta sede (turnos y agente por sede).</p>
+                        </div>
+                      ) : clinics.length > 0 && (
                         <div className="group">
                           <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
                             Clínica / Sucursal <span className="text-red-500">*</span>

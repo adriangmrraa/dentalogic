@@ -2,9 +2,51 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import {
     UserCheck, UserX, Clock, ShieldCheck, Mail,
-    AlertTriangle, User, Users, Lock, Unlock, X, Building2, Stethoscope, BarChart3, MessageSquare, Plus, Phone, Save
+    AlertTriangle, User, Users, Lock, Unlock, X, Building2, Stethoscope, BarChart3, MessageSquare, Plus, Phone, Save, Settings, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { Modal } from '../components/Modal';
+
+interface DayConfig { enabled: boolean; slots: { start: string; end: string }[]; }
+interface WorkingHours {
+  monday: DayConfig; tuesday: DayConfig; wednesday: DayConfig; thursday: DayConfig;
+  friday: DayConfig; saturday: DayConfig; sunday: DayConfig;
+}
+const DAYS_HORARIOS = [
+  { key: 'monday' as const, label: 'Lunes' },
+  { key: 'tuesday' as const, label: 'Martes' },
+  { key: 'wednesday' as const, label: 'Miércoles' },
+  { key: 'thursday' as const, label: 'Jueves' },
+  { key: 'friday' as const, label: 'Viernes' },
+  { key: 'saturday' as const, label: 'Sábado' },
+  { key: 'sunday' as const, label: 'Domingo' },
+];
+function createDefaultWorkingHours(): WorkingHours {
+  const wh: Record<string, DayConfig> = {};
+  DAYS_HORARIOS.forEach(day => {
+    wh[day.key] = {
+      enabled: day.key !== 'sunday',
+      slots: day.key !== 'sunday' ? [{ start: '09:00', end: '18:00' }] : [],
+    };
+  });
+  return wh as WorkingHours;
+}
+function parseWorkingHours(raw: unknown): WorkingHours {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>;
+    const base = createDefaultWorkingHours();
+    (Object.keys(base) as (keyof WorkingHours)[]).forEach(k => {
+      if (o[k] && typeof o[k] === 'object' && !Array.isArray(o[k])) {
+        const d = o[k] as { enabled?: boolean; slots?: { start?: string; end?: string }[] };
+        base[k] = {
+          enabled: d.enabled ?? base[k].enabled,
+          slots: Array.isArray(d.slots) ? d.slots.map(s => ({ start: s?.start ?? '09:00', end: s?.end ?? '18:00' })) : base[k].slots,
+        };
+      }
+    });
+    return base;
+  }
+  return createDefaultWorkingHours();
+}
 
 interface StaffUser {
     id: string;
@@ -36,6 +78,7 @@ interface ProfessionalRow {
     email?: string;
     specialty?: string;
     is_active?: boolean;
+    working_hours?: unknown;
 }
 
 const UserApprovalView: React.FC = () => {
