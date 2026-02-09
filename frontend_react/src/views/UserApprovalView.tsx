@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import {
     UserCheck, UserX, Clock, ShieldCheck, Mail,
-    AlertTriangle, User, Users, Lock, Unlock, X, Building2, Stethoscope, BarChart3, MessageSquare
+    AlertTriangle, User, Users, Lock, Unlock, X, Building2, Stethoscope, BarChart3, MessageSquare, Plus, Phone, Save
 } from 'lucide-react';
 import { Modal } from '../components/Modal';
 
@@ -35,6 +35,9 @@ const UserApprovalView: React.FC = () => {
     const [staffDetailLoading, setStaffDetailLoading] = useState(false);
     const [professionalRows, setProfessionalRows] = useState<ProfessionalRow[]>([]);
     const [clinics, setClinics] = useState<{ id: number; clinic_name: string }[]>([]);
+    const [showLinkForm, setShowLinkForm] = useState(false);
+    const [linkFormData, setLinkFormData] = useState({ tenant_id: null as number | null, phone: '', specialty: '', license_number: '' });
+    const [linkFormSubmitting, setLinkFormSubmitting] = useState(false);
 
     useEffect(() => {
         fetchAllUsers();
@@ -73,12 +76,49 @@ const UserApprovalView: React.FC = () => {
     const handleAction = async (userId: string, action: 'active' | 'suspended') => {
         try {
             await api.post(`/admin/users/${userId}/status`, { status: action });
-            // Actualizar estado localmente
             setUsers(prev => prev.map(u =>
                 u.id === userId ? { ...u, status: action } : u
             ));
         } catch (err: any) {
             alert("Error al procesar la solicitud.");
+        }
+    };
+
+    const closeStaffModal = () => {
+        setSelectedStaff(null);
+        setShowLinkForm(false);
+        setLinkFormData({ tenant_id: null, phone: '', specialty: '', license_number: '' });
+    };
+
+    const handleLinkToSedeSubmit = async (e: React.FormEvent) => {
+        if (!selectedStaff) return;
+        const tenant_id = linkFormData.tenant_id ?? clinics[0]?.id;
+        if (!tenant_id) {
+            alert('Seleccioná una sede.');
+            return;
+        }
+        e.preventDefault();
+        setLinkFormSubmitting(true);
+        try {
+            const name = `${selectedStaff.first_name || ''} ${selectedStaff.last_name || ''}`.trim() || 'Profesional';
+            await api.post('/admin/professionals', {
+                email: selectedStaff.email,
+                tenant_id,
+                name,
+                phone: linkFormData.phone || undefined,
+                specialty: linkFormData.specialty || undefined,
+                license_number: linkFormData.license_number || undefined,
+                is_active: true,
+            });
+            const res = await api.get<ProfessionalRow[]>(`/admin/professionals/by-user/${selectedStaff.id}`);
+            setProfessionalRows(res.data || []);
+            setShowLinkForm(false);
+            setLinkFormData({ tenant_id: null, phone: '', specialty: '', license_number: '' });
+        } catch (err: any) {
+            const msg = err?.response?.data?.detail || err?.message || 'Error al vincular a sede.';
+            alert(msg);
+        } finally {
+            setLinkFormSubmitting(false);
         }
     };
 
@@ -187,26 +227,100 @@ const UserApprovalView: React.FC = () => {
             {/* Modal: detalle del profesional (antes "página Profesionales") */}
             <Modal
                 isOpen={!!selectedStaff}
-                onClose={() => setSelectedStaff(null)}
+                onClose={closeStaffModal}
                 title={selectedStaff ? `${selectedStaff.first_name || 'Sin nombre'} ${selectedStaff.last_name || ''}` : 'Detalle'}
                 size="xl"
             >
                 {selectedStaff && (
                     <div className="space-y-6">
-                        <div className="flex flex-wrap gap-4 items-start">
-                            <div className="role-badge" data-role={selectedStaff.role}>
-                                {selectedStaff.role.toUpperCase()}
+                        <div className="flex flex-wrap gap-4 items-start justify-between">
+                            <div className="flex flex-wrap gap-4 items-start">
+                                <div className="role-badge" data-role={selectedStaff.role}>
+                                    {selectedStaff.role.toUpperCase()}
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-600 flex items-center gap-2">
+                                        <Mail size={14} />
+                                        {selectedStaff.email}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Miembro desde: {new Date(selectedStaff.created_at).toLocaleDateString()}
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-sm text-gray-600 flex items-center gap-2">
-                                    <Mail size={14} />
-                                    {selectedStaff.email}
-                                </p>
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Miembro desde: {new Date(selectedStaff.created_at).toLocaleDateString()}
-                                </p>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowLinkForm(true);
+                                    setLinkFormData((p) => ({ ...p, tenant_id: clinics[0]?.id ?? null }));
+                                }}
+                                className="btn-vincular-sede"
+                            >
+                                <Plus size={18} />
+                                {professionalRows.length > 0 ? 'Vincular a otra sede' : 'Vincular a sede'}
+                            </button>
                         </div>
+
+                        {showLinkForm && (
+                            <form onSubmit={handleLinkToSedeSubmit} className="glass p-5 rounded-xl space-y-4">
+                                <h3 className="text-sm font-semibold text-gray-800">Crear perfil en una sede</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Sede / Clínica</label>
+                                        <select
+                                            value={linkFormData.tenant_id ?? ''}
+                                            onChange={(e) => setLinkFormData((p) => ({ ...p, tenant_id: e.target.value ? parseInt(e.target.value, 10) : null }))}
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                            required
+                                        >
+                                            <option value="">Elegir sede</option>
+                                            {clinics.map((c) => (
+                                                <option key={c.id} value={c.id}>{c.clinic_name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><Phone size={12} /> Teléfono</label>
+                                        <input
+                                            type="text"
+                                            value={linkFormData.phone}
+                                            onChange={(e) => setLinkFormData((p) => ({ ...p, phone: e.target.value }))}
+                                            placeholder="Ej. +54 11 1234-5678"
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Especialidad</label>
+                                        <input
+                                            type="text"
+                                            value={linkFormData.specialty}
+                                            onChange={(e) => setLinkFormData((p) => ({ ...p, specialty: e.target.value }))}
+                                            placeholder="Ej. Odontología General"
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Matrícula</label>
+                                        <input
+                                            type="text"
+                                            value={linkFormData.license_number}
+                                            onChange={(e) => setLinkFormData((p) => ({ ...p, license_number: e.target.value }))}
+                                            placeholder="Opcional"
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button type="submit" disabled={linkFormSubmitting} className="btn-icon-labeled success">
+                                        <Save size={18} />
+                                        {linkFormSubmitting ? 'Guardando...' : 'Guardar y vincular'}
+                                    </button>
+                                    <button type="button" onClick={() => { setShowLinkForm(false); setLinkFormData({ tenant_id: null, phone: '', specialty: '', license_number: '' }); }} className="btn-icon-labeled">
+                                        Cancelar
+                                    </button>
+                                </div>
+                            </form>
+                        )}
 
                         {staffDetailLoading ? (
                             <p className="text-gray-500">Cargando datos de sedes...</p>
@@ -252,7 +366,7 @@ const UserApprovalView: React.FC = () => {
                             </>
                         ) : (
                             <div className="glass p-4 rounded-xl text-center text-gray-500 text-sm">
-                                Aún no está vinculado a ninguna sede. Al aprobar, se crea su perfil en la primera sede para que pueda usar la plataforma.
+                                Aún no está vinculado a ninguna sede. Usá el botón <strong>Vincular a sede</strong> arriba para elegir una clínica y guardar sus datos de contacto; así podrá usar la agenda y la plataforma.
                             </div>
                         )}
                     </div>
@@ -329,6 +443,26 @@ const UserApprovalView: React.FC = () => {
         .btn-icon-labeled.warning:hover {
           background: #ffeeba;
           border-color: #856404;
+        }
+        .btn-vincular-sede {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 20px;
+          border-radius: 10px;
+          font-size: 0.9rem;
+          font-weight: 600;
+          border: none;
+          background: #2563eb;
+          color: white;
+          cursor: pointer;
+          transition: all 0.2s;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .btn-vincular-sede:hover {
+          background: #1d4ed8;
+          transform: translateY(-1px);
+          box-shadow: 0 2px 6px rgba(0,0,0,0.15);
         }
         .animate-fadeIn {
           animation: fadeIn 0.4s ease-out;
