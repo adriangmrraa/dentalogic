@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import {
     UserCheck, UserX, Clock, ShieldCheck, Mail,
-    AlertTriangle, User, Users, Lock, Unlock, X, Building2, Stethoscope, BarChart3, MessageSquare, Plus, Phone, Save, Settings, ChevronDown, ChevronUp
+    AlertTriangle, User, Users, Lock, Unlock, X, Building2, Stethoscope, BarChart3, MessageSquare, Plus, Phone, Save, Settings, ChevronDown, ChevronUp, Edit
 } from 'lucide-react';
 import { Modal } from '../components/Modal';
 
@@ -555,108 +555,123 @@ const UserApprovalView: React.FC = () => {
                 )}
             </Modal>
 
-            {/* Modal Editar Perfil (abre desde la tuerca) */}
-            <Modal
-                isOpen={!!editingProfessionalRow}
-                onClose={closeEditProfileModal}
-                title={staffForEditModal ? `Editar Perfil: ${editFormData.name || (staffForEditModal.first_name && staffForEditModal.last_name ? `${staffForEditModal.first_name} ${staffForEditModal.last_name}` : staffForEditModal.email)}` : 'Editar Perfil'}
-                size="xl"
-            >
-                {editingProfessionalRow && (
-                    <form onSubmit={handleEditProfileSubmit} className="space-y-6">
-                        <p className="text-xs text-gray-500 -mt-2">Completa la información del staff médico.</p>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="space-y-4">
-                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Datos Principales</h3>
+            {/* Modal Editar Perfil (estilo captura: claro, grande, tres columnas) */}
+            {editingProfessionalRow && (
+                <div
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                    onClick={(e) => e.target === e.currentTarget && closeEditProfileModal()}
+                >
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
+                                    <Edit size={24} />
+                                </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-600 mb-1">Sede / Clínica</label>
-                                    <div className="py-2 px-3 bg-gray-100 rounded-lg text-sm text-gray-800">
-                                        {clinics.find((c) => c.id === editingProfessionalRow.tenant_id)?.clinic_name || `Sede ${editingProfessionalRow.tenant_id ?? '—'}`}
+                                    <h2 className="text-xl font-bold text-gray-900">
+                                        Editar Perfil: {editFormData.name || (staffForEditModal?.first_name && staffForEditModal?.last_name ? `${staffForEditModal.first_name} ${staffForEditModal.last_name}` : staffForEditModal?.email) || 'Profesional'}
+                                    </h2>
+                                    <p className="text-sm text-gray-500 mt-0.5">Completa la información del staff médico.</p>
+                                </div>
+                            </div>
+                            <button type="button" onClick={closeEditProfileModal} className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleEditProfileSubmit} className="flex-1 overflow-y-auto min-h-0">
+                            <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+                                <div className="lg:col-span-4 space-y-5">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Datos Principales</h3>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Sede / Clínica</label>
+                                        <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-medium text-gray-800">
+                                            {clinics.find((c) => c.id === editingProfessionalRow.tenant_id)?.clinic_name || `Sede ${editingProfessionalRow.tenant_id ?? '—'}`}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Nombre completo <span className="text-red-500">*</span></label>
+                                        <input type="text" value={editFormData.name} onChange={(e) => setEditFormData((p) => ({ ...p, name: e.target.value }))} className="edit-profile-input" required />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Especialidad</label>
+                                        <select value={editFormData.specialty} onChange={(e) => setEditFormData((p) => ({ ...p, specialty: e.target.value }))} className="edit-profile-input">
+                                            <option value="">Seleccionar...</option>
+                                            {SPECIALTIES.map((s) => <option key={s} value={s}>{s}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Matrícula</label>
+                                        <input type="text" value={editFormData.license_number} onChange={(e) => setEditFormData((p) => ({ ...p, license_number: e.target.value }))} className="edit-profile-input" placeholder="MN 12345" />
                                     </div>
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-600 mb-1">Nombre completo *</label>
-                                    <input type="text" value={editFormData.name} onChange={(e) => setEditFormData((p) => ({ ...p, name: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
+                                <div className="lg:col-span-4 space-y-5">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Contacto & Estado</h3>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">E-mail</label>
+                                        <input type="email" value={editFormData.email} onChange={(e) => setEditFormData((p) => ({ ...p, email: e.target.value }))} className="edit-profile-input" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Teléfono</label>
+                                        <input type="text" value={editFormData.phone} onChange={(e) => setEditFormData((p) => ({ ...p, phone: e.target.value }))} className="edit-profile-input" placeholder="+54 9..." />
+                                    </div>
+                                    <label className="flex items-center gap-3 cursor-pointer mt-4">
+                                        <input type="checkbox" checked={editFormData.is_active} onChange={(e) => setEditFormData((p) => ({ ...p, is_active: e.target.checked }))} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                        <span className="text-sm font-medium text-gray-700">Activo</span>
+                                    </label>
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-600 mb-1">Especialidad</label>
-                                    <select value={editFormData.specialty} onChange={(e) => setEditFormData((p) => ({ ...p, specialty: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                                        <option value="">Seleccionar...</option>
-                                        {SPECIALTIES.map((s) => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-600 mb-1">Matrícula</label>
-                                    <input type="text" value={editFormData.license_number} onChange={(e) => setEditFormData((p) => ({ ...p, license_number: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="MN 12345" />
-                                </div>
-                            </div>
-                            <div className="space-y-4">
-                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Contacto & Estado</h3>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-600 mb-1">E-mail</label>
-                                    <input type="email" value={editFormData.email} onChange={(e) => setEditFormData((p) => ({ ...p, email: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><Phone size={12} /> Teléfono</label>
-                                    <input type="text" value={editFormData.phone} onChange={(e) => setEditFormData((p) => ({ ...p, phone: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="+54 9..." />
-                                </div>
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" checked={editFormData.is_active} onChange={(e) => setEditFormData((p) => ({ ...p, is_active: e.target.checked }))} className="rounded border-gray-300" />
-                                    <span className="text-sm font-medium text-gray-700">Activo</span>
-                                </label>
-                            </div>
-                            <div className="space-y-4">
-                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2"><Clock size={14} /> Disponibilidad</h3>
-                                <p className="text-[11px] text-gray-500">Intervalos para el bot de IA por WhatsApp.</p>
-                                <div className="space-y-2">
-                                    {DAYS_HORARIOS.map((day) => {
-                                        const dayKey = day.key;
-                                        const config = editFormData.working_hours[dayKey];
-                                        const isExpanded = expandedEditDays.includes(dayKey);
-                                        return (
-                                            <div key={day.key} className="border border-gray-200 rounded-lg overflow-hidden">
-                                                <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
-                                                    <label className="flex items-center gap-2 cursor-pointer">
-                                                        <input type="checkbox" checked={config.enabled} onChange={() => toggleEditDayEnabled(dayKey)} className="rounded border-gray-300" />
-                                                        <span className="text-sm font-medium">{day.label}</span>
-                                                    </label>
-                                                    <div className="flex items-center gap-2">
-                                                        {config.enabled && <span className="text-xs text-gray-500">{config.slots.length} slot(s)</span>}
-                                                        <button type="button" onClick={() => setExpandedEditDays((prev) => isExpanded ? prev.filter((d) => d !== dayKey) : [...prev, dayKey])} className="p-1">
-                                                            <ChevronDown size={16} className={isExpanded ? 'rotate-180' : ''} />
-                                                        </button>
+                                <div className="lg:col-span-4 space-y-4">
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Clock size={14} /> Disponibilidad</h3>
+                                    <p className="text-xs text-gray-500">Intervalos para el bot de IA por WhatsApp.</p>
+                                    <div className="space-y-2">
+                                        {DAYS_HORARIOS.map((day) => {
+                                            const dayKey = day.key;
+                                            const config = editFormData.working_hours[dayKey];
+                                            const isExpanded = expandedEditDays.includes(dayKey);
+                                            return (
+                                                <div key={day.key} className="rounded-2xl border border-gray-200 overflow-hidden bg-white">
+                                                    <div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50/80 transition-colors">
+                                                        <label className="flex items-center gap-3 cursor-pointer flex-1">
+                                                            <input type="checkbox" checked={config.enabled} onChange={() => toggleEditDayEnabled(dayKey)} className="w-4 h-4 rounded border-gray-300 text-blue-600" />
+                                                            <span className="text-sm font-medium text-gray-800">{day.label}</span>
+                                                        </label>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xs text-gray-500 tabular-nums">{config.slots.length} slots</span>
+                                                            <button type="button" onClick={() => setExpandedEditDays((prev) => isExpanded ? prev.filter((d) => d !== dayKey) : [...prev, dayKey])} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500">
+                                                                <ChevronDown size={18} className={isExpanded ? 'rotate-180' : ''} />
+                                                            </button>
+                                                        </div>
                                                     </div>
+                                                    {isExpanded && config.enabled && (
+                                                        <div className="px-4 pb-4 pt-1 space-y-3 bg-gray-50/50 border-t border-gray-100">
+                                                            {config.slots.map((slot, idx) => (
+                                                                <div key={idx} className="flex items-center gap-3">
+                                                                    <input type="time" value={slot.start} onChange={(e) => updateEditTimeSlot(dayKey, idx, 'start', e.target.value)} className="edit-profile-input w-28" />
+                                                                    <span className="text-gray-400">–</span>
+                                                                    <input type="time" value={slot.end} onChange={(e) => updateEditTimeSlot(dayKey, idx, 'end', e.target.value)} className="edit-profile-input w-28" />
+                                                                    <button type="button" onClick={() => removeEditTimeSlot(dayKey, idx)} className="text-sm text-red-500 hover:text-red-700">Quitar</button>
+                                                                </div>
+                                                            ))}
+                                                            <button type="button" onClick={() => addEditTimeSlot(dayKey)} className="text-sm font-medium text-blue-600 hover:text-blue-800">+ Agregar horario</button>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                {isExpanded && config.enabled && (
-                                                    <div className="p-3 space-y-2 bg-white border-t border-gray-100">
-                                                        {config.slots.map((slot, idx) => (
-                                                            <div key={idx} className="flex items-center gap-2">
-                                                                <input type="time" value={slot.start} onChange={(e) => updateEditTimeSlot(dayKey, idx, 'start', e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-sm w-24" />
-                                                                <span className="text-gray-400">–</span>
-                                                                <input type="time" value={slot.end} onChange={(e) => updateEditTimeSlot(dayKey, idx, 'end', e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-sm w-24" />
-                                                                <button type="button" onClick={() => removeEditTimeSlot(dayKey, idx)} className="text-red-500 hover:text-red-700 text-sm">Quitar</button>
-                                                            </div>
-                                                        ))}
-                                                        <button type="button" onClick={() => addEditTimeSlot(dayKey)} className="text-sm text-medical-600 hover:text-medical-800">+ Agregar horario</button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div className="flex gap-2 pt-4 border-t border-gray-200">
-                            <button type="submit" disabled={editFormSubmitting} className="btn-icon-labeled success">
-                                <Save size={18} />
-                                {editFormSubmitting ? 'Guardando...' : 'Guardar Cambios'}
-                            </button>
-                            <button type="button" onClick={closeEditProfileModal} className="btn-icon-labeled">Cancelar</button>
-                        </div>
-                    </form>
-                )}
-            </Modal>
+                            <div className="px-6 md:px-8 py-5 border-t border-gray-100 bg-gray-50/50 flex gap-3 justify-end rounded-b-3xl">
+                                <button type="button" onClick={closeEditProfileModal} className="px-5 py-2.5 rounded-xl border border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-50">
+                                    Cancelar
+                                </button>
+                                <button type="submit" disabled={editFormSubmitting} className="px-5 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50">
+                                    {editFormSubmitting ? 'Guardando...' : 'Guardar Cambios'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             <style>{`
         .glass {
@@ -768,6 +783,21 @@ const UserApprovalView: React.FC = () => {
           border-color: #adb5bd;
           color: #2563eb;
           transform: translateY(-1px);
+        }
+        .edit-profile-input {
+          width: 100%;
+          padding: 12px 16px;
+          border: 1px solid #e5e7eb;
+          border-radius: 16px;
+          font-size: 0.875rem;
+          color: #1f2937;
+          background: #fff;
+          transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .edit-profile-input:focus {
+          outline: none;
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
         .animate-fadeIn {
           animation: fadeIn 0.4s ease-out;
