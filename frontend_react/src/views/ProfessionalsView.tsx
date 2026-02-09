@@ -260,7 +260,7 @@ export default function ProfessionalsView() {
           </div>
           <button
             onClick={openCreateModal}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 text-sm font-semibold"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-medical-600 hover:bg-medical-700 text-white px-6 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 text-sm font-semibold"
           >
             <Plus size={20} />
             Nuevo Profesional
@@ -299,7 +299,14 @@ export default function ProfessionalsView() {
               <ClipboardList size={32} />
             </div>
             <h3 className="text-lg font-bold text-gray-800">No hay profesionales</h3>
-            <p className="text-gray-500 max-w-xs mx-auto text-sm">Comienza agregando el primer miembro del staff médico para gestionar turnos.</p>
+            <p className="text-gray-500 max-w-xs mx-auto text-sm mb-6">Comienza agregando el primer miembro del staff médico para gestionar turnos.</p>
+            <button
+              onClick={openCreateModal}
+              className="inline-flex items-center justify-center gap-2 bg-medical-600 hover:bg-medical-700 text-white px-6 py-3 rounded-xl font-semibold shadow-md hover:shadow-lg transition-all"
+            >
+              <Plus size={20} />
+              Agregar primer profesional
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

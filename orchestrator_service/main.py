@@ -1065,16 +1065,31 @@ origins = list(dict.fromkeys(origins))
 
 # --- MIDDLEWARE & EXCEPTION HANDLERS ---
 
+def _cors_headers(request: Request) -> dict:
+    """Asegura que las respuestas de error incluyan CORS (evita bloqueo en navegador)."""
+    origin = request.headers.get("origin") or ""
+    h = {
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+    }
+    if origin in origins:
+        h["Access-Control-Allow-Origin"] = origin
+    elif origins:
+        h["Access-Control-Allow-Origin"] = origins[0]
+    return h
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"🔥 UNHANDLED ERROR: {str(exc)}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "Error interno del servidor. El equipo técnico ha sido notificado.",
-            "error_type": type(exc).__name__
-        }
-    )
+    content = {
+        "detail": "Error interno del servidor. El equipo técnico ha sido notificado.",
+        "error_type": type(exc).__name__
+    }
+    response = JSONResponse(status_code=500, content=content)
+    for k, v in _cors_headers(request).items():
+        response.headers[k] = v
+    return response
 
 app.add_middleware(
     CORSMiddleware,

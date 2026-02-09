@@ -1134,50 +1134,62 @@ async def list_patients(
     limit: int = 50,
     tenant_id: int = Depends(get_resolved_tenant_id),
 ):
-    """Listar pacientes del tenant. Aislado por tenant_id (Regla de Oro)."""
-    query = """
-        SELECT id, first_name, last_name, phone_number, email, insurance_provider as obra_social, dni, created_at, status 
-        FROM patients 
-        WHERE tenant_id = $1 AND status != 'deleted'
     """
-    params = [tenant_id]
+    Listar pacientes del tenant. Solo aparecen quienes tienen al menos un turno (Lead vs Paciente).
+    Aislado por tenant_id (Regla de Oro).
+    """
+    query = """
+        SELECT p.id, p.first_name, p.last_name, p.phone_number, p.email,
+               p.insurance_provider as obra_social, p.dni, p.created_at, p.status
+        FROM patients p
+        WHERE p.tenant_id = $1 AND p.status != 'deleted'
+          AND EXISTS (
+              SELECT 1 FROM appointments a
+              WHERE a.patient_id = p.id AND a.tenant_id = p.tenant_id
+          )
+    """
+    params: List[Any] = [tenant_id]
     if search:
-        query += " AND (first_name ILIKE $2 OR last_name ILIKE $2 OR phone_number ILIKE $2 OR dni ILIKE $2)"
+        query += " AND (p.first_name ILIKE $2 OR p.last_name ILIKE $2 OR p.phone_number ILIKE $2 OR p.dni ILIKE $2)"
         params.append(f"%{search}%")
-        query += " ORDER BY created_at DESC LIMIT $3"
+        query += " ORDER BY p.created_at DESC LIMIT $3"
         params.append(limit)
     else:
-        query += " ORDER BY created_at DESC LIMIT $2"
+        query += " ORDER BY p.created_at DESC LIMIT $2"
         params.append(limit)
     rows = await db.pool.fetch(query, *params)
     return [dict(row) for row in rows]
 
 @router.post("/professionals", dependencies=[Depends(verify_admin_token)])
-async def create_professional(professional: ProfessionalCreate):
-    """Crear un nuevo profesional."""
+async def create_professional(
+    professional: ProfessionalCreate,
+    tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """Crear un nuevo profesional. Soberanía: se asocia al tenant_id del contexto."""
     try:
         # 1. Crear usuario asociado
         user_id = uuid.uuid4()
-        # Generar un email dummy si no se provee, o usar el real
         email = professional.email or f"prof_{uuid.uuid4().hex[:8]}@dentalogic.local"
-        
+        # first_name/last_name: el payload trae "name"; partimos o usamos todo en first_name
+        name_part = (professional.name or "").strip()
+        first_name = name_part.split(maxsplit=1)[0] if name_part else "Profesional"
+        last_name = name_part.split(maxsplit=1)[1] if name_part and len(name_part.split(maxsplit=1)) > 1 else ""
+
         await db.pool.execute("""
             INSERT INTO users (id, email, password_hash, role, first_name, status, created_at)
             VALUES ($1, $2, $3, 'professional', $4, 'active', NOW())
-        """, user_id, email, "hash_placeholder", professional.name)
+        """, user_id, email, "hash_placeholder", first_name)
 
-        # 2. Crear profesional
+        # 2. Crear profesional (esquema: tenant_id, user_id, first_name, last_name, email, phone_number, specialty, registration_id, is_active, working_hours)
         wh = professional.working_hours or generate_default_working_hours()
-        
         await db.pool.execute("""
             INSERT INTO professionals (
-                user_id, first_name, specialty, license_number, phone_number, 
-                address, is_active, availability, working_hours, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-        """, user_id, professional.name, professional.specialty, professional.license_number,
-             professional.phone, professional.address, professional.is_active,
-             json.dumps(professional.availability), json.dumps(wh))
-             
+                tenant_id, user_id, first_name, last_name, email, phone_number,
+                specialty, registration_id, is_active, working_hours, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, NOW(), NOW())
+        """, tenant_id, user_id, first_name, last_name, email, professional.phone,
+             professional.specialty, professional.license_number, professional.is_active, json.dumps(wh))
+
         return {"status": "created", "user_id": str(user_id)}
     except Exception as e:
         logger.error(f"Error creating professional: {e}")
@@ -1799,11 +1811,26 @@ async def get_next_available_slots(
 @router.get("/professionals", dependencies=[Depends(verify_admin_token)])
 async def list_professionals(tenant_id: int = Depends(get_resolved_tenant_id)):
     """Lista profesionales de la clínica. Aislado por tenant_id (Regla de Oro)."""
-    rows = await db.pool.fetch(
-        "SELECT id, first_name, last_name, specialty, is_active FROM professionals WHERE tenant_id = $1",
-        tenant_id,
-    )
-    return [dict(row) for row in rows]
+    try:
+        # Soporta BD con o sin last_name (parches antiguos)
+        rows = await db.pool.fetch(
+            "SELECT id, first_name, last_name, specialty, is_active FROM professionals WHERE tenant_id = $1",
+            tenant_id,
+        )
+        return [dict(row) for row in rows]
+    except Exception as e:
+        if "last_name" in str(e).lower() or "column" in str(e).lower():
+            try:
+                rows = await db.pool.fetch(
+                    "SELECT id, first_name, specialty, is_active FROM professionals WHERE tenant_id = $1",
+                    tenant_id,
+                )
+                return [dict(r) | {"last_name": ""} for r in rows]
+            except Exception as e2:
+                logger.error(f"list_professionals fallback failed: {e2}")
+                raise HTTPException(status_code=500, detail=f"Error listando profesionales: {e2}")
+        logger.error(f"list_professionals: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error listando profesionales: {e}")
 
 # ==================== ENDPOINTS GOOGLE CALENDAR ====================
 

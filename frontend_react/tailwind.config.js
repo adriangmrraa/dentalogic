@@ -53,6 +53,11 @@ export default {
           light: '#38b2ac',
           dark: '#117a8b',
         },
+        // Alias para botones y acentos (contraste sobre blanco)
+        primary: {
+          DEFAULT: '#0059b3',
+          dark: '#004d99',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
