@@ -89,15 +89,22 @@ async def login(payload: UserLogin):
             detail=f"Tu cuenta está en estado '{user['status']}'. Contactá al administrador."
         )
 
-    # Success: Generate Token
-    # For now, tenant_id is 1 (Nexus Universal)
+    # Regla de Oro: resolver tenant_id desde professionals por user_id (aislamiento total)
+    tenant_id = await db.fetchval(
+        "SELECT tenant_id FROM professionals WHERE user_id = $1",
+        user['id']
+    )
+    if tenant_id is None:
+        # CEO/secretary: no tienen fila en professionals, usar primera clínica
+        tenant_id = await db.fetchval("SELECT id FROM tenants ORDER BY id ASC LIMIT 1") or 1
+    tenant_id = int(tenant_id)
+
     token_data = {
         "user_id": str(user['id']),
         "email": user['email'],
         "role": user['role'],
-        "tenant_id": 1 
+        "tenant_id": tenant_id,
     }
-    
     token = auth_service.create_access_token(token_data)
     
     return {
@@ -106,7 +113,8 @@ async def login(payload: UserLogin):
         "user": {
             "id": str(user['id']),
             "email": user['email'],
-            "role": user['role']
+            "role": user['role'],
+            "tenant_id": tenant_id,
         }
     }
 

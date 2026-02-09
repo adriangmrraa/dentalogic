@@ -244,6 +244,82 @@ class Database:
                 WHERE working_hours = '{}'::jsonb OR working_hours IS NULL;
             END $$;
             """,
+            # Parche 11: Columna config (JSONB) en tenants para calendar_provider y demás opciones
+            """
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tenants' AND column_name='config') THEN
+                    ALTER TABLE tenants ADD COLUMN config JSONB DEFAULT '{}';
+                END IF;
+                -- Asegurar que tenants existentes tengan calendar_provider por defecto
+                UPDATE tenants SET config = jsonb_set(COALESCE(config, '{}'), '{calendar_provider}', '"local"')
+                WHERE config IS NULL OR config->>'calendar_provider' IS NULL;
+            END $$;
+            """,
+            # Parche 12: tenant_id en professionals (idempotente, no rompe datos existentes)
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'professionals' AND column_name = 'tenant_id') THEN
+                    ALTER TABLE professionals ADD COLUMN tenant_id INTEGER DEFAULT 1;
+                    UPDATE professionals SET tenant_id = 1 WHERE tenant_id IS NULL;
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'tenants') THEN
+                        ALTER TABLE professionals ADD CONSTRAINT fk_professionals_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+                    END IF;
+                END IF;
+            END $$;
+            CREATE INDEX IF NOT EXISTS idx_professionals_tenant ON professionals(tenant_id);
+            """,
+            # Parche 13: tenant_id, source y google_calendar_event_id en appointments (idempotente)
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'appointments' AND column_name = 'tenant_id') THEN
+                    ALTER TABLE appointments ADD COLUMN tenant_id INTEGER DEFAULT 1;
+                    UPDATE appointments SET tenant_id = 1 WHERE tenant_id IS NULL;
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'tenants') THEN
+                        ALTER TABLE appointments ADD CONSTRAINT fk_appointments_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+                    END IF;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'appointments' AND column_name = 'source') THEN
+                    ALTER TABLE appointments ADD COLUMN source VARCHAR(20) DEFAULT 'ai';
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'appointments' AND column_name = 'google_calendar_event_id') THEN
+                    ALTER TABLE appointments ADD COLUMN google_calendar_event_id VARCHAR(255);
+                END IF;
+            END $$;
+            CREATE INDEX IF NOT EXISTS idx_appointments_tenant ON appointments(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_appointments_source ON appointments(source);
+            """,
+            # Parche 14: tenant_id en treatment_types (idempotente)
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'treatment_types' AND column_name = 'tenant_id') THEN
+                    ALTER TABLE treatment_types ADD COLUMN tenant_id INTEGER DEFAULT 1;
+                    UPDATE treatment_types SET tenant_id = 1 WHERE tenant_id IS NULL;
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'tenants') THEN
+                        ALTER TABLE treatment_types ADD CONSTRAINT fk_treatment_types_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+                    END IF;
+                END IF;
+            END $$;
+            CREATE INDEX IF NOT EXISTS idx_treatment_types_tenant ON treatment_types(tenant_id);
+            """,
+            # Parche 15: tenant_id en chat_messages (conversaciones por clínica, buffer/override independientes)
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chat_messages' AND column_name = 'tenant_id') THEN
+                    ALTER TABLE chat_messages ADD COLUMN tenant_id INTEGER DEFAULT 1;
+                    UPDATE chat_messages SET tenant_id = 1 WHERE tenant_id IS NULL;
+                    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'tenants') THEN
+                        ALTER TABLE chat_messages ADD CONSTRAINT fk_chat_messages_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+                    END IF;
+                END IF;
+            END $$;
+            CREATE INDEX IF NOT EXISTS idx_chat_messages_tenant_id ON chat_messages(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_chat_messages_tenant_from_created ON chat_messages(tenant_id, from_number, created_at DESC);
+            """,
         ]
 
         async with self.pool.acquire() as conn:
@@ -287,19 +363,19 @@ class Database:
         async with self.pool.acquire() as conn:
             await conn.execute(query, provider, provider_message_id, error)
 
-    async def append_chat_message(self, from_number: str, role: str, content: str, correlation_id: str):
-        query = "INSERT INTO chat_messages (from_number, role, content, correlation_id) VALUES ($1, $2, $3, $4)"
+    async def append_chat_message(self, from_number: str, role: str, content: str, correlation_id: str, tenant_id: int = 1):
+        query = "INSERT INTO chat_messages (from_number, role, content, correlation_id, tenant_id) VALUES ($1, $2, $3, $4, $5)"
         async with self.pool.acquire() as conn:
-            await conn.execute(query, from_number, role, content, correlation_id)
+            await conn.execute(query, from_number, role, content, correlation_id, tenant_id)
 
-    async def ensure_patient_exists(self, phone_number: str, first_name: str = 'Visitante', status: str = 'guest'):
+    async def ensure_patient_exists(self, phone_number: str, tenant_id: int, first_name: str = 'Visitante', status: str = 'guest'):
         """
         Ensures a patient record exists for the given phone number.
         If it exists as a 'guest', it can be updated to 'active' or update its name.
         """
         query = """
         INSERT INTO patients (tenant_id, phone_number, first_name, status, created_at)
-        VALUES (1, $1, $2, $3, NOW())
+        VALUES ($1, $2, $3, $4, NOW())
         ON CONFLICT (tenant_id, phone_number) 
         DO UPDATE SET 
             first_name = CASE 
@@ -314,10 +390,15 @@ class Database:
         RETURNING id, status
         """
         async with self.pool.acquire() as conn:
-            return await conn.fetchrow(query, phone_number, first_name, status)
+            return await conn.fetchrow(query, tenant_id, phone_number, first_name, status)
 
-    async def get_chat_history(self, from_number: str, limit: int = 15) -> List[dict]:
-        """Returns list of {'role': ..., 'content': ...} in chronological order."""
+    async def get_chat_history(self, from_number: str, limit: int = 15, tenant_id: Optional[int] = None) -> List[dict]:
+        """Returns list of {'role': ..., 'content': ...} in chronological order. Opcional tenant_id para aislamiento por clínica."""
+        if tenant_id is not None:
+            query = "SELECT role, content FROM chat_messages WHERE from_number = $1 AND tenant_id = $2 ORDER BY created_at DESC LIMIT $3"
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(query, from_number, tenant_id, limit)
+                return [dict(row) for row in reversed(rows)]
         query = "SELECT role, content FROM chat_messages WHERE from_number = $1 ORDER BY created_at DESC LIMIT $2"
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, from_number, limit)

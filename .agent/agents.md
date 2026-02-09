@@ -2,6 +2,8 @@
 
 Este archivo actúa como el índice maestro de capacidades para los Agentes Autónomos. Define qué Skill utilizar para cada tipo de tarea.
 
+> **Comandos de workflows y skills:** Ver [COMMANDS.md](COMMANDS.md) para la lista completa de comandos (`/specify`, `/plan`, etc.) y triggers de skills. La IA debe usar ese documento en coordinación contigo cuando invoques un comando.
+
 ## 🌟 Core Skills (Infraestructura)
 | Skill | Trigger Keywords | Uso Principal |
 |-------|------------------|---------------|

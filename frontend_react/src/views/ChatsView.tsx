@@ -11,8 +11,14 @@ import { io, Socket } from 'socket.io-client';
 // INTERFACES
 // ============================================
 
+interface ClinicOption {
+  id: number;
+  clinic_name: string;
+}
+
 interface ChatSession {
   phone_number: string;
+  tenant_id: number;
   patient_id?: number;
   patient_name?: string;
   last_message: string;
@@ -66,6 +72,9 @@ interface Toast {
 // ============================================
 
 export default function ChatsView() {
+  // Clínicas (CEO puede tener varias; secretary/professional una)
+  const [clinics, setClinics] = useState<ClinicOption[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState<number | null>(null);
   // Estados principales
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<ChatSession | null>(null);
@@ -98,8 +107,9 @@ export default function ChatsView() {
     // Conectar al WebSocket
     socketRef.current = io(BACKEND_URL);
 
-    // Evento: Nueva derivación humana (derivhumano)
-    socketRef.current.on('HUMAN_HANDOFF', (data: { phone_number: string; reason: string }) => {
+    // Evento: Nueva derivación humana (derivhumano) — solo para la clínica seleccionada
+    socketRef.current.on('HUMAN_HANDOFF', (data: { phone_number: string; reason: string; tenant_id?: number }) => {
+      if (data.tenant_id != null && selectedTenantId != null && data.tenant_id !== selectedTenantId) return;
       setSessions(prev => prev.map(s =>
         s.phone_number === data.phone_number
           ? {
@@ -129,8 +139,9 @@ export default function ChatsView() {
       }
     });
 
-    // Evento: Nuevo mensaje en chat
-    socketRef.current.on('NEW_MESSAGE', (data: { phone_number: string; message: string; role: string }) => {
+    // Evento: Nuevo mensaje en chat (tenant_id opcional; si viene, solo actualizar si es la clínica seleccionada)
+    socketRef.current.on('NEW_MESSAGE', (data: { phone_number: string; message: string; role: string; tenant_id?: number }) => {
+      if (data.tenant_id != null && selectedTenantId != null && data.tenant_id !== selectedTenantId) return;
       setSessions(prev => {
         const updatedSessions = prev.map(s =>
           s.phone_number === data.phone_number
@@ -185,8 +196,9 @@ export default function ChatsView() {
       }
     });
 
-    // Evento: Estado de override cambiado
-    socketRef.current.on('HUMAN_OVERRIDE_CHANGED', (data: { phone_number: string; enabled: boolean; until?: string }) => {
+    // Evento: Estado de override cambiado (por clínica: solo actualizar si es la clínica seleccionada)
+    socketRef.current.on('HUMAN_OVERRIDE_CHANGED', (data: { phone_number: string; enabled: boolean; until?: string; tenant_id?: number }) => {
+      if (data.tenant_id != null && selectedTenantId != null && data.tenant_id !== selectedTenantId) return;
       setSessions(prev => {
         const updated = prev.map(s =>
           s.phone_number === data.phone_number
@@ -259,22 +271,29 @@ export default function ChatsView() {
         socketRef.current.disconnect();
       }
     };
-  }, [selectedSession, soundEnabled]);
+  }, [selectedSession, soundEnabled, selectedTenantId]);
 
   // ============================================
-  // DATOS - CARGAR SESIONES Y MENSAJES
+  // DATOS - CARGAR CLÍNICAS, SESIONES Y MENSAJES
   // ============================================
 
   useEffect(() => {
-    fetchSessions();
+    api.get<ClinicOption[]>('/admin/chat/tenants').then((res) => {
+      setClinics(res.data);
+      if (res.data.length >= 1) setSelectedTenantId(res.data[0].id);
+    }).catch(() => setClinics([]));
   }, []);
 
   useEffect(() => {
+    if (selectedTenantId != null) fetchSessions(selectedTenantId);
+    else setSessions([]);
+  }, [selectedTenantId]);
+
+  useEffect(() => {
     if (selectedSession) {
-      fetchMessages(selectedSession.phone_number);
-      fetchPatientContext(selectedSession.phone_number);
-      // Marcar como leído
-      markAsRead(selectedSession.phone_number);
+      fetchMessages(selectedSession.phone_number, selectedSession.tenant_id);
+      fetchPatientContext(selectedSession.phone_number, selectedSession.tenant_id);
+      markAsRead(selectedSession.phone_number, selectedSession.tenant_id);
     }
   }, [selectedSession]);
 
@@ -286,24 +305,19 @@ export default function ChatsView() {
   // FUNCIONES DE DATOS
   // ============================================
 
-  const fetchSessions = async () => {
+  const fetchSessions = async (tenantId: number) => {
     try {
       setLoading(true);
-      const response = await api.get('/admin/chat/sessions');
+      const response = await api.get<ChatSession[]>('/admin/chat/sessions', { params: { tenant_id: tenantId } });
       setSessions(response.data);
-
-      // Deep Link Logic: Si venimos de notificación
       const navState = (window as any).history.state as { selectPhone?: string } | null;
       if (navState?.selectPhone) {
-        const targetPhone = navState.selectPhone;
-        const targetSession = response.data.find((s: ChatSession) => s.phone_number === targetPhone);
+        const targetSession = response.data.find((s: ChatSession) => s.phone_number === navState.selectPhone);
         if (targetSession) {
           setSelectedSession(targetSession);
-          // Limpiar state para evitar re-selección futura
           window.history.replaceState({}, document.title);
         }
       }
-
     } catch (error) {
       console.error('Error fetching sessions:', error);
       setSessions([]);
@@ -318,11 +332,12 @@ export default function ChatsView() {
     }
   };
 
-  const fetchMessages = async (phone: string, append: boolean = false) => {
+  const fetchMessages = async (phone: string, tenantId: number, append: boolean = false) => {
+    if (!selectedSession) return;
     try {
       const currentOffset = append ? messageOffset + 50 : 0;
       const response = await api.get(`/admin/chat/messages/${phone}`, {
-        params: { limit: 50, offset: currentOffset }
+        params: { tenant_id: tenantId, limit: 50, offset: currentOffset }
       });
 
       const newBatch = response.data;
@@ -348,12 +363,13 @@ export default function ChatsView() {
   const handleLoadMore = () => {
     if (!selectedSession || loadingMore || !hasMoreMessages) return;
     setLoadingMore(true);
-    fetchMessages(selectedSession.phone_number, true);
+    fetchMessages(selectedSession.phone_number, selectedSession.tenant_id, true);
   };
 
-  const fetchPatientContext = async (phone: string) => {
+  const fetchPatientContext = async (phone: string, tenantId?: number) => {
     try {
-      const response = await api.get(`/admin/patients/phone/${phone}/context`);
+      const params = tenantId != null ? { tenant_id_override: tenantId } : {};
+      const response = await api.get(`/admin/patients/phone/${phone}/context`, { params });
       setPatientContext(response.data);
     } catch (error) {
       console.error('Error fetching patient context:', error);
@@ -361,11 +377,11 @@ export default function ChatsView() {
     }
   };
 
-  const markAsRead = async (phone: string) => {
+  const markAsRead = async (phone: string, tenantId: number) => {
     try {
-      await api.put(`/admin/chat/sessions/${phone}/read`);
+      await api.put(`/admin/chat/sessions/${phone}/read`, null, { params: { tenant_id: tenantId } });
       setSessions(prev => prev.map(s =>
-        s.phone_number === phone ? { ...s, unread_count: 0 } : s
+        s.phone_number === phone && s.tenant_id === tenantId ? { ...s, unread_count: 0 } : s
       ));
     } catch (error) {
       console.error('Error marking as read:', error);
@@ -384,14 +400,15 @@ export default function ChatsView() {
     try {
       await api.post('/admin/chat/send', {
         phone: selectedSession.phone_number,
+        tenant_id: selectedSession.tenant_id,
         message: newMessage,
       });
       setNewMessage('');
-      fetchMessages(selectedSession.phone_number);
+      fetchMessages(selectedSession.phone_number, selectedSession.tenant_id);
 
-      // Emitir evento de mensaje manual
       socketRef.current?.emit('MANUAL_MESSAGE', {
         phone: selectedSession.phone_number,
+        tenant_id: selectedSession.tenant_id,
         message: newMessage,
       });
     } catch (error) {
@@ -410,6 +427,7 @@ export default function ChatsView() {
     try {
       await api.post('/admin/chat/human-intervention', {
         phone: selectedSession.phone_number,
+        tenant_id: selectedSession.tenant_id,
         activate,
         duration: 24 * 60 * 60 * 1000, // 24 horas
       });
@@ -437,6 +455,7 @@ export default function ChatsView() {
     try {
       await api.post('/admin/chat/remove-silence', {
         phone: selectedSession.phone_number,
+        tenant_id: selectedSession.tenant_id,
       });
 
       // Actualización local inmediata
@@ -558,6 +577,23 @@ export default function ChatsView() {
               {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
             </button>
           </div>
+          {clinics.length > 1 && (
+            <div className="mb-3">
+              <label className="block text-xs font-medium text-gray-500 mb-1">Clínica</label>
+              <select
+                value={selectedTenantId ?? ''}
+                onChange={(e) => setSelectedTenantId(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+              >
+                {clinics.map((c) => (
+                  <option key={c.id} value={c.id}>{c.clinic_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {clinics.length === 1 && clinics[0] && (
+            <p className="text-xs text-gray-500 mb-2">{clinics[0].clinic_name}</p>
+          )}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             <input

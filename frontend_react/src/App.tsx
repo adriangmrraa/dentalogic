@@ -11,6 +11,7 @@ import TreatmentsView from './views/TreatmentsView';
 import LoginView from './views/LoginView';
 import UserApprovalView from './views/UserApprovalView';
 import ProfileView from './views/ProfileView';
+import ClinicsView from './views/ClinicsView';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -41,6 +42,11 @@ function App() {
                   <Route path="aprobaciones" element={
                     <ProtectedRoute allowedRoles={['ceo']}>
                       <UserApprovalView />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="sedes" element={
+                    <ProtectedRoute allowedRoles={['ceo']}>
+                      <ClinicsView />
                     </ProtectedRoute>
                   } />
                   <Route path="configuracion" element={<div className="p-6"><h1 className="text-2xl font-bold">Configuración</h1><p className="text-gray-500">Próximamente...</p></div>} />

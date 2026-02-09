@@ -24,6 +24,7 @@ Maneja la integración con YCloud y la IA de audio (Whisper).
 ### 🎨 Control (Frontend React)
 - **Routing:** Usa `path="/*"` en el router raíz de `App.tsx` para permitir rutas anidadas.
 - **AuthContext:** Gestiona el estado de sesión y rol del usuario.
+- **Chats por clínica:** ChatsView usa GET `/admin/chat/tenants` y GET `/admin/chat/sessions?tenant_id=`. Selector de Clínicas para CEO (varias clínicas); secretaria/profesional ven una sola. Mensajes, human-intervention y remove-silence usan `tenant_id`; override 24h independiente por clínica.
 
 ---
 
@@ -31,17 +32,25 @@ Maneja la integración con YCloud y la IA de audio (Whisper).
 
 ### 🚦 Mecanismo de Silencio (Human Override)
 - **Duración:** 24 horas. Se guarda en `human_override_until`.
+- **Por clínica:** Override y ventana de 24h son por `(tenant_id, phone_number)` en `patients`. Una intervención en la Clínica A no afecta a la Clínica B.
+
+### 🧠 Cerebro Híbrido (Calendario por clínica)
+- **`tenants.config.calendar_provider`:** `'local'` o `'google'`.
+- **`check_availability` / `book_appointment`:** Si `calendar_provider == 'google'` → usan `gcal_service` y eventos GCal; si `'local'` → solo consultas SQL a `appointments` (y bloques locales). Siempre filtro por `tenant_id`.
+- La IA usa la API Key global (env) para razonamiento; los datos de turnos están aislados por clínica.
 
 ### 🤖 Maintenance Robot (Self-Healing)
 - **Protocolo Omega Prime:** Se auto-activa al primer administrador (CEO) para evitar bloqueos en despliegues nuevos.
+- **Parches 12–15 (idempotentes):** Añaden `tenant_id` + índice en `professionals`, `appointments`, `treatment_types`, `chat_messages`; en `appointments` aseguran columnas `source` y `google_calendar_event_id`. Usan bloques `DO $$ BEGIN ... END $$` para no romper datos existentes.
 
 ---
 
 ## 🛠️ Herramientas (Tools) - Nombres Exactos
-- `check_availability`: Consulta disponibilidad de turnos.
-- `book_appointment`: Registra un turno.
+- `check_availability`: Consulta disponibilidad de turnos (por `calendar_provider`: google → GCal, local → solo BD).
+- `book_appointment`: Registra un turno (misma lógica híbrida; siempre por `tenant_id`).
 - `triage_urgency`: Analiza síntomas.
-- `derivhumano`: Derivación a humano y bloqueo de 24h.
+- `derivhumano`: Derivación a humano y bloqueo de 24h (por `tenant_id` + phone en `patients`).
+- `cancel_appointment` / `reschedule_appointment`: Aislados por tenant; GCal solo si `calendar_provider == 'google'`.
 
 ---
 
@@ -62,6 +71,12 @@ Maneja la integración con YCloud y la IA de audio (Whisper).
 
 ---
 
+## 🔐 Integración Auth0 / Google Calendar (connect-sovereign)
+- **POST `/admin/calendar/connect-sovereign`:** Recibe el token de Auth0; se guarda **cifrado con Fernet** (clave en `CREDENTIALS_FERNET_KEY`) en la tabla `credentials` con `category = 'google_calendar'`, asociado al `tenant_id` de la clínica. Tras guardar, el sistema actualiza `tenants.config.calendar_provider` a `'google'` para esa clínica.
+- La clave de cifrado debe generarse una vez (en Windows: `py -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) y definirse en el entorno.
+
+---
+
 ## 🛠️ Available Skills Index
 
 | Skill Name | Trigger | Descripción |
@@ -74,5 +89,4 @@ Maneja la integración con YCloud y la IA de audio (Whisper).
 | **Mobile Adaptation Architect**| *v8.0, DKG* | v8.0: Senior UI/UX Architect. Especialista en Blueprint Universal y Scroll Isolation. |
 
 ---
-*Actualizado: 2026-02-06 - Protocolo Platinum Resilience v7.6*
-泛
+*Actualizado: 2026-02-08 - Protocolo Platinum Resilience v7.6 (Cerebro Híbrido, Chats por clínica, connect-sovereign)*

@@ -91,8 +91,36 @@ Fuerza el mirroring entre Google Calendar y la base de datos local.
 - **Automatización**: Invocado silenciosamente al montar la Agenda en el frontend.
 
 ### Bóveda de Credenciales (Internal)
-`POST /admin/internal/credentials`
-Almacena tokens de OAuth para cada tenant de forma segura.
+`GET /admin/internal/credentials/{name}`
+Obtiene credenciales internas (header `X-Internal-Token`).
+
+### Connect Sovereign (Auth0 / Google Calendar)
+`POST /admin/calendar/connect-sovereign`
+
+Guarda el token de Auth0 cifrado (Fernet) en la tabla `credentials` (category `google_calendar`, por `tenant_id`) y actualiza `tenants.config.calendar_provider` a `'google'` para esa clínica. Requiere `CREDENTIALS_FERNET_KEY` en el entorno.
+
+**Payload:**
+```json
+{
+  "access_token": "<token Auth0>",
+  "tenant_id": 1
+}
+```
+- `tenant_id` opcional; si no se envía se usa la clínica resuelta del usuario (CEO puede indicar clínica).
+
+**Response:** `{ "status": "connected", "tenant_id": 1, "calendar_provider": "google" }`
+
+## Chat (multi-tenant)
+
+Las rutas de chat filtran por `tenant_id`; Human Override y ventana 24h son independientes por clínica.
+
+- `GET /admin/chat/tenants` — Clínicas disponibles para Chats (CEO: todas; otros: una). Response: `[{ "id", "clinic_name" }]`.
+- `GET /admin/chat/sessions?tenant_id=<id>` — Sesiones de esa clínica (obligatorio `tenant_id`).
+- `GET /admin/chat/messages/{phone}?tenant_id=<id>` — Historial por clínica.
+- `PUT /admin/chat/sessions/{phone}/read?tenant_id=<id>` — Marcar como leído.
+- `POST /admin/chat/human-intervention` — Body: `phone`, `tenant_id`, `activate`, `duration`.
+- `POST /admin/chat/remove-silence` — Body: `phone`, `tenant_id`.
+- `POST /admin/chat/send` — Body: `phone`, `tenant_id`, `message`.
 
 ## Pacientes
 

@@ -19,6 +19,32 @@ logger = logging.getLogger(__name__)
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-token")
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "internal-secret-token")
 WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://whatsapp:8002")
+CREDENTIALS_FERNET_KEY = os.getenv("CREDENTIALS_FERNET_KEY")  # Base64 key for AES-256 (Fernet) encryption
+
+def _get_fernet():
+    """Fernet instance for encrypting credentials. Uses CREDENTIALS_FERNET_KEY (url-safe base64)."""
+    from cryptography.fernet import Fernet
+    key = CREDENTIALS_FERNET_KEY
+    if not key:
+        return None
+    if isinstance(key, str):
+        key = key.encode("utf-8")
+    try:
+        return Fernet(key)
+    except Exception as e:
+        logger.warning(f"Invalid CREDENTIALS_FERNET_KEY: {e}")
+        return None
+
+def _encrypt_credential(plain: str) -> Optional[str]:
+    """Encrypt a credential value with Fernet (AES-256). Returns base64 ciphertext or None if key not configured."""
+    f = _get_fernet()
+    if not f:
+        return None
+    try:
+        return f.encrypt(plain.encode("utf-8")).decode("ascii")
+    except Exception as e:
+        logger.error(f"Encryption failed: {e}")
+        return None
 
 ARG_TZ = timezone(timedelta(hours=-3))
 
@@ -99,24 +125,71 @@ async def verify_admin_token(
     request.state.user = user_data
     return user_data
 
+
+# --- Regla de Oro: resolver tenant_id desde professionals por user_id (aislamiento total) ---
+async def get_resolved_tenant_id(user_data=Depends(verify_admin_token)) -> int:
+    """
+    Resuelve el tenant_id real consultando la tabla professionals mediante el UUID del current_user.
+    Garantiza aislamiento total: nunca se usa tenant_id del JWT sin validar contra BD.
+    - Si el usuario es professional: tenant_id de su fila en professionals.
+    - Si es CEO/secretary (sin fila en professionals): primera clínica (tenants ORDER BY id LIMIT 1).
+    """
+    try:
+        tid = await db.pool.fetchval(
+            "SELECT tenant_id FROM professionals WHERE user_id = $1",
+            uuid.UUID(user_data.user_id)
+        )
+        if tid is not None:
+            return int(tid)
+    except (ValueError, TypeError):
+        pass
+    # CEO/secretary: no tienen fila en professionals, usar primera clínica
+    first = await db.pool.fetchval("SELECT id FROM tenants ORDER BY id ASC LIMIT 1")
+    return int(first) if first is not None else 1
+
+
+async def get_allowed_tenant_ids(user_data=Depends(verify_admin_token)) -> List[int]:
+    """
+    Lista de tenant_id que el usuario puede ver (chats, sesiones).
+    CEO: todos los tenants. Secretary/Professional: solo su clínica resuelta.
+    """
+    if user_data.role == "ceo":
+        rows = await db.pool.fetch("SELECT id FROM tenants ORDER BY id ASC")
+        return [int(r["id"]) for r in rows]
+    try:
+        tid = await db.pool.fetchval(
+            "SELECT tenant_id FROM professionals WHERE user_id = $1",
+            uuid.UUID(user_data.user_id),
+        )
+        if tid is not None:
+            return [int(tid)]
+    except (ValueError, TypeError):
+        pass
+    first = await db.pool.fetchval("SELECT id FROM tenants ORDER BY id ASC LIMIT 1")
+    return [int(first)] if first is not None else [1]
+
+
 @router.get("/patients/phone/{phone}/context")
 async def get_patient_clinical_context(
     phone: str,
-    user_data=Depends(verify_admin_token)
+    tenant_id_override: Optional[int] = None,
+    user_data=Depends(verify_admin_token),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+    allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
 ):
     """
-    Retorna el contexto clínico completo de un paciente por su teléfono:
-    Basic info, última cita, próxima cita y plan de tratamiento.
-    Aislado por tenant_id del usuario logueado.
+    Retorna el contexto clínico completo de un paciente por su teléfono.
+    Si se pasa tenant_id_override (ej. CEO eligió una clínica en Chats), se usa si el usuario tiene acceso.
     """
+    tenant_id = tenant_id_override if (tenant_id_override is not None and tenant_id_override in allowed_ids) else resolved_tenant_id
     normalized_phone = normalize_phone(phone)
-    tenant_id = user_data.tenant_id
     
     # 1. Buscar paciente con isolation
     patient = await db.pool.fetchrow("""
         SELECT id, first_name, last_name, phone_number, status, urgency_level, urgency_reason, preferred_schedule
         FROM patients 
         WHERE tenant_id = $1 AND (phone_number = $2 OR phone_number = $3)
+        AND status != 'deleted'
     """, tenant_id, normalized_phone, phone)
     
     if not patient:
@@ -317,120 +390,201 @@ class TreatmentTypeUpdate(BaseModel):
 
 class ChatSendMessage(BaseModel):
     phone: str
+    tenant_id: int
     message: str
 
 class HumanInterventionToggle(BaseModel):
     phone: str
+    tenant_id: int  # Clínica: override/silencio es por (tenant_id, phone), independiente por clínica
     activate: bool
     duration: Optional[int] = 86400000  # 24 horas en ms
 
+
+class ConnectSovereignPayload(BaseModel):
+    """Token de Auth0 para conectar Google Calendar de forma soberana por clínica."""
+    access_token: str  # Token de Auth0 (se guarda cifrado en credentials)
+    tenant_id: Optional[int] = None  # Solo CEO puede especificar; si no, se usa la clínica resuelta
+
 # ==================== ENDPOINTS CHAT MANAGEMENT ====================
 
+@router.get("/chat/tenants", dependencies=[Depends(verify_admin_token)])
+async def get_chat_tenants(allowed_ids: List[int] = Depends(get_allowed_tenant_ids)):
+    """
+    Lista de clínicas que el usuario puede ver en Chats.
+    CEO: todas. Secretary/Professional: una sola (su clínica).
+    Usado por el selector de Clínicas en ChatsView.
+    """
+    if not allowed_ids:
+        return []
+    rows = await db.pool.fetch(
+        "SELECT id, clinic_name FROM tenants WHERE id = ANY($1::int[]) ORDER BY id ASC",
+        allowed_ids,
+    )
+    return [{"id": r["id"], "clinic_name": r["clinic_name"]} for r in rows]
+
+
 @router.get("/chat/sessions", dependencies=[Depends(verify_admin_token)])
-async def get_chat_sessions():
+async def get_chat_sessions(
+    tenant_id: int,
+    allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
+):
     """
-    Obtiene todas las sesiones de chat activas con su estado.
-    Devuelve información de paciente, último mensaje, y estado de intervención humana.
+    Sesiones de chat activas para la clínica indicada.
+    El usuario solo ve sesiones cuyo tenant_id coincide con su clínica (o cualquiera si es CEO).
+    Human Override y ventana de 24h son por (tenant_id, phone): independientes por clínica.
     """
-    rows = await db.pool.fetch("""
-        SELECT * FROM (
-            SELECT DISTINCT ON (p.phone_number)
-                p.phone_number,
-                p.id as patient_id,
-                p.first_name || ' ' || COALESCE(p.last_name, '') as patient_name,
-                cm.content as last_message,
-                cm.created_at as last_message_time,
-                p.human_handoff_requested,
-                p.human_override_until,
-                p.last_derivhumano_at,
-                CASE 
-                    WHEN p.human_handoff_requested AND p.human_override_until > NOW() THEN 'human_handling'
-                    WHEN p.human_override_until > NOW() THEN 'silenced'
-                    ELSE 'active'
-                END as status,
-                urgency.urgency_level
-            FROM patients p
-            LEFT JOIN LATERAL (
-                SELECT content, created_at, role
-                FROM chat_messages
-                WHERE from_number = p.phone_number
-                ORDER BY created_at DESC
-                LIMIT 1
-            ) cm ON true
-            LEFT JOIN LATERAL (
-                SELECT urgency_level
-                FROM appointments
-                WHERE patient_id = p.id
-                ORDER BY created_at DESC
-                LIMIT 1
-            ) urgency ON true
-            WHERE EXISTS (
-                SELECT 1 FROM chat_messages 
-                WHERE from_number = p.phone_number
-            )
-            ORDER BY p.phone_number, cm.created_at DESC
-        ) sub
-        ORDER BY last_message_time DESC NULLS LAST
-    """)
-    
+    if tenant_id not in allowed_ids:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta clínica.")
+    # Sesiones = pacientes de esta clínica que tienen al menos un mensaje en esta clínica
+    has_tenant_in_cm = await db.pool.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='chat_messages' AND column_name='tenant_id')"
+    )
+    if not has_tenant_in_cm:
+        # Fallback: DB sin parche 15, filtrar solo por patients.tenant_id (mensajes sin tenant)
+        rows = await db.pool.fetch("""
+            SELECT * FROM (
+                SELECT DISTINCT ON (p.phone_number)
+                    p.phone_number,
+                    p.id as patient_id,
+                    p.first_name || ' ' || COALESCE(p.last_name, '') as patient_name,
+                    cm.content as last_message,
+                    cm.created_at as last_message_time,
+                    p.human_handoff_requested,
+                    p.human_override_until,
+                    p.last_derivhumano_at,
+                    CASE 
+                        WHEN p.human_handoff_requested AND p.human_override_until > NOW() THEN 'human_handling'
+                        WHEN p.human_override_until > NOW() THEN 'silenced'
+                        ELSE 'active'
+                    END as status,
+                    urgency.urgency_level
+                FROM patients p
+                LEFT JOIN LATERAL (
+                    SELECT content, created_at FROM chat_messages
+                    WHERE from_number = p.phone_number
+                    ORDER BY created_at DESC LIMIT 1
+                ) cm ON true
+                LEFT JOIN LATERAL (
+                    SELECT urgency_level FROM appointments
+                    WHERE tenant_id = $1 AND patient_id = p.id
+                    ORDER BY created_at DESC LIMIT 1
+                ) urgency ON true
+                WHERE p.tenant_id = $1
+                AND EXISTS (SELECT 1 FROM chat_messages WHERE from_number = p.phone_number)
+                ORDER BY p.phone_number, cm.created_at DESC
+            ) sub
+            ORDER BY last_message_time DESC NULLS LAST
+        """, tenant_id)
+    else:
+        rows = await db.pool.fetch("""
+            SELECT * FROM (
+                SELECT DISTINCT ON (p.phone_number)
+                    p.phone_number,
+                    p.id as patient_id,
+                    p.first_name || ' ' || COALESCE(p.last_name, '') as patient_name,
+                    cm.content as last_message,
+                    cm.created_at as last_message_time,
+                    p.human_handoff_requested,
+                    p.human_override_until,
+                    p.last_derivhumano_at,
+                    CASE 
+                        WHEN p.human_handoff_requested AND p.human_override_until > NOW() THEN 'human_handling'
+                        WHEN p.human_override_until > NOW() THEN 'silenced'
+                        ELSE 'active'
+                    END as status,
+                    urgency.urgency_level
+                FROM patients p
+                LEFT JOIN LATERAL (
+                    SELECT content, created_at FROM chat_messages
+                    WHERE tenant_id = $1 AND from_number = p.phone_number
+                    ORDER BY created_at DESC LIMIT 1
+                ) cm ON true
+                LEFT JOIN LATERAL (
+                    SELECT urgency_level FROM appointments
+                    WHERE tenant_id = $1 AND patient_id = p.id
+                    ORDER BY created_at DESC LIMIT 1
+                ) urgency ON true
+                WHERE p.tenant_id = $1
+                AND EXISTS (SELECT 1 FROM chat_messages WHERE tenant_id = $1 AND from_number = p.phone_number)
+                ORDER BY p.phone_number, cm.created_at DESC
+            ) sub
+            ORDER BY last_message_time DESC NULLS LAST
+        """, tenant_id)
     sessions = []
     for row in rows:
-        # Calcular mensajes no leídos
-        unread = await db.pool.fetchval("""
-            SELECT COUNT(*) 
-            FROM chat_messages 
-            WHERE from_number = $1 
-            AND role = 'user' 
+        unread_sql = """
+            SELECT COUNT(*) FROM chat_messages
+            WHERE from_number = $1 AND role = 'user'
             AND created_at > COALESCE(
-                (SELECT created_at FROM chat_messages 
-                 WHERE from_number = $1 AND role = 'assistant' 
+                (SELECT created_at FROM chat_messages
+                 WHERE from_number = $1 AND role = 'assistant'
+                 """ + (" AND tenant_id = $2" if has_tenant_in_cm else "") + """
                  ORDER BY created_at DESC LIMIT 1),
                 '1970-01-01'::timestamptz
             )
-        """, row['phone_number'])
-
-        # Calcular si la ventana de 24hs está abierta (último mensaje del USUARIO)
-        last_user_msg = await db.pool.fetchval("""
-            SELECT created_at FROM chat_messages 
-            WHERE from_number = $1 AND role = 'user' 
+            """ + (" AND tenant_id = $2" if has_tenant_in_cm else "")
+        unread_params = [row["phone_number"]] + ([tenant_id] if has_tenant_in_cm else [])
+        unread = await db.pool.fetchval(unread_sql, *unread_params)
+        last_user_sql = """
+            SELECT created_at FROM chat_messages
+            WHERE from_number = $1 AND role = 'user'
+            """ + (" AND tenant_id = $2" if has_tenant_in_cm else "") + """
             ORDER BY created_at DESC LIMIT 1
-        """, row['phone_number'])
-        
+        """
+        last_user_params = [row["phone_number"]] + ([tenant_id] if has_tenant_in_cm else [])
+        last_user_msg = await db.pool.fetchval(last_user_sql, *last_user_params)
         is_window_open = False
         if last_user_msg:
-            # Normalize naive stored dates to ARG_TZ if they come back naive, 
-            # or just use aware now with original tz
             now_localized = datetime.now(last_user_msg.tzinfo if last_user_msg.tzinfo else ARG_TZ)
             is_window_open = (now_localized - last_user_msg) < timedelta(hours=24)
-        
         sessions.append({
-            "phone_number": row['phone_number'],
-            "patient_id": row['patient_id'],
-            "patient_name": row['patient_name'],
-            "last_message": row['last_message'] or "",
-            "last_message_time": row['last_message_time'].isoformat() if row['last_message_time'] else None,
+            "phone_number": row["phone_number"],
+            "patient_id": row["patient_id"],
+            "patient_name": row["patient_name"],
+            "tenant_id": tenant_id,
+            "last_message": row["last_message"] or "",
+            "last_message_time": row["last_message_time"].isoformat() if row["last_message_time"] else None,
             "unread_count": unread or 0,
-            "status": row['status'],
-            "human_override_until": row['human_override_until'].isoformat() if row['human_override_until'] else None,
-            "urgency_level": row['urgency_level'],
-            "last_derivhumano_at": row['last_derivhumano_at'].isoformat() if row['last_derivhumano_at'] else None,
+            "status": row["status"],
+            "human_override_until": row["human_override_until"].isoformat() if row["human_override_until"] else None,
+            "urgency_level": row["urgency_level"],
+            "last_derivhumano_at": row["last_derivhumano_at"].isoformat() if row["last_derivhumano_at"] else None,
             "is_window_open": is_window_open,
-            "last_user_message_time": last_user_msg.isoformat() if last_user_msg else None
+            "last_user_message_time": last_user_msg.isoformat() if last_user_msg else None,
         })
-    
     return sessions
 
 
 @router.get("/chat/messages/{phone}", dependencies=[Depends(verify_admin_token)])
-async def get_chat_messages(phone: str, limit: int = 50, offset: int = 0):
-    """Obtiene el historial de mensajes para un número de teléfono específico con paginación."""
-    rows = await db.pool.fetch("""
-        SELECT id, from_number, role, content, created_at, correlation_id
-        FROM chat_messages
-        WHERE from_number = $1
-        ORDER BY created_at DESC
-        LIMIT $2 OFFSET $3
-    """, phone, limit, offset)
+async def get_chat_messages(
+    phone: str,
+    tenant_id: int,
+    limit: int = 50,
+    offset: int = 0,
+    allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
+):
+    """Historial de mensajes para un número en la clínica indicada. Aislado por tenant_id."""
+    if tenant_id not in allowed_ids:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta clínica.")
+    has_tenant = await db.pool.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='chat_messages' AND column_name='tenant_id')"
+    )
+    if has_tenant:
+        rows = await db.pool.fetch("""
+            SELECT id, from_number, role, content, created_at, correlation_id
+            FROM chat_messages
+            WHERE from_number = $1 AND tenant_id = $2
+            ORDER BY created_at DESC
+            LIMIT $3 OFFSET $4
+        """, phone, tenant_id, limit, offset)
+    else:
+        rows = await db.pool.fetch("""
+            SELECT id, from_number, role, content, created_at, correlation_id
+            FROM chat_messages
+            WHERE from_number = $1
+            ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
+        """, phone, limit, offset)
     
     # Invertir para que lleguen en orden cronológico al frontend
     rows = sorted(rows, key=lambda x: x['created_at'])
@@ -452,87 +606,92 @@ async def get_chat_messages(phone: str, limit: int = 50, offset: int = 0):
     return messages
 
 
+@router.put("/chat/sessions/{phone}/read", dependencies=[Depends(verify_admin_token)])
+async def mark_chat_session_read(
+    phone: str,
+    tenant_id: int,
+    allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
+):
+    """Marca la conversación (tenant_id, phone) como leída. Por clínica."""
+    if tenant_id not in allowed_ids:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta clínica.")
+    # Estado de "leído" es solo en frontend; el backend puede persistirlo más adelante si se desea
+    return {"status": "ok", "phone": phone, "tenant_id": tenant_id}
 
 
 @router.post("/chat/human-intervention", dependencies=[Depends(verify_admin_token)])
-async def toggle_human_intervention(payload: HumanInterventionToggle, request: Request):
+async def toggle_human_intervention(
+    payload: HumanInterventionToggle,
+    request: Request,
+    allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
+):
     """
-    Activa o desactiva la intervención humana para un chat específico.
-    Cuando está activo, la IA permanece silenciada por la duración especificada.
+    Activa o desactiva la intervención humana para un chat (tenant_id + phone).
+    Independiente por clínica: intervención en Clínica A no afecta Clínica B.
     """
+    if payload.tenant_id not in allowed_ids:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta clínica.")
     if payload.activate:
-        # Activar intervención humana
         override_until = datetime.now(ARG_TZ) + timedelta(milliseconds=payload.duration)
-        
         await db.pool.execute("""
-            UPDATE patients 
+            UPDATE patients
             SET human_handoff_requested = TRUE,
                 human_override_until = $1,
                 last_derivhumano_at = NULL,
                 updated_at = NOW()
-            WHERE phone_number = $2
-        """, override_until, payload.phone)
-        
-        logger.info(f"👤 Intervención humana activada para {payload.phone} hasta {override_until}")
-        
-        # Notificar vía Socket
-        await emit_appointment_event('HUMAN_OVERRIDE_CHANGED', {
-            'phone_number': payload.phone,
-            'enabled': True,
-            'until': override_until.isoformat()
+            WHERE tenant_id = $2 AND phone_number = $3
+        """, override_until, payload.tenant_id, payload.phone)
+        logger.info(f"👤 Intervención humana activada para {payload.phone} (tenant={payload.tenant_id}) hasta {override_until}")
+        await emit_appointment_event("HUMAN_OVERRIDE_CHANGED", {
+            "phone_number": payload.phone,
+            "tenant_id": payload.tenant_id,
+            "enabled": True,
+            "until": override_until.isoformat(),
         }, request)
-        
-        return {
-            "status": "activated",
-            "phone": payload.phone,
-            "until": override_until.isoformat()
-        }
+        return {"status": "activated", "phone": payload.phone, "tenant_id": payload.tenant_id, "until": override_until.isoformat()}
     else:
-        # Desactivar intervención humana
         await db.pool.execute("""
-            UPDATE patients 
+            UPDATE patients
             SET human_handoff_requested = FALSE,
                 human_override_until = NULL,
                 updated_at = NOW()
-            WHERE phone_number = $1
-        """, payload.phone)
-        
-        logger.info(f"🤖 IA reactivada para {payload.phone}")
-        
-        # Notificar vía Socket
-        await emit_appointment_event('HUMAN_OVERRIDE_CHANGED', {
-            'phone_number': payload.phone,
-            'enabled': False
+            WHERE tenant_id = $1 AND phone_number = $2
+        """, payload.tenant_id, payload.phone)
+        logger.info(f"🤖 IA reactivada para {payload.phone} (tenant={payload.tenant_id})")
+        await emit_appointment_event("HUMAN_OVERRIDE_CHANGED", {
+            "phone_number": payload.phone,
+            "tenant_id": payload.tenant_id,
+            "enabled": False,
         }, request)
-        
-        return {
-            "status": "deactivated",
-            "phone": payload.phone
-        }
+        return {"status": "deactivated", "phone": payload.phone, "tenant_id": payload.tenant_id}
 
 
 @router.post("/chat/remove-silence", dependencies=[Depends(verify_admin_token)])
-async def remove_silence(payload: dict, request: Request):
-    """Remueve el silencio de la IA para un número específico."""
+async def remove_silence(
+    payload: dict,
+    request: Request,
+    allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
+):
+    """Remueve el silencio de la IA para (tenant_id, phone). Por clínica."""
     phone = payload.get("phone")
-    if not phone:
-        raise HTTPException(status_code=400, detail="Phone number required")
-    
+    tenant_id = payload.get("tenant_id")
+    if not phone or tenant_id is None:
+        raise HTTPException(status_code=400, detail="phone y tenant_id requeridos")
+    if tenant_id not in allowed_ids:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta clínica.")
     await db.pool.execute("""
-        UPDATE patients 
+        UPDATE patients
         SET human_handoff_requested = FALSE,
             human_override_until = NULL,
             updated_at = NOW()
-        WHERE phone_number = $1
-    """, phone)
-    
-    # Notificar vía Socket
-    await emit_appointment_event('HUMAN_OVERRIDE_CHANGED', {
-        'phone_number': phone,
-        'enabled': False
+        WHERE tenant_id = $1 AND phone_number = $2
+    """, tenant_id, phone)
+    await emit_appointment_event("HUMAN_OVERRIDE_CHANGED", {
+        "phone_number": phone,
+        "tenant_id": tenant_id,
+        "enabled": False,
     }, request)
-    
-    return {"status": "removed", "phone": phone}
+    return {"status": "removed", "phone": phone, "tenant_id": tenant_id}
 
 
 @router.get("/internal/credentials/{name}")
@@ -557,47 +716,56 @@ async def get_internal_credential(name: str, x_internal_token: str = Header(None
 
 
 @router.post("/chat/send", dependencies=[Depends(verify_admin_token)])
-async def send_chat_message(payload: ChatSendMessage, request: Request, background_tasks: BackgroundTasks):
-    """Envía un mensaje manual por WhatsApp y lo guarda en BD."""
+async def send_chat_message(
+    payload: ChatSendMessage,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
+):
+    """Envía un mensaje manual por WhatsApp; guarda en BD con tenant_id. Ventana 24h por clínica."""
+    if payload.tenant_id not in allowed_ids:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta clínica.")
     try:
-        # 0. Verificar ventana de 24hs (WhatsApp Policy)
-        last_user_msg = await db.pool.fetchval("""
-            SELECT created_at FROM chat_messages 
-            WHERE from_number = $1 AND role = 'user' 
-            ORDER BY created_at DESC LIMIT 1
-        """, payload.phone)
-        
+        has_tenant = await db.pool.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='chat_messages' AND column_name='tenant_id')"
+        )
+        if has_tenant:
+            last_user_msg = await db.pool.fetchval("""
+                SELECT created_at FROM chat_messages
+                WHERE from_number = $1 AND role = 'user' AND tenant_id = $2
+                ORDER BY created_at DESC LIMIT 1
+            """, payload.phone, payload.tenant_id)
+        else:
+            last_user_msg = await db.pool.fetchval("""
+                SELECT created_at FROM chat_messages
+                WHERE from_number = $1 AND role = 'user'
+                ORDER BY created_at DESC LIMIT 1
+            """, payload.phone)
         if not last_user_msg:
-             raise HTTPException(status_code=403, detail="No se puede enviar un mensaje si el usuario nunca ha escrito.")
-             
+            raise HTTPException(status_code=403, detail="No se puede enviar un mensaje si el usuario nunca ha escrito.")
         now_localized = datetime.now(last_user_msg.tzinfo if last_user_msg.tzinfo else ARG_TZ)
-        diff = now_localized - last_user_msg
-        if diff > timedelta(hours=24):
-             raise HTTPException(status_code=403, detail="La ventana de 24hs de WhatsApp ha expirado. El paciente debe escribir primero.")
-
-        # 1. Guardar en Base de Datos
+        if (now_localized - last_user_msg) > timedelta(hours=24):
+            raise HTTPException(status_code=403, detail="La ventana de 24hs de WhatsApp ha expirado. El paciente debe escribir primero.")
         correlation_id = str(uuid.uuid4())
         await db.append_chat_message(
             from_number=payload.phone,
-            role='assistant',
+            role="assistant",
             content=payload.message,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
+            tenant_id=payload.tenant_id,
         )
-        
-        # 2. Notificar al Frontend vía Socket
-        if hasattr(request.app.state, 'emit_appointment_event'):
-            await request.app.state.emit_appointment_event('NEW_MESSAGE', {
-                'phone_number': payload.phone,
-                'message': payload.message,
-                'role': 'assistant'
+        if hasattr(request.app.state, "emit_appointment_event"):
+            await request.app.state.emit_appointment_event("NEW_MESSAGE", {
+                "phone_number": payload.phone,
+                "tenant_id": payload.tenant_id,
+                "message": payload.message,
+                "role": "assistant",
             })
-
-        # 3. Enviar a WhatsApp Service (Segundo plano para evitar latencia)
         business_number = os.getenv("YCLOUD_Phone_Number_ID") or os.getenv("BOT_PHONE_NUMBER") or "default"
         background_tasks.add_task(send_to_whatsapp_task, payload.phone, payload.message, business_number)
-            
         return {"status": "sent", "correlation_id": correlation_id}
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error sending manual message: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -606,12 +774,14 @@ async def send_chat_message(payload: ChatSendMessage, request: Request, backgrou
 # ==================== ENDPOINTS DASHBOARD ====================
 
 @router.get("/stats/summary")
-async def get_dashboard_stats(range: str = 'weekly', user_data=Depends(verify_admin_token)):
-    """Devuelve métricas avanzadas filtradas por rango temporal (weekly/monthly)."""
+async def get_dashboard_stats(
+    range: str = 'weekly',
+    user_data=Depends(verify_admin_token),
+    tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """Devuelve métricas avanzadas filtradas por rango temporal. Aislado por tenant_id (Regla de Oro)."""
     try:
         days = 7 if range == 'weekly' else 30
-        
-        tenant_id = user_data.tenant_id
         
         # 1. IA Conversations (Hilos únicos de pacientes en el rango seleccionado)
         ia_conversations = await db.pool.fetchval("""
@@ -678,20 +848,83 @@ async def get_dashboard_stats(range: str = 'weekly', user_data=Depends(verify_ad
             "total_revenue": float(total_revenue),
             "growth_data": growth_data
         }
+
+# --- CLÍNICAS (TENANTS) - CEO ONLY ---
+# Tratamos "Tenant" como "Clínica". config (JSONB) incluye calendar_provider: 'local' | 'google'.
+
+@router.get("/tenants")
+async def get_tenants(user_data=Depends(verify_admin_token)):
+    """Lista todas las clínicas (tenants). Solo CEO. Incluye config (JSONB) con calendar_provider."""
+    if user_data.role != 'ceo':
+        raise HTTPException(status_code=403, detail="Solo el CEO puede gestionar clínicas.")
+    rows = await db.pool.fetch(
+        "SELECT id, clinic_name, bot_phone_number, config, created_at, updated_at FROM tenants ORDER BY id ASC"
+    )
+    return [dict(r) for r in rows]
+
+@router.post("/tenants")
+async def create_tenant(data: Dict[str, Any], user_data=Depends(verify_admin_token)):
+    """Crea una nueva clínica. config.calendar_provider obligatorio: 'local' o 'google'."""
+    if user_data.role != 'ceo':
+        raise HTTPException(status_code=403, detail="Solo el CEO puede gestionar clínicas.")
+    calendar_provider = (data.get("calendar_provider") or data.get("config", {}).get("calendar_provider") or "local").lower()
+    if calendar_provider not in ("local", "google"):
+        calendar_provider = "local"
+    config_json = json.dumps({"calendar_provider": calendar_provider})
+    query = """
+    INSERT INTO tenants (clinic_name, bot_phone_number, config, created_at)
+    VALUES ($1, $2, $3::jsonb, NOW())
+    RETURNING id
+    """
+    try:
+        new_id = await db.pool.fetchval(
+            query,
+            data.get("clinic_name"),
+            data.get("bot_phone_number"),
+            config_json,
+        )
+        return {"id": new_id, "status": "created"}
     except Exception as e:
-        logger.error(f"Error generating dashboard stats: {e}")
-        # Retornar objeto vacío compatible para evitar crash en frontend
-        return {
-            "ia_conversations": 0,
-            "ia_appointments": 0,
-            "active_urgencies": 0,
-            "total_revenue": 0,
-            "growth_data": []
-        }
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.put("/tenants/{tenant_id}")
+async def update_tenant(tenant_id: int, data: Dict[str, Any], user_data=Depends(verify_admin_token)):
+    """Actualiza datos de una clínica. Incluye config.calendar_provider si se envía."""
+    if user_data.role != 'ceo':
+        raise HTTPException(status_code=403, detail="Solo el CEO puede gestionar clínicas.")
+    updates = []
+    params = []
+    if "clinic_name" in data and data["clinic_name"] is not None:
+        params.append(data["clinic_name"])
+        updates.append(f"clinic_name = ${len(params)}")
+    if "bot_phone_number" in data and data["bot_phone_number"] is not None:
+        params.append(data["bot_phone_number"])
+        updates.append(f"bot_phone_number = ${len(params)}")
+    if "calendar_provider" in data and data["calendar_provider"] is not None:
+        cp = str(data["calendar_provider"]).lower() if data["calendar_provider"] else "local"
+        if cp not in ("local", "google"):
+            cp = "local"
+        params.append(cp)
+        updates.append(f"config = COALESCE(config, '{{}}')::jsonb || jsonb_build_object('calendar_provider', ${len(params)}::text)")
+    if not updates:
+        return {"status": "updated"}
+    params.append(tenant_id)
+    updates.append("updated_at = NOW()")
+    query = f"UPDATE tenants SET {', '.join(updates)} WHERE id = ${len(params)}"
+    await db.pool.execute(query, *params)
+    return {"status": "updated"}
+
+@router.delete("/tenants/{tenant_id}")
+async def delete_tenant(tenant_id: int, user_data=Depends(verify_admin_token)):
+    """Elimina una clínica. Solo CEO."""
+    if user_data.role != 'ceo':
+        raise HTTPException(status_code=403, detail="Solo el CEO puede gestionar clínicas.")
+    await db.pool.execute("DELETE FROM tenants WHERE id = $1", tenant_id)
+    return {"status": "deleted"}
 
 @router.get("/chat/urgencies", dependencies=[Depends(verify_admin_token)])
-async def get_recent_urgencies(limit: int = 10):
-    """Retorna los últimos casos de urgencia detectados para la tabla del dashboard."""
+async def get_recent_urgencies(limit: int = 10, tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Retorna los últimos casos de urgencia. Aislado por tenant_id (Regla de Oro)."""
     try:
         rows = await db.pool.fetch("""
             SELECT 
@@ -703,10 +936,10 @@ async def get_recent_urgencies(limit: int = 10):
                 a.appointment_datetime as timestamp
             FROM appointments a
             JOIN patients p ON a.patient_id = p.id
-            WHERE a.urgency_level IN ('high', 'emergency')
+            WHERE a.tenant_id = $1 AND a.urgency_level IN ('high', 'emergency')
             ORDER BY a.created_at DESC
-            LIMIT $1
-        """, limit)
+            LIMIT $2
+        """, tenant_id, limit)
         
         return [
             {
@@ -893,26 +1126,27 @@ async def get_patient_insurance_status(patient_id: int):
 # ==================== ENDPOINTS PACIENTES ====================
 
 @router.get("/patients", dependencies=[Depends(verify_admin_token)])
-async def list_patients(search: str = None, limit: int = 50):
-    """Listar pacientes con búsqueda por nombre o DNI."""
+async def list_patients(
+    search: str = None,
+    limit: int = 50,
+    tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """Listar pacientes del tenant. Aislado por tenant_id (Regla de Oro)."""
     query = """
         SELECT id, first_name, last_name, phone_number, email, insurance_provider as obra_social, dni, created_at, status 
         FROM patients 
-        WHERE status = 'active'
+        WHERE tenant_id = $1 AND status != 'deleted'
     """
-    params = []
-    
+    params = [tenant_id]
     if search:
-        query += " AND (first_name ILIKE $1 OR last_name ILIKE $1 OR phone_number ILIKE $1 OR dni ILIKE $1)"
+        query += " AND (first_name ILIKE $2 OR last_name ILIKE $2 OR phone_number ILIKE $2 OR dni ILIKE $2)"
         params.append(f"%{search}%")
+        query += " ORDER BY created_at DESC LIMIT $3"
+        params.append(limit)
+    else:
         query += " ORDER BY created_at DESC LIMIT $2"
         params.append(limit)
-        rows = await db.pool.fetch(query, *params)
-    else:
-        query += " ORDER BY created_at DESC LIMIT $1"
-        params.append(limit)
-        rows = await db.pool.fetch(query, *params)
-        
+    rows = await db.pool.fetch(query, *params)
     return [dict(row) for row in rows]
 
 @router.post("/professionals", dependencies=[Depends(verify_admin_token)])
@@ -992,72 +1226,88 @@ async def update_professional(id: int, payload: ProfessionalUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/patients/{id}", dependencies=[Depends(verify_admin_token)])
-async def get_patient(id: int):
-    """Obtener un paciente por ID."""
+async def get_patient(id: int, tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Obtener un paciente por ID. Aislado por tenant_id (Regla de Oro)."""
     row = await db.pool.fetchrow("""
         SELECT id, first_name, last_name, phone_number, email, insurance_provider as obra_social, dni, birth_date, created_at, status, notes
         FROM patients 
-        WHERE id = $1
-    """, id)
-    
+        WHERE id = $1 AND tenant_id = $2
+    """, id, tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
-        
     return dict(row)
 
 @router.put("/patients/{id}", dependencies=[Depends(verify_admin_token)])
-async def update_patient(id: int, p: PatientCreate):
-    """Actualizar datos de un paciente."""
+async def update_patient(id: int, p: PatientCreate, tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Actualizar datos de un paciente. Aislado por tenant_id (Regla de Oro)."""
     try:
-        await db.pool.execute("""
+        result = await db.pool.execute("""
             UPDATE patients SET
                 first_name = $1, last_name = $2, phone_number = $3, 
                 email = $4, dni = $5, insurance_provider = $6,
                 updated_at = NOW()
-            WHERE id = $7
-        """, p.first_name, p.last_name, p.phone_number, p.email, p.dni, p.insurance, id)
-        
+            WHERE id = $7 AND tenant_id = $8
+        """, p.first_name, p.last_name, p.phone_number, p.email, p.dni, p.insurance, id, tenant_id)
+        if result == "UPDATE 0":
+            raise HTTPException(status_code=404, detail="Paciente no encontrado")
         return {"id": id, "status": "updated"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error updating patient {id}: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.delete("/patients/{id}", dependencies=[Depends(verify_admin_token)])
-async def delete_patient(id: int):
-    """Marcar paciente como eliminado o desactivado."""
+async def delete_patient(id: int, tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Marcar paciente como eliminado. Aislado por tenant_id (Regla de Oro)."""
     try:
-        # Por seguridad podemos hacer soft-delete
-        await db.pool.execute("UPDATE patients SET status = 'deleted', updated_at = NOW() WHERE id = $1", id)
+        result = await db.pool.execute(
+            "UPDATE patients SET status = 'deleted', updated_at = NOW() WHERE id = $1 AND tenant_id = $2",
+            id, tenant_id,
+        )
+        if result == "UPDATE 0":
+            raise HTTPException(status_code=404, detail="Paciente no encontrado")
         return {"status": "deleted", "id": id}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error deleting patient {id}: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/patients/{id}/records", dependencies=[Depends(verify_admin_token)])
-async def get_clinical_records(id: int):
-    """Obtener historia clínica de un paciente."""
+async def get_clinical_records(id: int, tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Obtener historia clínica de un paciente. Aislado por tenant_id (Regla de Oro)."""
     rows = await db.pool.fetch("""
-        SELECT id, appointment_id, diagnosis, treatment_plan, created_at 
-        FROM clinical_records 
-        WHERE patient_id = $1 
-        ORDER BY created_at DESC
-    """, id)
+        SELECT cr.id, cr.appointment_id, cr.diagnosis, cr.treatment_plan, cr.created_at 
+        FROM clinical_records cr
+        JOIN patients p ON cr.patient_id = p.id
+        WHERE cr.patient_id = $1 AND p.tenant_id = $2
+        ORDER BY cr.created_at DESC
+    """, id, tenant_id)
     return [dict(row) for row in rows]
 
 @router.post("/patients/{id}/records", dependencies=[Depends(verify_admin_token)])
-async def add_clinical_note(id: int, note: ClinicalNote):
-    """Agregar una evolución/nota a la historia clínica."""
+async def add_clinical_note(id: int, note: ClinicalNote, tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Agregar una evolución/nota a la historia clínica. Aislado por tenant_id (Regla de Oro)."""
+    patient = await db.pool.fetchrow("SELECT id FROM patients WHERE id = $1 AND tenant_id = $2", id, tenant_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
     await db.pool.execute("""
-        INSERT INTO clinical_records (id, patient_id, diagnosis, odontogram, created_at)
-        VALUES ($1, $2, $3, $4, NOW())
-    """, str(uuid.uuid4()), id, note.content, json.dumps(note.odontogram_data) if note.odontogram_data else None)
+        INSERT INTO clinical_records (id, tenant_id, patient_id, diagnosis, odontogram, created_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+    """, str(uuid.uuid4()), tenant_id, id, note.content, json.dumps(note.odontogram_data) if note.odontogram_data else '{}')
     return {"status": "ok"}
 
 # ==================== ENDPOINTS TURNOS (AGENDA) ====================
 
 @router.get("/appointments", dependencies=[Depends(verify_admin_token)])
-async def list_appointments(start_date: str, end_date: str, professional_id: Optional[int] = None):
-    """Obtener turnos para el calendario con filtro opcional por profesional."""
+async def list_appointments(
+    start_date: str,
+    end_date: str,
+    professional_id: Optional[int] = None,
+    tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """Obtener turnos del calendario. Aislado por tenant_id (Regla de Oro)."""
     query = """
         SELECT a.id, a.appointment_datetime, a.duration_minutes, a.status, a.urgency_level,
                a.source, a.appointment_type, a.notes,
@@ -1067,16 +1317,13 @@ async def list_appointments(start_date: str, end_date: str, professional_id: Opt
         FROM appointments a
         JOIN patients p ON a.patient_id = p.id
         LEFT JOIN professionals prof ON a.professional_id = prof.id
-        WHERE a.appointment_datetime BETWEEN $1 AND $2
+        WHERE a.tenant_id = $1 AND a.appointment_datetime BETWEEN $2 AND $3
     """
-    params = [datetime.fromisoformat(start_date), datetime.fromisoformat(end_date)]
-    
+    params = [tenant_id, datetime.fromisoformat(start_date), datetime.fromisoformat(end_date)]
     if professional_id:
         query += f" AND a.professional_id = ${len(params) + 1}"
         params.append(professional_id)
-        
     query += " ORDER BY a.appointment_datetime ASC"
-    
     rows = await db.pool.fetch(query, *params)
     return [dict(row) for row in rows]
 
@@ -1088,37 +1335,32 @@ async def check_collisions(
     professional_id: int,
     datetime_str: str,
     duration_minutes: int = 60,
-    exclude_appointment_id: str = None
+    exclude_appointment_id: str = None,
+    tenant_id: int = Depends(get_resolved_tenant_id),
 ):
-    """Verificar si hay colisiones de horario para un profesional."""
+    """Verificar colisiones de horario. Aislado por tenant_id (Regla de Oro)."""
     target_datetime = datetime.fromisoformat(datetime_str)
     target_end = target_datetime + timedelta(minutes=duration_minutes)
-    
-    # Query para buscar turnos que se solapan
     overlap_query = """
         SELECT id, appointment_datetime, duration_minutes, status, source
         FROM appointments
-        WHERE professional_id = $1
+        WHERE tenant_id = $1 AND professional_id = $2
         AND status NOT IN ('cancelled', 'no-show')
-        AND appointment_datetime < $3
-        AND appointment_datetime + (duration_minutes || ' minutes')::interval > $2
+        AND appointment_datetime < $4
+        AND appointment_datetime + (duration_minutes || ' minutes')::interval > $3
     """
-    params = [professional_id, target_datetime, target_end]
-    
+    params = [tenant_id, professional_id, target_datetime, target_end]
     if exclude_appointment_id:
-        overlap_query += " AND id != $4"
+        overlap_query += " AND id != $5"
         params.append(exclude_appointment_id)
-    
     overlapping = await db.pool.fetch(overlap_query, *params)
-    
-    # Verificar también bloques de GCalendar
     gcal_blocks = await db.pool.fetch("""
         SELECT id, title, start_datetime, end_datetime
         FROM google_calendar_blocks
-        WHERE (professional_id = $1 OR professional_id IS NULL)
-        AND start_datetime < $3
-        AND end_datetime > $2
-    """, professional_id, target_datetime, target_end)
+        WHERE tenant_id = $1 AND (professional_id = $2 OR professional_id IS NULL)
+        AND start_datetime < $4
+        AND end_datetime > $3
+    """, tenant_id, professional_id, target_datetime, target_end)
     
     has_collisions = len(overlapping) > 0 or len(gcal_blocks) > 0
     
@@ -1129,17 +1371,20 @@ async def check_collisions(
     }
 
 @router.post("/appointments", dependencies=[Depends(verify_admin_token)])
-async def create_appointment_manual(apt: AppointmentCreate, request: Request):
-    """Agendar turno manualmente desde el admin."""
-    
+async def create_appointment_manual(
+    apt: AppointmentCreate,
+    request: Request,
+    tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """Agendar turno manualmente. Aislado por tenant_id (Regla de Oro)."""
     try:
-        # 0. Verificar colisiones si está habilitado
         if apt.check_collisions:
             collision_response = await check_collisions(
                 apt.professional_id,
                 apt.appointment_datetime.isoformat(),
                 60,
-                None
+                None,
+                tenant_id=tenant_id,
             )
             if collision_response["has_collisions"]:
                 conflicts = []
@@ -1152,41 +1397,36 @@ async def create_appointment_manual(apt: AppointmentCreate, request: Request):
                     detail=f"Hay colisiones de horario: {'; '.join(conflicts)}"
                 )
         
-        # 1. Validar que professional_id existe
+        # 1. Validar que professional_id existe y pertenece al tenant
         prof_exists = await db.pool.fetchval(
-            "SELECT id FROM professionals WHERE id = $1 AND is_active = true",
-            apt.professional_id
+            "SELECT id FROM professionals WHERE id = $1 AND tenant_id = $2 AND is_active = true",
+            apt.professional_id, tenant_id,
         )
         if not prof_exists:
             raise HTTPException(status_code=400, detail="Profesional inválido o inactivo")
         
-        # 2. Resolver patient_id
+        # 2. Resolver patient_id (solo dentro del tenant)
         pid = apt.patient_id
         if not pid and apt.patient_phone:
-            # Buscar por teléfono
-            exist = await db.pool.fetchrow("SELECT id FROM patients WHERE phone_number = $1", apt.patient_phone)
+            exist = await db.pool.fetchrow(
+                "SELECT id FROM patients WHERE tenant_id = $1 AND phone_number = $2",
+                tenant_id, apt.patient_phone,
+            )
             if exist:
                 pid = exist['id']
             else:
-                # Crear paciente temporal
                 new_p = await db.pool.fetchrow(
-                    "INSERT INTO patients (phone_number, first_name, created_at) VALUES ($1, $2, NOW()) RETURNING id",
-                    apt.patient_phone,
-                    "Paciente Manual"
+                    "INSERT INTO patients (tenant_id, phone_number, first_name, created_at) VALUES ($1, $2, $3, NOW()) RETURNING id",
+                    tenant_id, apt.patient_phone, "Paciente Manual",
                 )
                 pid = new_p['id']
-        
         if not pid:
             raise HTTPException(status_code=400, detail="Se requiere ID de paciente o teléfono válido.")
-        
-        # 3. Validar que patient_id existe
-        patient_exists = await db.pool.fetchval("SELECT id FROM patients WHERE id = $1", pid)
+        patient_exists = await db.pool.fetchval("SELECT id FROM patients WHERE id = $1 AND tenant_id = $2", pid, tenant_id)
         if not patient_exists:
             raise HTTPException(status_code=400, detail="Paciente no encontrado")
-        
         # 4. Crear turno (source='manual')
         new_id = str(uuid.uuid4())
-        tenant_id = 1 # Por defecto v1.0
         await db.pool.execute("""
             INSERT INTO appointments (
                 id, tenant_id, patient_id, professional_id, appointment_datetime, 
@@ -1458,66 +1698,45 @@ class NextSlotsResponse(BaseModel):
 @router.get("/appointments/next-slots", response_model=List[NextSlotsResponse], dependencies=[Depends(verify_admin_token)])
 async def get_next_available_slots(
     days_ahead: int = 3,
-    slot_duration_minutes: int = 20
+    slot_duration_minutes: int = 20,
+    tenant_id: int = Depends(get_resolved_tenant_id),
 ):
     """
-    Obtiene los próximos huecos disponibles para urgencias (triaje de 15-20 minutos).
-    
-    Busca gaps en la agenda de los próximos N días considerando:
-    - Turnos existentes
-    - Bloques de Google Calendar
-    - Horario laboral: 9:00 a 18:00
-    
-    Returns:
-        Lista de los próximos 3-5 huecos disponibles
+    Próximos huecos disponibles para urgencias. Aislado por tenant_id (Regla de Oro).
     """
-    import random
-    
-    # Obtener profesionales activos
     professionals = await db.pool.fetch("""
         SELECT id, first_name, last_name 
         FROM professionals 
-        WHERE is_active = true
-    """)
-    
+        WHERE tenant_id = $1 AND is_active = true
+    """, tenant_id)
     if not professionals:
         return []
-    
     available_slots: List[Dict[str, Any]] = []
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    
     for day_offset in range(days_ahead + 1):
         current_date = today + timedelta(days=day_offset)
-        
-        # Skip weekends
         if current_date.weekday() >= 5:
             continue
-            
         day_start = current_date.replace(hour=9, minute=0, second=0, microsecond=0)
         day_end = current_date.replace(hour=18, minute=0, second=0, microsecond=0)
-        
         for prof in professionals:
             prof_id = prof['id']
             prof_name = f"{prof['first_name']} {prof.get('last_name', '')}".strip()
-            
-            # Obtener turnos del día para este profesional
             appointments = await db.pool.fetch("""
                 SELECT appointment_datetime, duration_minutes
                 FROM appointments
-                WHERE professional_id = $1
-                AND DATE(appointment_datetime) = $2
+                WHERE tenant_id = $1 AND professional_id = $2
+                AND DATE(appointment_datetime) = $3
                 AND status NOT IN ('cancelled', 'no-show')
                 ORDER BY appointment_datetime ASC
-            """, prof_id, current_date.date())
-            
-            # Obtener bloques de GCalendar del día
+            """, tenant_id, prof_id, current_date.date())
             gcal_blocks = await db.pool.fetch("""
                 SELECT start_datetime, end_datetime
                 FROM google_calendar_blocks
-                WHERE (professional_id = $1 OR professional_id IS NULL)
-                AND DATE(start_datetime) = $2
+                WHERE tenant_id = $1 AND (professional_id = $2 OR professional_id IS NULL)
+                AND DATE(start_datetime) = $3
                 ORDER BY start_datetime ASC
-            """, prof_id, current_date.date())
+            """, tenant_id, prof_id, current_date.date())
             
             # Crear lista de busy periods (turnos + bloques)
             busy_periods = []
@@ -1575,33 +1794,104 @@ async def get_next_available_slots(
 # ==================== ENDPOINTS PROFESIONALES ====================
 
 @router.get("/professionals", dependencies=[Depends(verify_admin_token)])
-async def list_professionals():
-    rows = await db.pool.fetch("SELECT id, first_name, last_name, specialization, is_active FROM professionals")
+async def list_professionals(tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Lista profesionales de la clínica. Aislado por tenant_id (Regla de Oro)."""
+    rows = await db.pool.fetch(
+        "SELECT id, first_name, last_name, specialty, is_active FROM professionals WHERE tenant_id = $1",
+        tenant_id,
+    )
     return [dict(row) for row in rows]
 
 # ==================== ENDPOINTS GOOGLE CALENDAR ====================
 
+@router.post("/calendar/connect-sovereign", dependencies=[Depends(verify_admin_token)])
+async def connect_sovereign_calendar(
+    payload: ConnectSovereignPayload,
+    user_data=Depends(verify_admin_token),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+    allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
+):
+    """
+    Guarda el token de Auth0 cifrado (Fernet) en credentials para la clínica
+    y cambia calendar_provider a 'google'. Preparación para integración Auth0.
+    """
+    tenant_id = payload.tenant_id if (payload.tenant_id is not None and payload.tenant_id in allowed_ids) else resolved_tenant_id
+    if tenant_id not in allowed_ids:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta clínica.")
+    encrypted = _encrypt_credential(payload.access_token)
+    if not encrypted:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Cifrado no configurado. Definí CREDENTIALS_FERNET_KEY en el entorno.",
+        )
+    try:
+        existing = await db.pool.fetchrow(
+            """
+            SELECT id FROM credentials
+            WHERE tenant_id = $1 AND category = 'google_calendar' AND name = 'access_token'
+            LIMIT 1
+            """,
+            tenant_id,
+        )
+        if existing:
+            await db.pool.execute(
+                """
+                UPDATE credentials SET value = $1
+                WHERE tenant_id = $2 AND category = 'google_calendar' AND name = 'access_token'
+                """,
+                encrypted,
+                tenant_id,
+            )
+        else:
+            await db.pool.execute(
+                """
+                INSERT INTO credentials (name, value, category, scope, tenant_id, description)
+                VALUES ('access_token', $1, 'google_calendar', 'tenant', $2, 'Auth0/Google Calendar token (encrypted)')
+                """,
+                encrypted,
+                tenant_id,
+            )
+        await db.pool.execute(
+            """
+            UPDATE tenants
+            SET config = COALESCE(config, '{}')::jsonb || jsonb_build_object('calendar_provider', 'google'),
+                updated_at = NOW()
+            WHERE id = $1
+            """,
+            tenant_id,
+        )
+        logger.info(f"Calendar connect-sovereign: tenant_id={tenant_id}, calendar_provider=google")
+        return {"status": "connected", "tenant_id": tenant_id, "calendar_provider": "google"}
+    except Exception as e:
+        logger.error(f"connect-sovereign failed: {e}")
+        raise HTTPException(status_code=500, detail="Error al guardar el token o actualizar la clínica.")
+
+
 @router.get("/calendar/blocks", dependencies=[Depends(verify_admin_token)])
-@router.get("/calendar/blocks", dependencies=[Depends(verify_admin_token)])
-async def get_calendar_blocks(start_date: str, end_date: str, professional_id: Optional[int] = None):
-    """Obtener bloques de Google Calendar para el período con filtro por profesional."""
+async def get_calendar_blocks(
+    start_date: str,
+    end_date: str,
+    professional_id: Optional[int] = None,
+    tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """Obtener bloques de calendario. Aislado por tenant_id (Regla de Oro)."""
     try:
         query = """
             SELECT id, google_event_id, title, description,
                    start_datetime, end_datetime, all_day,
                    professional_id, sync_status
             FROM google_calendar_blocks
-            WHERE start_datetime < $2 AND end_datetime > $1
+            WHERE tenant_id = $1 AND start_datetime < $3 AND end_datetime > $2
         """
-        params = [datetime.fromisoformat(start_date.replace('Z', '+00:00')), 
-                  datetime.fromisoformat(end_date.replace('Z', '+00:00'))]
-        
+        params = [
+            tenant_id,
+            datetime.fromisoformat(start_date.replace('Z', '+00:00')),
+            datetime.fromisoformat(end_date.replace('Z', '+00:00')),
+        ]
         if professional_id:
-            query += " AND professional_id = $3"
+            query += " AND professional_id = $4"
             params.append(professional_id)
-            
         query += " ORDER BY start_datetime ASC"
-        
         rows = await db.pool.fetch(query, *params)
         return [dict(row) for row in rows]
     except Exception as e:
@@ -1610,54 +1900,53 @@ async def get_calendar_blocks(start_date: str, end_date: str, professional_id: O
 
 
 @router.post("/calendar/blocks", dependencies=[Depends(verify_admin_token)])
-async def create_calendar_block(block: GCalendarBlockCreate):
-    """Crear un bloque de calendario (simulado para desarrollo)."""
+async def create_calendar_block(
+    block: GCalendarBlockCreate,
+    tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """Crear un bloque de calendario. Aislado por tenant_id (Regla de Oro)."""
     try:
         new_id = str(uuid.uuid4())
         await db.pool.execute("""
             INSERT INTO google_calendar_blocks (
-                id, google_event_id, title, description,
+                id, tenant_id, google_event_id, title, description,
                 start_datetime, end_datetime, all_day, professional_id, sync_status, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'synced', NOW())
-        """, new_id, block.google_event_id, block.title, block.description,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'synced', NOW())
+        """, new_id, tenant_id, block.google_event_id, block.title, block.description,
              block.start_datetime, block.end_datetime, block.all_day, block.professional_id)
-        
         return {"id": new_id, "status": "created"}
     except Exception as e:
-        # Si la tabla no existe, retornar success simulado
         return {"id": str(uuid.uuid4()), "status": "simulated", "message": str(e)}
 
 
 @router.delete("/calendar/blocks/{block_id}", dependencies=[Depends(verify_admin_token)])
-async def delete_calendar_block(block_id: str):
-    """Eliminar un bloque de Google Calendar."""
-    await db.pool.execute("DELETE FROM google_calendar_blocks WHERE id = $1", block_id)
+async def delete_calendar_block(block_id: str, tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Eliminar un bloque de calendario. Aislado por tenant_id (Regla de Oro)."""
+    await db.pool.execute("DELETE FROM google_calendar_blocks WHERE id = $1 AND tenant_id = $2", block_id, tenant_id)
     return {"status": "deleted"}
 
 
 @router.post("/sync/calendar", dependencies=[Depends(verify_admin_token)])
 @router.post("/calendar/sync", dependencies=[Depends(verify_admin_token)])
-async def trigger_sync():
+async def trigger_sync(tenant_id: int = Depends(get_resolved_tenant_id)):
     """
-    Sincronización REAL con Google Calendar para todos los profesionales activos.
-    Trae eventos de GCal que NO son appointments y los guarda como bloqueos.
+    Sincronización con Google Calendar para profesionales activos del tenant.
+    Aislado por tenant_id (Regla de Oro).
     """
     try:
-        # 0. Obtener tenant_id
-        tenant_id = await db.pool.fetchval("SELECT id FROM tenants LIMIT 1") or 1
-
-        # 1. Obtener todos los profesionales con calendario configurado
         professionals = await db.pool.fetch("""
             SELECT id, first_name, google_calendar_id 
             FROM professionals 
-            WHERE is_active = true AND google_calendar_id IS NOT NULL
-        """)
+            WHERE tenant_id = $1 AND is_active = true AND google_calendar_id IS NOT NULL
+        """, tenant_id)
 
         if not professionals:
             return {"status": "warning", "message": "No hay profesionales con calendario configurado."}
 
-        # 2. Obtener IDs de eventos que son APPOINTMENTS para no duplicarlos como "bloqueo"
-        appointment_google_ids = await db.pool.fetch("SELECT google_calendar_event_id FROM appointments WHERE google_calendar_event_id IS NOT NULL")
+        appointment_google_ids = await db.pool.fetch(
+            "SELECT google_calendar_event_id FROM appointments WHERE tenant_id = $1 AND google_calendar_event_id IS NOT NULL",
+            tenant_id,
+        )
         apt_ids_set = {row['google_calendar_event_id'] for row in appointment_google_ids}
 
         total_created = 0
@@ -1746,13 +2035,12 @@ async def trigger_sync():
         }
 # --- Función Helper de Entorno (Legacy support) ---
 async def sync_environment():
-    """Crea el tenant default si no existe (Necesario para que arranque main.py)."""
-    # Esta función es llamada por main.py en el startup
+    """Crea la clínica por defecto si no existe (startup main.py)."""
     exists = await db.pool.fetchval("SELECT id FROM tenants LIMIT 1")
     if not exists:
         await db.pool.execute("""
-            INSERT INTO tenants (store_name, bot_phone_number) 
-            VALUES ('Clínica Dental', '5491100000000')
+            INSERT INTO tenants (clinic_name, bot_phone_number, config)
+            VALUES ('Clínica Dental', '5491100000000', '{"calendar_provider": "local"}'::jsonb)
         """)
 # ==================== ENDPOINTS TRATAMIENTOS ====================
 
@@ -1772,40 +2060,39 @@ class TreatmentTypeUpdate(BaseModel):
 
 
 @router.get("/treatment-types", dependencies=[Depends(verify_admin_token)])
-async def list_treatment_types():
-    """Listar tipos de tratamiento con sus duraciones."""
+async def list_treatment_types(tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Listar tipos de tratamiento de la clínica. Aislado por tenant_id (Regla de Oro)."""
     rows = await db.pool.fetch("""
         SELECT id, code, name, description, default_duration_minutes,
                min_duration_minutes, max_duration_minutes, complexity_level,
                category, requires_multiple_sessions, session_gap_days,
                is_active, is_available_for_booking, internal_notes
         FROM treatment_types
+        WHERE tenant_id = $1
         ORDER BY category, name
-    """)
+    """, tenant_id)
     return [dict(row) for row in rows]
 
 
 @router.get("/treatment-types/{code}", dependencies=[Depends(verify_admin_token)])
-async def get_treatment_type(code: str):
-    """Obtener un tipo de tratamiento específico."""
+async def get_treatment_type(code: str, tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Obtener un tipo de tratamiento. Aislado por tenant_id (Regla de Oro)."""
     row = await db.pool.fetchrow("""
         SELECT id, code, name, description, default_duration_minutes,
                min_duration_minutes, max_duration_minutes, complexity_level,
                category, requires_multiple_sessions, session_gap_days,
                is_active, is_available_for_booking, internal_notes
         FROM treatment_types
-        WHERE code = $1
-    """, code)
-    
+        WHERE tenant_id = $1 AND code = $2
+    """, tenant_id, code)
     if not row:
         raise HTTPException(status_code=404, detail="Tipo de tratamiento no encontrado")
-    
     return dict(row)
 
 
 @router.post("/treatment-types", dependencies=[Depends(verify_admin_token)])
-async def create_treatment_type(treatment: TreatmentTypeCreate):
-    """Crear un nuevo tipo de tratamiento."""
+async def create_treatment_type(treatment: TreatmentTypeCreate, tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Crear un nuevo tipo de tratamiento. Aislado por tenant_id (Regla de Oro)."""
     try:
         await db.pool.execute("""
             INSERT INTO treatment_types (
@@ -1813,13 +2100,12 @@ async def create_treatment_type(treatment: TreatmentTypeCreate):
                 min_duration_minutes, max_duration_minutes, complexity_level,
                 category, requires_multiple_sessions, session_gap_days,
                 is_active, is_available_for_booking, internal_notes, created_at
-            ) VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
-        """, treatment.code, treatment.name, treatment.description, treatment.default_duration_minutes,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+        """, tenant_id, treatment.code, treatment.name, treatment.description, treatment.default_duration_minutes,
             treatment.min_duration_minutes, treatment.max_duration_minutes,
             treatment.complexity_level, treatment.category, treatment.requires_multiple_sessions,
             treatment.session_gap_days, treatment.is_active, treatment.is_available_for_booking,
             treatment.internal_notes)
-        
         return {"status": "created", "code": treatment.code}
     except asyncpg.UniqueViolationError:
         raise HTTPException(status_code=400, detail=f"El código de tratamiento '{treatment.code}' ya existe.")
@@ -1829,55 +2115,47 @@ async def create_treatment_type(treatment: TreatmentTypeCreate):
 
 
 @router.put("/treatment-types/{code}", dependencies=[Depends(verify_admin_token)])
-async def update_treatment_type(code: str, treatment: TreatmentTypeUpdate):
-    """Actualizar configuración de un tipo de tratamiento."""
+async def update_treatment_type(code: str, treatment: TreatmentTypeUpdate, tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Actualizar tipo de tratamiento. Aislado por tenant_id (Regla de Oro)."""
     result = await db.pool.execute("""
         UPDATE treatment_types SET
-            name = $1,
-            description = $2,
-            default_duration_minutes = $3,
-            min_duration_minutes = $4,
-            max_duration_minutes = $5,
-            complexity_level = $6,
-            category = $7,
-            requires_multiple_sessions = $8,
-            session_gap_days = $9,
-            is_active = $10,
-            is_available_for_booking = $11,
-            internal_notes = $12,
-            updated_at = NOW()
-        WHERE code = $13
+            name = $1, description = $2, default_duration_minutes = $3,
+            min_duration_minutes = $4, max_duration_minutes = $5,
+            complexity_level = $6, category = $7, requires_multiple_sessions = $8,
+            session_gap_days = $9, is_active = $10, is_available_for_booking = $11,
+            internal_notes = $12, updated_at = NOW()
+        WHERE tenant_id = $13 AND code = $14
     """, treatment.name, treatment.description, treatment.default_duration_minutes,
         treatment.min_duration_minutes, treatment.max_duration_minutes,
         treatment.complexity_level, treatment.category, treatment.requires_multiple_sessions,
         treatment.session_gap_days, treatment.is_active, treatment.is_available_for_booking,
-        treatment.internal_notes, code)
-    
+        treatment.internal_notes, tenant_id, code)
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Tipo de tratamiento no encontrado")
-    
     return {"status": "updated", "code": code}
 
 
 @router.delete("/treatment-types/{code}", dependencies=[Depends(verify_admin_token)])
-async def delete_treatment_type(code: str):
-    """Eliminar (o desactivar) un tipo de tratamiento."""
-    # En lugar de borrar físicamente (que podría romper integridad con citas pasadas),
-    # verificamos si tiene citas. Si no tiene, borramos. Si tiene, desactivamos.
-    has_appointments = await db.pool.fetchval("SELECT EXISTS(SELECT 1 FROM appointments WHERE appointment_type = $1)", code)
-    
+async def delete_treatment_type(code: str, tenant_id: int = Depends(get_resolved_tenant_id)):
+    """Eliminar o desactivar tipo de tratamiento. Aislado por tenant_id (Regla de Oro)."""
+    has_appointments = await db.pool.fetchval(
+        "SELECT EXISTS(SELECT 1 FROM appointments WHERE tenant_id = $1 AND appointment_type = $2)",
+        tenant_id, code,
+    )
     if has_appointments:
-        await db.pool.execute("UPDATE treatment_types SET is_active = false, is_available_for_booking = false WHERE code = $1", code)
+        await db.pool.execute(
+            "UPDATE treatment_types SET is_active = false, is_available_for_booking = false WHERE tenant_id = $1 AND code = $2",
+            tenant_id, code,
+        )
         return {"status": "deactivated", "code": code, "message": "Tratamiento desactivado por tener citas asociadas."}
-    else:
-        result = await db.pool.execute("DELETE FROM treatment_types WHERE code = $1", code)
-        if result == "DELETE 0":
-            raise HTTPException(status_code=404, detail="Tipo de tratamiento no encontrado")
-        return {"status": "deleted", "code": code}
+    result = await db.pool.execute("DELETE FROM treatment_types WHERE tenant_id = $1 AND code = $2", tenant_id, code)
+    if result == "DELETE 0":
+        raise HTTPException(status_code=404, detail="Tipo de tratamiento no encontrado")
+    return {"status": "deleted", "code": code}
 
 
 @router.get("/treatment-types/{code}/duration", dependencies=[Depends(verify_admin_token)])
-async def get_treatment_duration(code: str, urgency_level: str = "normal"):
+async def get_treatment_duration(code: str, urgency_level: str = "normal", tenant_id: int = Depends(get_resolved_tenant_id)):
     """
     Obtener duración calculada para un tratamiento según urgencia.
     
@@ -1891,8 +2169,8 @@ async def get_treatment_duration(code: str, urgency_level: str = "normal"):
     row = await db.pool.fetchrow("""
         SELECT default_duration_minutes, min_duration_minutes, max_duration_minutes
         FROM treatment_types
-        WHERE code = $1 AND is_active = TRUE AND is_available_for_booking = TRUE
-    """, code)
+        WHERE tenant_id = $1 AND code = $2 AND is_active = TRUE AND is_available_for_booking = TRUE
+    """, tenant_id, code)
     
     if not row:
         # Return default duration if treatment not found
@@ -1933,7 +2211,8 @@ async def get_treatment_duration(code: str, urgency_level: str = "normal"):
 async def get_professionals_analytics(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    user_data = Depends(verify_admin_token)
+    user_data=Depends(verify_admin_token),
+    tenant_id: int = Depends(get_resolved_tenant_id),
 ):
     """
     Retorna métricas estratégicas de los profesionales para el dashboard del CEO.
@@ -1952,7 +2231,7 @@ async def get_professionals_analytics(
             start = datetime.fromisoformat(start_date)
             end = datetime.fromisoformat(end_date)
             
-        data = await analytics_service.get_professionals_summary(start, end)
+        data = await analytics_service.get_professionals_summary(start, end, tenant_id=tenant_id)
         return data
         
     except Exception as e:

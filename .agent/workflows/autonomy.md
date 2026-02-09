@@ -17,6 +17,7 @@ El Motor de Autonomía transforma solicitudes vagas en software funcional siguie
 2. **Confidence Gatekeeper**: El umbral de confianza técnica es la frontera entre planear y ejecutar.
 3. **Sovereign Architecture**: Multi-tenancy (`tenant_id`) y Scroll Isolation (`min-h-0`) son requisitos no negociables.
 4. **Non-Destructive Evolution**: Toda modificación preserva la lógica existente mediante fusión, nunca reemplazo.
+5. **SQL Execution Restriction**: NO ejecutar comandos SQL (`psql`) directamente en el entorno local. Proporcionar los comandos al usuario y que él devuelva el resultado.
 
 ---
 

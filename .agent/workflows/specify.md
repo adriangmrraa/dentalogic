@@ -13,3 +13,5 @@ Transforma requerimientos vagos en una especificación técnica rigurosa.
     - Estructura: Objetivos, Esquema de Datos, Lógica "Gala", Criterios de Aceptación.
 3.  **Soberanía de Datos**:
     - Validar que se cumplan las reglas de aislamiento multi-tenant.
+4.  **REGLA DE ORO DE EJECUCIÓN**:
+    - NO ejecutar comandos SQL (`psql`) directamente. Proporcionar el comando al usuario y esperar sus resultados.

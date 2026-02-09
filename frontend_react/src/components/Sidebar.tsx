@@ -36,6 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
     { id: 'chats', label: 'Conversaciones', icon: <MessageSquare size={20} />, path: '/chats', roles: ['ceo', 'professional', 'secretary'] },
     { id: 'approvals', label: 'Personal', icon: <ShieldCheck size={20} />, path: '/aprobaciones', roles: ['ceo'] },
     { id: 'professionals', label: 'Profesionales', icon: <Stethoscope size={20} />, path: '/profesionales', roles: ['ceo', 'secretary'] },
+    { id: 'tenants', label: 'Sedes (Clínicas)', icon: <ShieldCheck size={20} />, path: '/sedes', roles: ['ceo'] },
     { id: 'analytics', label: 'Estrategia', icon: <BarChart3 size={20} />, path: '/analytics/professionals', roles: ['ceo'] },
     { id: 'treatments', label: 'Tratamientos', icon: <Clock size={20} />, path: '/tratamientos', roles: ['ceo', 'secretary'] },
     { id: 'profile', label: 'Mi Perfil', icon: <User size={20} />, path: '/perfil', roles: ['ceo', 'professional', 'secretary'] },

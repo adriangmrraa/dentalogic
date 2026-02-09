@@ -55,6 +55,9 @@ Este proyecto se configura completamente mediante variables de entorno. En despl
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Duración del token de sesión | `43200` (30 días) | `30` |
 | `PLATFORM_URL` | URL del frontend (para links de activación) | `https://ui.clinic.com` | `http://localhost:3000` |
 | `CORS_ALLOWED_ORIGINS` | Origins CORS permitidos (comma-separated) | `http://localhost:3000,https://domain.com` | `*` |
+| `CREDENTIALS_FERNET_KEY` | Clave Fernet (base64) para cifrar tokens en `credentials` (ej. Auth0 en connect-sovereign) | Salida de `Fernet.generate_key().decode()` | ✅ (si se usa connect-sovereign) |
+
+**Generar clave Fernet:** En la raíz del proyecto, con Python en el PATH: `py -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` (Windows). En Linux/macOS: `python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Guardar la salida en `CREDENTIALS_FERNET_KEY`.
 
 ## 3. WhatsApp Service (8002)
 
@@ -87,6 +90,8 @@ JWT_SECRET_KEY=mi-llave-maestra-dental
 PLATFORM_URL=https://dentalogic-frontend.ugwrjq.easypanel.host
 ACCESS_TOKEN_EXPIRE_MINUTES=43200
 ADMIN_TOKEN=admin-dev-token
+# Opcional: para POST /admin/calendar/connect-sovereign (token Auth0 cifrado)
+# CREDENTIALS_FERNET_KEY=<generar con: py -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())">
 
 # --- Orchestrator ---
 STORE_NAME=Dentalogic
