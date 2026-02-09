@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
+import { useTranslation } from '../context/LanguageContext';
 import {
     UserCheck, UserX, Clock, ShieldCheck, Mail,
     AlertTriangle, User, Users, Lock, Unlock, X, Building2, Stethoscope, BarChart3, MessageSquare, Plus, Phone, Save, Settings, ChevronDown, ChevronUp, Edit
@@ -83,6 +84,7 @@ interface ProfessionalRow {
 }
 
 const UserApprovalView: React.FC = () => {
+    const { t } = useTranslation();
     const [users, setUsers] = useState<StaffUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -363,7 +365,7 @@ const UserApprovalView: React.FC = () => {
     // pero aquí mostramos todos menos el rol 'ceo' para evitar auto-bloqueo accidental)
     const staff = users.filter(u => u.status !== 'pending' && u.role !== 'ceo');
 
-    if (loading) return <div className="p-6">Cargando personal de clínica...</div>;
+    if (loading) return <div className="p-6">{t('approvals.loading_staff')}</div>;
 
     return (
         <div className="view active p-6">
@@ -371,9 +373,9 @@ const UserApprovalView: React.FC = () => {
                 <div>
                     <h1 className="view-title flex items-center gap-3">
                         <ShieldCheck color="var(--accent)" />
-                        Gestión de Usuarios y Personal
+                        {t('approvals.page_title')}
                     </h1>
-                    <p className="text-secondary">Administre los accesos y el personal de la clínica.</p>
+                    <p className="text-secondary">{t('approvals.page_subtitle')}</p>
                 </div>
             </div>
 
@@ -387,7 +389,7 @@ const UserApprovalView: React.FC = () => {
                         }`}
                 >
                     <div className="flex items-center gap-2">
-                        Solicitudes
+                        {t('approvals.requests')}
                         {requests.length > 0 && (
                             <span className="bg-danger text-white text-[10px] px-1.5 py-0.5 rounded-full shadow-sm">
                                 {requests.length}
@@ -408,7 +410,7 @@ const UserApprovalView: React.FC = () => {
                             : 'text-gray-500 hover:text-medical-700'
                         }`}
                 >
-                    Personal Activo
+                    {t('approvals.staff')}
                     {activeTab === 'staff' && (
                         <>
                             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-medical-600" />
@@ -429,8 +431,8 @@ const UserApprovalView: React.FC = () => {
                         requests.length === 0 ? (
                             <div className="glass p-12 text-center">
                                 <Clock size={48} className="mx-auto mb-4 opacity-50" />
-                                <h3 className="text-xl font-medium mb-2">No hay solicitudes pendientes</h3>
-                                <p className="text-secondary">Todas las solicitudes han sido procesadas.</p>
+                                <h3 className="text-xl font-medium mb-2">{t('approvals.no_requests')}</h3>
+                                <p className="text-secondary">{t('approvals.no_requests_processed')}</p>
                             </div>
                         ) : (
                             requests.map(user => (
@@ -441,8 +443,8 @@ const UserApprovalView: React.FC = () => {
                         staff.length === 0 ? (
                             <div className="glass p-12 text-center">
                                 <Users size={48} className="mx-auto mb-4 opacity-50" />
-                                <h3 className="text-xl font-medium mb-2">No hay personal registrado</h3>
-                                <p className="text-secondary">Registe profesionales o secretarias para verlos aquí.</p>
+                                <h3 className="text-xl font-medium mb-2">{t('approvals.no_staff')}</h3>
+                                <p className="text-secondary">{t('approvals.no_staff_register')}</p>
                             </div>
                         ) : (
                             staff.map(user => (
@@ -499,23 +501,23 @@ const UserApprovalView: React.FC = () => {
                                     className="btn-vincular-sede min-h-[44px] touch-manipulation shrink-0"
                                 >
                                     <Plus size={18} />
-                                    {professionalRows.length > 0 ? 'Vincular a otra sede' : 'Vincular a sede'}
+                                    {professionalRows.length > 0 ? t('approvals.link_to_another_sede') : t('approvals.link_to_sede')}
                                 </button>
                             </div>
 
                             {showLinkForm && (
                                 <form onSubmit={handleLinkToSedeSubmit} className="glass p-4 sm:p-5 rounded-xl space-y-4">
-                                    <h3 className="text-sm font-semibold text-gray-800">Crear perfil en una sede</h3>
+                                    <h3 className="text-sm font-semibold text-gray-800">{t('approvals.create_profile_sede')}</h3>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Sede / Clínica</label>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">{t('approvals.choose_clinic')}</label>
                                             <select
                                                 value={linkFormData.tenant_id ?? ''}
                                                 onChange={(e) => setLinkFormData((p) => ({ ...p, tenant_id: e.target.value ? parseInt(e.target.value, 10) : null }))}
                                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                                                 required
                                             >
-                                                <option value="">Elegir sede</option>
+                                                <option value="">{t('approvals.choose_clinic')}</option>
                                                 {clinics.map((c) => (
                                                     <option key={c.id} value={c.id}>{c.clinic_name}</option>
                                                 ))}

@@ -26,6 +26,8 @@ Maneja la integración con YCloud y la IA de audio (Whisper).
 - **AuthContext:** Gestiona el estado de sesión y rol del usuario.
 - **Registro:** LoginView pide **Sede/Clínica** (GET `/auth/clinics`), especialidad (dropdown), teléfono y matrícula para professional/secretary; POST `/auth/register` con `tenant_id` y datos de profesional crea fila en `professionals` pendiente de aprobación.
 - **Chats por clínica:** ChatsView usa GET `/admin/chat/tenants` y GET `/admin/chat/sessions?tenant_id=`. Selector de Clínicas para CEO (varias clínicas); secretaria/profesional ven una sola. Mensajes, human-intervention y remove-silence usan `tenant_id`; override 24h independiente por clínica.
+- **Idioma (i18n):** `LanguageProvider` envuelve la app; idioma por defecto **inglés**. GET/PATCH `/admin/settings/clinic` para `ui_language` (es\|en\|fr) en `tenants.config`. Traducciones en `src/locales/{es,en,fr}.json`; componentes usan `useTranslation()` y `t('clave')`. Al cambiar idioma en Configuración, `setLanguage(value)` se ejecuta primero para efecto inmediato en toda la UI.
+- **Configuración:** Vista real en `/configuracion` (ConfigView) con selector de idioma; solo CEO. El agente de chat es **agnóstico**: el system prompt inyecta el nombre de la clínica (`tenants.clinic_name`) y responde en el idioma detectado del mensaje del lead (es/en/fr).
 
 ---
 
@@ -90,4 +92,4 @@ Maneja la integración con YCloud y la IA de audio (Whisper).
 | **Mobile Adaptation Architect**| *v8.0, DKG* | v8.0: Senior UI/UX Architect. Especialista en Blueprint Universal y Scroll Isolation. |
 
 ---
-*Actualizado: 2026-02-08 - Protocolo Platinum Resilience v7.6 (Cerebro Híbrido, Chats por clínica, connect-sovereign; registro con sede, Personal Activo → modal Editar Perfil/Vincular a sede, parches 12d/12e)*
+*Actualizado: 2026-02-08 - Protocolo Platinum Resilience v7.6 (Cerebro Híbrido, Chats por clínica, connect-sovereign; registro con sede, Personal Activo → modal Editar Perfil/Vincular a sede, parches 12d/12e; i18n es/en/fr, idioma por defecto inglés, agente agnóstico con nombre clínica inyectado y detección idioma del mensaje)*

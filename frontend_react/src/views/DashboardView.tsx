@@ -20,6 +20,7 @@ import {
   Area
 } from 'recharts';
 import api, { BACKEND_URL } from '../api/axios';
+import { useTranslation } from '../context/LanguageContext';
 
 // ============================================
 // INTERFACES & TYPES
@@ -81,7 +82,7 @@ const UrgencyBadge = ({ level }: { level: UrgencyRecord['urgency_level'] }) => {
 // ============================================
 
 export default function DashboardView() {
-  console.log('--- DashboardView Rendering ---');
+  const { t } = useTranslation();
   const [stats, setStats] = useState<AnalyticsStats | null>(null);
   const [urgencies, setUrgencies] = useState<UrgencyRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,8 +142,8 @@ export default function DashboardView() {
       {/* HEADER SECTION */}
       <header className="p-6 shrink-0 bg-white/50 backdrop-blur-sm border-b border-slate-100 flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Dashboard de Analítica Soberana</h1>
-          <p className="text-slate-500 text-sm">Monitoreo en tiempo real de la clínica</p>
+          <h1 className="text-2xl font-bold text-slate-800">{t('dashboard.analytics_title')}</h1>
+          <p className="text-slate-500 text-sm">{t('dashboard.analytics_subtitle')}</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -152,7 +153,7 @@ export default function DashboardView() {
                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
               }`}
           >
-            Semanal
+            {t('dashboard.weekly')}
           </button>
           <button
             onClick={() => setTimeRange('monthly')}
@@ -161,7 +162,7 @@ export default function DashboardView() {
                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
               }`}
           >
-            Mensual
+            {t('dashboard.monthly')}
           </button>
         </div>
       </header>
@@ -172,27 +173,27 @@ export default function DashboardView() {
         {/* TOP ROW: KPI CARDS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard
-            title="Conversaciones IA"
+            title={t('dashboard.conversations')}
             value={stats?.ia_conversations}
             icon={MessageSquare}
             color="bg-blue-500"
             trend="+12%"
           />
           <KPICard
-            title="Citas de IA"
+            title={t('dashboard.ia_appointments')}
             value={stats?.ia_appointments}
             icon={CalendarCheck}
             color="bg-emerald-500"
             trend="+5%"
           />
           <KPICard
-            title="Urgencias"
+            title={t('dashboard.urgencies')}
             value={stats?.active_urgencies}
             icon={Activity}
             color="bg-rose-500"
           />
           <KPICard
-            title="Ingresos"
+            title={t('dashboard.revenue')}
             value={`$${stats?.total_revenue?.toLocaleString()}`}
             icon={DollarSign}
             color="bg-amber-500"
@@ -204,10 +205,10 @@ export default function DashboardView() {
         <div className="grid grid-cols-1 gap-6">
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-slate-800">Eficiencia de IA (Derivaciones vs Concretadas)</h2>
+              <h2 className="text-lg font-semibold text-slate-800">{t('dashboard.chart_title')}</h2>
               <div className="hidden sm:flex gap-4 text-xs font-medium text-slate-500">
-                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500"></div> Derivaciones</span>
-                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Concretadas</span>
+                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500"></div> {t('dashboard.referrals')}</span>
+                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> {t('dashboard.completed')}</span>
               </div>
             </div>
             <div className="h-[300px] w-full">
@@ -241,17 +242,17 @@ export default function DashboardView() {
         {/* BOTTOM ROW: RECENT URGENCIES TABLE */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col mb-4">
           <div className="p-6 border-b border-slate-50 flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-slate-800">Urgencias Recientes (Triage)</h2>
-            <button className="text-blue-600 text-sm font-semibold hover:underline px-3 py-2">Ver todo</button>
+            <h2 className="text-lg font-semibold text-slate-800">{t('dashboard.urgencies_recent')}</h2>
+            <button className="text-blue-600 text-sm font-semibold hover:underline px-3 py-2">{t('dashboard.see_all')}</button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[600px]">
               <thead>
                 <tr className="bg-slate-50/50">
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Paciente</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Motivo</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Gravedad</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Hora</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('dashboard.patient')}</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('dashboard.reason')}</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('dashboard.severity')}</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t('dashboard.time')}</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider"></th>
                 </tr>
               </thead>

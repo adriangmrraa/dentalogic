@@ -57,6 +57,9 @@
     "first_name": "First name",
     "last_name": "Last name",
     "role": "Role",
+    "role_professional": "Dental Professional",
+    "role_secretary": "Secretary / Administration",
+    "role_ceo": "Director / CEO",
     "clinic": "Clinic / Location",
     "clinic_required": "Please select a clinic to register.",
     "specialty": "Specialty",
@@ -67,14 +70,36 @@
     "register_success": "Request submitted. A CEO must approve your account before you can log in.",
     "choose_clinic": "Select clinic",
     "select_role": "Select role",
-    "select_specialty": "Select (optional)"
+    "select_specialty": "Select (optional)",
+    "no_clinics": "No clinics loaded. Contact the administrator.",
+    "processing": "Processing...",
+    "submit_login": "Log in",
+    "submit_register": "Submit request",
+    "have_account": "Already have an account? Log in here",
+    "request_access_link": "No access? Request it now",
+    "placeholder_optional": "Optional",
+    "placeholder_calendar": "Optional. Configurable later in profile."
   },
   "dashboard": {
     "title": "Dashboard",
     "urgencies": "Urgencies",
     "conversations": "IA Conversations",
     "appointments": "Appointments",
-    "revenue": "Revenue"
+    "revenue": "Revenue",
+    "analytics_title": "Sovereign Analytics Dashboard",
+    "analytics_subtitle": "Real-time clinic monitoring",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "ia_appointments": "IA Appointments",
+    "chart_title": "IA Efficiency (Referrals vs Completed)",
+    "referrals": "Referrals",
+    "completed": "Completed",
+    "urgencies_recent": "Recent Urgencies (Triage)",
+    "see_all": "See all",
+    "patient": "Patient",
+    "reason": "Reason",
+    "severity": "Severity",
+    "time": "Time"
   },
   "agenda": {
     "title": "Agenda",
@@ -83,12 +108,18 @@
   },
   "patients": {
     "title": "Patients",
-    "new_patient": "New patient"
+    "new_patient": "New patient",
+    "search_placeholder": "Search by name, ID or phone...",
+    "search_semantic": "Search by symptoms (AI)..."
   },
   "chats": {
     "title": "Conversations",
     "select_clinic": "Select clinic",
-    "no_sessions": "No conversations"
+    "no_sessions": "No conversations",
+    "search_placeholder": "Search by name or phone...",
+    "mute_sound": "Mute notifications",
+    "enable_sound": "Enable sound",
+    "clinic_label": "Clinic"
   },
   "approvals": {
     "title": "Staff",
@@ -96,10 +127,34 @@
     "staff": "Active staff",
     "approve": "Approve",
     "reject": "Reject",
-    "suspend": "Suspend access"
+    "suspend": "Suspend access",
+    "page_title": "User and Staff Management",
+    "page_subtitle": "Manage access and clinic staff.",
+    "no_requests": "No pending requests",
+    "no_requests_processed": "All requests have been processed.",
+    "no_staff": "No staff registered",
+    "no_staff_register": "Register professionals or secretaries to see them here.",
+    "loading_staff": "Loading clinic staff...",
+    "close": "Close",
+    "link_to_sede": "Link to location",
+    "link_to_another_sede": "Link to another location",
+    "create_profile_sede": "Create profile at a location",
+    "choose_clinic": "Choose location",
+    "phone": "Phone",
+    "specialty": "Specialty",
+    "license_number": "License number",
+    "member_since": "Member since",
+    "remove_schedule": "Remove",
+    "add_schedule": "Add schedule",
+    "error_process": "Error processing request.",
+    "error_load_pro": "Could not load professional data.",
+    "error_save": "Error saving.",
+    "select_sede": "Please select a location.",
+    "error_link_sede": "Error linking to location."
   },
   "clinics": {
     "title": "Clinics",
+    "subtitle": "Manage clinics and their configuration (calendar, WhatsApp).",
     "new_clinic": "New clinic",
     "clinic_name": "Clinic name"
   },
@@ -107,7 +162,8 @@
     "title": "Treatments"
   },
   "profile": {
-    "title": "My Profile"
+    "title": "My Profile",
+    "subtitle": "Manage your personal information and clinic settings."
   },
   "layout": {
     "app_title": "Dental System",

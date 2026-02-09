@@ -11,7 +11,7 @@
 | Área        | Estado global | Drift / Riesgos |
 |------------|----------------|------------------|
 | Backend    | ✅ Funcional   | ✅ **Corregido:** rutas `/admin/tenants` ahora usan `verify_admin_token` (antes `get_current_user` no definido). Bloque `except` suelto eliminado. |
-| Frontend   | ✅ Funcional   | ⚠️ Vista Configuración es placeholder. Sedes (ClinicsView) ya puede usar `/admin/tenants` correctamente. |
+| Frontend   | ✅ Funcional   | ✅ Vista Configuración (ConfigView) con selector de idioma (es/en/fr) e i18n en Sidebar, Layout y páginas. Sedes (ClinicsView) usa `/admin/tenants` correctamente. |
 | Base de datos | ✅ Esquema unificado | ✅ Aislamiento por `tenant_id` en tablas críticas. |
 | Lógica     | ✅ Coherente  | Soberanía (tenant_id, JWT) aplicada en la mayoría de endpoints. |
 | Specs vs código | Parcial | Algunas specs implementadas; otras (ej. Sovereign Glass) parciales. |
@@ -147,7 +147,8 @@
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | GET | `/admin/config/deployment` | Config de despliegue. |
-| GET | `/admin/settings/clinic` | Configuración de clínica. |
+| GET | `/admin/settings/clinic` | Configuración de clínica (tenant resuelto). Devuelve `name`, `ui_language` (es\|en\|fr, default `en`), `hours_start`, `hours_end`, etc. |
+| PATCH | `/admin/settings/clinic` | Actualizar configuración. **Body:** `{ "ui_language": "es" \| "en" \| "fr" }`. Persiste en `tenants.config.ui_language`. |
 
 #### Interno (header X-Internal-Token)
 
@@ -224,7 +225,7 @@
 | Perfil | ✅ | /auth/profile, PATCH /auth/profile | Edición perfil. |
 | Aprobaciones | ✅ | /admin/users/pending, /admin/users/{id}/status, /admin/professionals, /admin/professionals/by-user/:id, PUT /admin/professionals/:id | Solo CEO. Personal Activo + modal detalle, Vincular a sede, tuerca → Editar Perfil (3 columnas, max-w-6xl). |
 | Sedes (Clinics) | ✅ | /admin/tenants | Corregido: backend usa `verify_admin_token`. |
-| Configuración | ⚠️ | — | Solo placeholder. |
+| Configuración | ✅ | GET/PATCH /admin/settings/clinic | ConfigView: selector idioma (es/en/fr), i18n aplicado. |
 
 ---
 
@@ -281,6 +282,8 @@
 | Treatments optimization | docs/19_treatments_optimization.spec.md | Implementado | treatment_types CRUD y duración por urgencia. |
 | Professionals CEO control / Personal Activo | docs/22_professionals_ceo_control_vision.spec.md | Implementado | Personal Activo como fuente de verdad; modal detalle, Vincular a sede, tuerca → Editar Perfil; GET by-user; CEO ve profesionales de todas sus sedes. |
 | Registro con sede y datos profesional | docs/23_registro_con_sede_y_datos_profesional.spec.md | Implementado | GET /auth/clinics, POST /auth/register con tenant_id y datos pro; formulario registro con selector sede y especialidad. |
+| Modal datos profesional (acordeón) | docs/24_modal_datos_profesional_acordeon.spec.md | Implementado | Modal detalle grande con acordeón (Sus pacientes, Uso plataforma, Mensajes); GET /admin/professionals/:id/analytics; optimizado móvil (bottom sheet). |
+| Idioma plataforma y agente | docs/25_idioma_plataforma_y_agente.spec.md | Implementado | Selector idioma en Configuración (es/en/fr); i18n (LanguageContext, locales, t()); agente agnóstico (nombre clínica inyectado) y detección idioma del mensaje; idioma por defecto inglés. |
 | Dashboard Analytics Sovereign | Dashboard_Analytics_Sovereign/docs/specs/ | Módulo aparte | Dashboard_Analytics_Sovereign con vistas CEO/Secretary; no integrado en frontend_react principal. |
 
 ---
@@ -288,7 +291,7 @@
 ## 7. Acciones correctivas recomendadas
 
 1. ~~**Crítico – Rutas tenants:**~~ **HECHO.** Las rutas `/admin/tenants` usan ya `verify_admin_token` y comprueban rol CEO; se eliminó el bloque `except` suelto que seguía a `delete_tenant`.  
-2. **Configuración:** Sustituir el placeholder de `/configuracion` por una vista real (por ejemplo enlace a ajustes de clínica, credenciales o configuración de despliegue) o documentar como “pendiente”.  
+2. ~~**Configuración:**~~ **HECHO.** ConfigView en `/configuracion` con selector de idioma (es/en/fr), GET/PATCH `/admin/settings/clinic`, e i18n (Sidebar, Layout, ConfigView). “pendiente”.  
 3. **Sovereign Glass / Scroll:** Revisar Layout y AgendaView (y vistas con listas largas) para cumplir 100% con Scroll Isolation (h-screen, overflow-hidden, flex-1 min-h-0 overflow-y-auto).  
 4. **Dashboard Analytics Sovereign:** Decidir si el módulo en `Dashboard_Analytics_Sovereign` debe integrarse en la SPA principal (rutas y menú) o permanecer como servicio/vista separado, y documentarlo.  
 5. ~~**Auditoría de sintaxis en admin_routes**~~ **HECHO.** Se eliminó el bloque `except` suelto que estaba después de `delete_tenant`.
@@ -299,7 +302,7 @@
 
 El proyecto está **operativo** en backend (excepto tenants), frontend (excepto Sedes y Configuración), base de datos y lógica de negocio. La soberanía de datos (tenant_id y JWT) está aplicada en la gran mayoría de los endpoints.  
 
-**Drift crítico corregido:** las rutas de tenants usan `verify_admin_token` y la vista Sedes (ClinicsView) funciona. **Actualizaciones recientes (2026-02-08):** Cerebro Híbrido (calendar_provider local/google), Chats por clínica (tenant_id en sesiones/mensajes/override), Maintenance Robot parches 12–15 (tenant_id y chat_messages), POST `/admin/calendar/connect-sovereign` (token Auth0 cifrado Fernet → credentials, calendar_provider → google). Pendiente: alineación con specs (Scroll Isolation, vista Configuración, módulo Analytics Sovereign).
+**Drift crítico corregido:** las rutas de tenants usan `verify_admin_token` y la vista Sedes (ClinicsView) funciona. **Actualizaciones recientes (2026-02-08):** Cerebro Híbrido, Chats por clínica, connect-sovereign; Personal Activo (modal detalle, acordeón con datos reales, GET `/admin/professionals/:id/analytics`); modales (detalle y Editar Perfil) optimizados móvil (bottom sheet, touch targets); **idioma:** ConfigView con selector es/en/fr, GET/PATCH `/admin/settings/clinic` (`ui_language` en `tenants.config`), LanguageContext + locales (es/en/fr), Sidebar/Layout/ConfigView con `t()` para efecto inmediato; agente agnóstico (nombre clínica inyectado, detección idioma del mensaje); idioma por defecto inglés. Pendiente: Scroll Isolation en todas las vistas, módulo Analytics Sovereign.
 
 ---
 
@@ -325,7 +328,21 @@ El proyecto está **operativo** en backend (excepto tenants), frontend (excepto 
 
 - **docs/22_professionals_ceo_control_vision.spec.md:** Visión CEO, Personal Activo como fuente de verdad, modal detalle, Vincular a sede, tuerca → Editar Perfil.
 - **docs/23_registro_con_sede_y_datos_profesional.spec.md:** Registro con sede obligatoria y datos de profesional (especialidad, teléfono, matrícula).
+- **docs/24_modal_datos_profesional_acordeon.spec.md:** Modal detalle con acordeón (Sus pacientes, Uso plataforma, Mensajes) y datos reales vía `/admin/professionals/:id/analytics` y sesiones de chat; layout grande y scroll aislado; optimizado móvil.
+- **docs/25_idioma_plataforma_y_agente.spec.md:** Idioma de la UI (selector en Configuración, es/en/fr, persistido en `tenants.config.ui_language`); i18n con LanguageContext, `frontend_react/src/locales/*.json` y `t()` en componentes; agente con prompt agnóstico (nombre clínica dinámico) y respuesta en el idioma del mensaje del lead.
+
+### 9.4 Modales y móvil
+
+- **Modal detalle del profesional:** Tamaño grande (max-w-6xl, 92dvh), scroll interno; en móvil se muestra como bottom sheet (items-end, rounded-t-3xl). Acordeón con tres secciones que cargan datos reales (métricas por profesional, conversaciones por sede).
+- **Modal Editar Perfil:** Misma estrategia móvil (bottom sheet); botones y controles con min-h 44px y touch-manipulation.
+
+### 9.5 Idioma (i18n y agente)
+
+- **Backend:** `GET /admin/settings/clinic` devuelve `ui_language` (default `en`). `PATCH /admin/settings/clinic` con `{ "ui_language": "es"|"en"|"fr" }` actualiza `tenants.config.ui_language`.
+- **Frontend:** `LanguageProvider` envuelve la app; carga idioma desde API al iniciar (si hay sesión) y desde `localStorage`. `useTranslation()` expone `t(key)`, `language`, `setLanguage`. Al cambiar idioma en ConfigView se llama `setLanguage(value)` primero (efecto inmediato en toda la UI) y luego PATCH para persistir.
+- **Traducciones:** `frontend_react/src/locales/es.json`, `en.json`, `fr.json` con claves nav, common, config, login, layout, etc. Sidebar, Layout y ConfigView usan `t()`; el resto de vistas pueden ir migrando a claves.
+- **Agente:** Prompt construido con `build_system_prompt(clinic_name, ...)`; `clinic_name` desde `tenants.clinic_name`. `detect_message_language(text)` devuelve es/en/fr y se inyecta la instrucción de responder en ese idioma.
 
 ---
 
-*Documento generado por workflow Audit – Dentalogic / Antigravity. Última actualización doc: 2026-02-08. Sección 9 añadida por workflow Update Docs (Non-Destructive Fusion).*
+*Documento generado por workflow Audit – Dentalogic / Antigravity. Última actualización doc: 2026-02-08. Secciones 9–9.5 ampliadas por workflow Update Docs (Non-Destructive Fusion).*

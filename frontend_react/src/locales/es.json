@@ -57,6 +57,9 @@
     "first_name": "Nombre",
     "last_name": "Apellido",
     "role": "Rol",
+    "role_professional": "Profesional Dental",
+    "role_secretary": "Secretaría / Administración",
+    "role_ceo": "Director / CEO",
     "clinic": "Sede / Clínica",
     "clinic_required": "Elegí una sede/clínica para registrarte.",
     "specialty": "Especialidad",
@@ -67,14 +70,36 @@
     "register_success": "Registro solicitado con éxito. Un CEO debe aprobar tu cuenta antes de que puedas ingresar.",
     "choose_clinic": "Elegir sede",
     "select_role": "Seleccionar rol",
-    "select_specialty": "Seleccionar (opcional)"
+    "select_specialty": "Seleccionar (opcional)",
+    "no_clinics": "No hay sedes cargadas. Contactá al administrador.",
+    "processing": "Procesando...",
+    "submit_login": "Ingresar",
+    "submit_register": "Solicitar Registro",
+    "have_account": "¿Ya tienes cuenta? Ingresa aquí",
+    "request_access_link": "¿No tienes acceso? Solicitalo ahora",
+    "placeholder_optional": "Opcional",
+    "placeholder_calendar": "Opcional. Configurable después en perfil."
   },
   "dashboard": {
     "title": "Dashboard",
     "urgencies": "Urgencias",
     "conversations": "Conversaciones IA",
     "appointments": "Turnos",
-    "revenue": "Ingresos"
+    "revenue": "Ingresos",
+    "analytics_title": "Dashboard de Analítica Soberana",
+    "analytics_subtitle": "Monitoreo en tiempo real de la clínica",
+    "weekly": "Semanal",
+    "monthly": "Mensual",
+    "ia_appointments": "Citas de IA",
+    "chart_title": "Eficiencia de IA (Derivaciones vs Concretadas)",
+    "referrals": "Derivaciones",
+    "completed": "Concretadas",
+    "urgencies_recent": "Urgencias Recientes (Triage)",
+    "see_all": "Ver todo",
+    "patient": "Paciente",
+    "reason": "Motivo",
+    "severity": "Gravedad",
+    "time": "Hora"
   },
   "agenda": {
     "title": "Agenda",
@@ -83,12 +108,18 @@
   },
   "patients": {
     "title": "Pacientes",
-    "new_patient": "Nuevo paciente"
+    "new_patient": "Nuevo paciente",
+    "search_placeholder": "Buscar por nombre, DNI o teléfono...",
+    "search_semantic": "Buscar por síntomas (IA)..."
   },
   "chats": {
     "title": "Conversaciones",
     "select_clinic": "Seleccionar clínica",
-    "no_sessions": "Sin conversaciones"
+    "no_sessions": "Sin conversaciones",
+    "search_placeholder": "Buscar por nombre o teléfono...",
+    "mute_sound": "Silenciar notificaciones",
+    "enable_sound": "Activar sonido",
+    "clinic_label": "Clínica"
   },
   "approvals": {
     "title": "Personal",
@@ -96,10 +127,34 @@
     "staff": "Personal Activo",
     "approve": "Aprobar",
     "reject": "Rechazar",
-    "suspend": "Suspender Acceso"
+    "suspend": "Suspender Acceso",
+    "page_title": "Gestión de Usuarios y Personal",
+    "page_subtitle": "Administre los accesos y el personal de la clínica.",
+    "no_requests": "No hay solicitudes pendientes",
+    "no_requests_processed": "Todas las solicitudes han sido procesadas.",
+    "no_staff": "No hay personal registrado",
+    "no_staff_register": "Registe profesionales o secretarias para verlos aquí.",
+    "loading_staff": "Cargando personal de clínica...",
+    "close": "Cerrar",
+    "link_to_sede": "Vincular a sede",
+    "link_to_another_sede": "Vincular a otra sede",
+    "create_profile_sede": "Crear perfil en una sede",
+    "choose_clinic": "Elegir sede",
+    "phone": "Teléfono",
+    "specialty": "Especialidad",
+    "license_number": "Matrícula",
+    "member_since": "Miembro desde",
+    "remove_schedule": "Quitar",
+    "add_schedule": "Agregar horario",
+    "error_process": "Error al procesar la solicitud.",
+    "error_load_pro": "No se pudieron cargar los datos del profesional.",
+    "error_save": "Error al guardar.",
+    "select_sede": "Seleccioná una sede.",
+    "error_link_sede": "Error al vincular a sede."
   },
   "clinics": {
     "title": "Sedes",
+    "subtitle": "Administra las clínicas y su configuración (calendario, WhatsApp).",
     "new_clinic": "Nueva sede",
     "clinic_name": "Nombre de la clínica"
   },
@@ -107,7 +162,8 @@
     "title": "Tratamientos"
   },
   "profile": {
-    "title": "Mi Perfil"
+    "title": "Mi Perfil",
+    "subtitle": "Gestiona tu información personal y configuración clínica."
   },
   "layout": {
     "app_title": "Sistema Dental",

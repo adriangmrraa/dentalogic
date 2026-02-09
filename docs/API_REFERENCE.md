@@ -33,6 +33,29 @@ Crea usuario con `status = 'pending'`. Para roles `professional` y `secretary` e
 
 El backend aplica fallbacks si la tabla `professionals` no tiene columnas `phone_number`, `specialty` o `updated_at` (parches 12d/12e en db.py).
 
+## Configuración de clínica (idioma UI)
+
+### Obtener configuración
+`GET /admin/settings/clinic`
+
+Devuelve la configuración de la clínica del tenant resuelto del usuario (nombre, horarios, **idioma de la UI**). Requiere autenticación admin.
+
+**Response:**
+- `name`: nombre de la clínica (`tenants.clinic_name`)
+- `ui_language`: `"es"` | `"en"` | `"fr"` (por defecto `"en"`). Persistido en `tenants.config.ui_language`.
+- `hours_start`, `hours_end`, `time_zone`, etc.
+
+### Actualizar idioma de la plataforma
+`PATCH /admin/settings/clinic`
+
+Actualiza la configuración de la clínica. Solo se envían los campos a modificar.
+
+**Payload:**
+```json
+{ "ui_language": "en" }
+```
+Valores permitidos: `"es"`, `"en"`, `"fr"`. Se persiste en `tenants.config.ui_language` del tenant resuelto.
+
 ## Tratamientos (Services)
 
 ### Listar Tratamientos

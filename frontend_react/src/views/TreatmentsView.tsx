@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Clock, AlertCircle, CheckCircle, Edit2, Save, X, Zap, Shield, Heart, Activity, Stethoscope } from 'lucide-react';
 import api from '../api/axios';
+import { useTranslation } from '../context/LanguageContext';
 
 interface TreatmentType {
   id: number;
@@ -31,6 +32,7 @@ const categoryIcons: Record<string, React.ReactNode> = {
 // Category icons mapping already defined
 
 export default function TreatmentsView() {
+  const { t } = useTranslation();
   const [treatments, setTreatments] = useState<TreatmentType[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -169,7 +171,7 @@ export default function TreatmentsView() {
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Tratamientos y Servicios</h1>
+            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">{t('treatments.title')}</h1>
             <p className="text-slate-500 font-medium">Configura la lógica de agendamiento inteligente</p>
           </div>
           <button

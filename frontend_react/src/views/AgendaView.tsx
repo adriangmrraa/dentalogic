@@ -14,6 +14,7 @@ import { addDays, subDays, startOfDay, endOfDay } from 'date-fns';
 import { io, Socket } from 'socket.io-client';
 import { BACKEND_URL } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import { useTranslation } from '../context/LanguageContext';
 
 // ==================== TYPE DEFINITIONS ====================
 export interface Appointment {
@@ -117,6 +118,7 @@ const getSourceLabel = (source: string | undefined): string => {
 
 export default function AgendaView() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [googleBlocks, setGoogleBlocks] = useState<GoogleCalendarBlock[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
@@ -511,7 +513,7 @@ export default function AgendaView() {
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full lg:w-auto gap-4">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">Agenda</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">{t('agenda.title')}</h1>
               <p className="text-xs sm:text-sm text-slate-600">Gestión de turnos y citas</p>
             </div>
 
@@ -682,7 +684,7 @@ export default function AgendaView() {
                 <div className="flex items-center justify-center h-full">
                   <div className="flex flex-col items-center gap-4">
                     <RefreshCw className="w-12 h-12 text-blue-500 animate-spin" />
-                    <p className="text-gray-500 font-medium">Cargando agenda...</p>
+                    <p className="text-gray-500 font-medium">{t('common.loading')}</p>
                   </div>
                 </div>
               ) : (
@@ -721,11 +723,11 @@ export default function AgendaView() {
                   slotMaxTime="20:00:00"
                   locale="es"
                   buttonText={{
-                    today: 'Hoy',
+                    today: t('agenda.today'),
                     month: 'Mes',
                     week: 'Semana',
                     day: 'Día',
-                    list: 'Agenda'
+                    list: t('agenda.title')
                   }}
                   allDayText="Todo el día"
                   eventContent={(eventInfo) => <AppointmentCard {...eventInfo} />}

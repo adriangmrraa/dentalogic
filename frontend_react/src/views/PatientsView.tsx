@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Edit, Trash2, X, FileText, Brain, Calendar, User, Clock, Stethoscope } from 'lucide-react';
 import api from '../api/axios';
+import { useTranslation } from '../context/LanguageContext';
 
 interface Patient {
   id: number;
@@ -30,6 +31,7 @@ interface Professional {
 }
 
 export default function PatientsView() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
@@ -244,7 +246,7 @@ export default function PatientsView() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Pacientes</h1>
+          <h1 className="text-2xl font-bold text-gray-800">{t('patients.title')}</h1>
           <p className="text-sm text-gray-500">Gestiona los pacientes de la clínica</p>
         </div>
         <button
@@ -262,7 +264,7 @@ export default function PatientsView() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
           <input
             type="text"
-            placeholder="Buscar por nombre, DNI o teléfono..."
+            placeholder={t('patients.search_placeholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
@@ -274,7 +276,7 @@ export default function PatientsView() {
           <Brain className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-500" size={18} />
           <input
             type="text"
-            placeholder="Buscar por síntomas (IA)..."
+            placeholder={t('patients.search_semantic')}
             value={semanticSearchTerm}
             onChange={(e) => handleSemanticSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"

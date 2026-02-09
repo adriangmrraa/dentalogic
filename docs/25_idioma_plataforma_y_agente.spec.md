@@ -119,9 +119,17 @@
 - **Detección de idioma:** `detect_message_language(text)` (heurística por palabras típicas es/en/fr) y se inyecta la instrucción "RESPOND ONLY IN Spanish|English|French" en el prompt.
 - **Configuración (frontend):** Vista `ConfigView` en `/configuracion` con selector Español / English / Français que llama a PATCH y persiste por tenant. Solo CEO.
 
-## 8. Referencias
+## 8. Implementación Fase 2 (i18n y efecto inmediato)
 
-- AGENTS.md: Regla de Soberanía; agente ahora agnóstico (nombre clínica inyectado).
+- **LanguageContext:** `frontend_react/src/context/LanguageContext.tsx` proporciona `language`, `setLanguage`, `t(key)` e `isLoading`. Al montar la app, si hay sesión se carga el idioma desde GET `/admin/settings/clinic`; el valor por defecto (y el del backend cuando no hay `ui_language` guardado) es **inglés** (`en`).
+- **Traducciones:** Archivos `frontend_react/src/locales/es.json`, `en.json`, `fr.json` con claves `nav.*`, `common.*`, `config.*`, `login.*`, `layout.*`, etc. Cualquier componente que use `useTranslation()` y `t('clave')` muestra el texto en el idioma actual.
+- **Efecto inmediato:** En ConfigView, al elegir un idioma se llama primero `setLanguage(value)` (actualiza el contexto y toda la UI al instante) y después PATCH para persistir en el servidor. No se espera al PATCH para ver el cambio.
+- **Componentes traducidos:** Sidebar (menú y logout), Layout (título de app, sucursal, notificación de derivación), ConfigView (todos los textos). Otras vistas pueden migrar a `t()` progresivamente.
+- **Idioma por defecto:** Plataforma y selector por defecto en **inglés** (frontend y backend).
+
+## 9. Referencias
+
+- AGENTS.md: Regla de Soberanía; agente agnóstico (nombre clínica inyectado); i18n y idioma por defecto inglés.
 - `orchestrator_service/main.py`: `build_system_prompt`, `detect_message_language`, `chat_endpoint`.
 - `frontend_react/src/views/ConfigView.tsx`: selector de idioma de la plataforma.
 - `tenants.config` (JSONB): `calendar_provider`, `ui_language`.

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { User, Mail, Calendar, Save, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTranslation } from '../context/LanguageContext';
 
 interface UserProfile {
     id: string;
@@ -14,6 +15,7 @@ interface UserProfile {
 
 const ProfileView: React.FC = () => {
     const { user: authUser } = useAuth();
+    const { t } = useTranslation();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -76,8 +78,8 @@ const ProfileView: React.FC = () => {
     return (
         <div className="max-w-4xl mx-auto animate-fadeIn">
             <div className="mb-8">
-                <h1 className="text-2xl font-bold text-gray-800">Mi Perfil</h1>
-                <p className="text-gray-500">Gestiona tu información personal y configuración clínica.</p>
+                <h1 className="text-2xl font-bold text-gray-800">{t('profile.title')}</h1>
+                <p className="text-gray-500">{t('profile.subtitle')}</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

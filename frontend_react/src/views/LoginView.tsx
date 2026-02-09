@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTranslation } from '../context/LanguageContext';
 import api from '../api/axios';
 import { Lock, Mail, Shield, AlertCircle, CheckCircle } from 'lucide-react';
 
@@ -23,6 +24,7 @@ interface ClinicOption {
 
 const LoginView: React.FC = () => {
   const { login } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const [isRegistering, setIsRegistering] = useState(false);
@@ -60,7 +62,7 @@ const LoginView: React.FC = () => {
       login(response.data.access_token, response.data.user);
       navigate(from, { replace: true });
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Error al iniciar sesión. Verifique sus credenciales.");
+      setError(err.response?.data?.detail || t('login.login_error'));
     } finally {
       setLoading(false);
     }
@@ -71,7 +73,7 @@ const LoginView: React.FC = () => {
     setError(null);
     setMessage(null);
     if ((role === 'professional' || role === 'secretary') && !tenantId) {
-      setError('Elegí una sede/clínica para registrarte.');
+      setError(t('login.clinic_required'));
       return;
     }
     setLoading(true);
@@ -88,10 +90,10 @@ const LoginView: React.FC = () => {
         registration_id: registrationId || null,
         google_calendar_id: role === 'professional' ? (googleCalendarId || null) : null,
       });
-      setMessage("Registro solicitado con éxito. Un CEO debe aprobar tu cuenta antes de que puedas ingresar.");
+      setMessage(t('login.register_success'));
       setIsRegistering(false);
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Error al registrarse. Intente nuevamente.");
+      setError(err.response?.data?.detail || t('login.register_error'));
     } finally {
       setLoading(false);
     }
@@ -104,8 +106,8 @@ const LoginView: React.FC = () => {
           <div className="logo-icon">
             <Shield size={32} color="var(--accent)" />
           </div>
-          <h1>Dentalogic</h1>
-          <p>{isRegistering ? 'Solicitud de acceso a la plataforma' : 'Bienvenido de nuevo'}</p>
+          <h1>{t('login.title')}</h1>
+          <p>{isRegistering ? t('login.request_access') : t('login.welcome')}</p>
         </div>
 
         {error && (
@@ -126,25 +128,25 @@ const LoginView: React.FC = () => {
           {isRegistering && (
             <>
               <div className="input-group">
-                <label>Nombre</label>
+                <label>{t('login.first_name')}</label>
                 <div className="input-wrapper">
                   <input
                     type="text"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Nombre"
+                    placeholder={t('login.first_name')}
                     required
                   />
                 </div>
               </div>
               <div className="input-group">
-                <label>Apellido</label>
+                <label>{t('login.last_name')}</label>
                 <div className="input-wrapper">
                   <input
                     type="text"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Apellido"
+                    placeholder={t('login.last_name')}
                   />
                 </div>
               </div>
@@ -152,7 +154,7 @@ const LoginView: React.FC = () => {
           )}
 
           <div className="input-group">
-            <label>Correo Electrónico</label>
+            <label>{t('login.email')}</label>
             <div className="input-wrapper">
               <Mail className="input-icon" size={18} />
               <input
@@ -166,7 +168,7 @@ const LoginView: React.FC = () => {
           </div>
 
           <div className="input-group">
-            <label>Contraseña</label>
+            <label>{t('login.password')}</label>
             <div className="input-wrapper">
               <Lock className="input-icon" size={18} />
               <input
@@ -181,31 +183,31 @@ const LoginView: React.FC = () => {
 
           {isRegistering && (
             <div className="input-group">
-              <label>Rol solicitado</label>
+              <label>{t('login.role')}</label>
               <select value={role} onChange={(e) => setRole(e.target.value)}>
-                <option value="professional">Profesional Dental</option>
-                <option value="secretary">Secretaría / Administración</option>
-                <option value="ceo">Director / CEO</option>
+                <option value="professional">{t('login.role_professional')}</option>
+                <option value="secretary">{t('login.role_secretary')}</option>
+                <option value="ceo">{t('login.role_ceo')}</option>
               </select>
             </div>
           )}
 
           {isRegistering && (role === 'professional' || role === 'secretary') && (
             <div className="input-group">
-              <label>Sede / Clínica <span className="required-dot">*</span></label>
+              <label>{t('login.clinic')} <span className="required-dot">*</span></label>
               <select
                 value={tenantId}
                 onChange={(e) => setTenantId(e.target.value === '' ? '' : Number(e.target.value))}
                 required={role === 'professional' || role === 'secretary'}
               >
-                <option value="">Elegir sede</option>
+                <option value="">{t('login.choose_clinic')}</option>
                 {clinics.map((c) => (
                   <option key={c.id} value={c.id}>{c.clinic_name}</option>
                 ))}
               </select>
               {clinics.length === 0 && (
                 <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginTop: '4px' }}>
-                  No hay sedes cargadas. Contactá al administrador.
+                  {t('login.no_clinics')}
                 </p>
               )}
             </div>
@@ -214,16 +216,16 @@ const LoginView: React.FC = () => {
           {isRegistering && role === 'professional' && (
             <>
               <div className="input-group">
-                <label>Especialidad</label>
+                <label>{t('login.specialty')}</label>
                 <select value={specialty} onChange={(e) => setSpecialty(e.target.value)}>
-                  <option value="">Seleccionar (opcional)</option>
+                  <option value="">{t('login.select_specialty')}</option>
                   {SPECIALTIES.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
               </div>
               <div className="input-group">
-                <label>Teléfono</label>
+                <label>{t('login.phone')}</label>
                 <div className="input-wrapper">
                   <input
                     type="text"
@@ -234,13 +236,13 @@ const LoginView: React.FC = () => {
                 </div>
               </div>
               <div className="input-group">
-                <label>Matrícula</label>
+                <label>{t('login.registration_id')}</label>
                 <div className="input-wrapper">
                   <input
                     type="text"
                     value={registrationId}
                     onChange={(e) => setRegistrationId(e.target.value)}
-                    placeholder="Opcional"
+                    placeholder={t('login.placeholder_optional')}
                   />
                 </div>
               </div>
@@ -251,7 +253,7 @@ const LoginView: React.FC = () => {
                     type="text"
                     value={googleCalendarId}
                     onChange={(e) => setGoogleCalendarId(e.target.value)}
-                    placeholder="Opcional. Configurable después en perfil."
+                    placeholder={t('login.placeholder_calendar')}
                   />
                 </div>
               </div>
@@ -266,7 +268,7 @@ const LoginView: React.FC = () => {
                   type="text"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="Opcional"
+                  placeholder={t('login.placeholder_optional')}
                 />
               </div>
             </div>
@@ -287,7 +289,7 @@ const LoginView: React.FC = () => {
               setMessage(null);
             }}
           >
-            {isRegistering ? '¿Ya tienes cuenta? Ingresa aquí' : '¿No tienes acceso? Solicitalo ahora'}
+            {isRegistering ? t('login.have_account') : t('login.request_access_link')}
           </button>
         </div>
       </div>

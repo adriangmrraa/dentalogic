@@ -57,6 +57,9 @@
     "first_name": "Prénom",
     "last_name": "Nom",
     "role": "Rôle",
+    "role_professional": "Professionnel dentaire",
+    "role_secretary": "Secrétariat / Administration",
+    "role_ceo": "Directeur / CEO",
     "clinic": "Site / Clinique",
     "clinic_required": "Veuillez choisir une clinique pour vous inscrire.",
     "specialty": "Spécialité",
@@ -67,14 +70,36 @@
     "register_success": "Demande envoyée. Un responsable doit approuver votre compte avant que vous puissiez vous connecter.",
     "choose_clinic": "Choisir une clinique",
     "select_role": "Choisir le rôle",
-    "select_specialty": "Choisir (optionnel)"
+    "select_specialty": "Choisir (optionnel)",
+    "no_clinics": "Aucune clinique chargée. Contactez l'administrateur.",
+    "processing": "Traitement...",
+    "submit_login": "Se connecter",
+    "submit_register": "Envoyer la demande",
+    "have_account": "Déjà un compte ? Connectez-vous ici",
+    "request_access_link": "Pas d'accès ? Demandez-le",
+    "placeholder_optional": "Optionnel",
+    "placeholder_calendar": "Optionnel. Configurable plus tard dans le profil."
   },
   "dashboard": {
     "title": "Tableau de bord",
     "urgencies": "Urgences",
     "conversations": "Conversations IA",
     "appointments": "Rendez-vous",
-    "revenue": "Revenus"
+    "revenue": "Revenus",
+    "analytics_title": "Tableau de bord analytique",
+    "analytics_subtitle": "Suivi en temps réel de la clinique",
+    "weekly": "Hebdomadaire",
+    "monthly": "Mensuel",
+    "ia_appointments": "Rendez-vous IA",
+    "chart_title": "Efficacité IA (Dérivations vs Réalisés)",
+    "referrals": "Dérivations",
+    "completed": "Réalisés",
+    "urgencies_recent": "Urgences récentes (Triage)",
+    "see_all": "Voir tout",
+    "patient": "Patient",
+    "reason": "Motif",
+    "severity": "Gravité",
+    "time": "Heure"
   },
   "agenda": {
     "title": "Agenda",
@@ -83,12 +108,18 @@
   },
   "patients": {
     "title": "Patients",
-    "new_patient": "Nouveau patient"
+    "new_patient": "Nouveau patient",
+    "search_placeholder": "Rechercher par nom, n° ou téléphone...",
+    "search_semantic": "Rechercher par symptômes (IA)..."
   },
   "chats": {
     "title": "Conversations",
     "select_clinic": "Choisir la clinique",
-    "no_sessions": "Aucune conversation"
+    "no_sessions": "Aucune conversation",
+    "search_placeholder": "Rechercher par nom ou téléphone...",
+    "mute_sound": "Couper les notifications",
+    "enable_sound": "Activer le son",
+    "clinic_label": "Clinique"
   },
   "approvals": {
     "title": "Personnel",
@@ -96,10 +127,34 @@
     "staff": "Personnel actif",
     "approve": "Approuver",
     "reject": "Rejeter",
-    "suspend": "Suspendre l'accès"
+    "suspend": "Suspendre l'accès",
+    "page_title": "Gestion des utilisateurs et du personnel",
+    "page_subtitle": "Gérer les accès et le personnel de la clinique.",
+    "no_requests": "Aucune demande en attente",
+    "no_requests_processed": "Toutes les demandes ont été traitées.",
+    "no_staff": "Aucun personnel enregistré",
+    "no_staff_register": "Enregistrez des professionnels ou secrétaires pour les voir ici.",
+    "loading_staff": "Chargement du personnel...",
+    "close": "Fermer",
+    "link_to_sede": "Lier à un site",
+    "link_to_another_sede": "Lier à un autre site",
+    "create_profile_sede": "Créer un profil sur un site",
+    "choose_clinic": "Choisir un site",
+    "phone": "Téléphone",
+    "specialty": "Spécialité",
+    "license_number": "N° d'ordre",
+    "member_since": "Membre depuis",
+    "remove_schedule": "Retirer",
+    "add_schedule": "Ajouter horaire",
+    "error_process": "Erreur lors du traitement.",
+    "error_load_pro": "Impossible de charger les données du professionnel.",
+    "error_save": "Erreur lors de l'enregistrement.",
+    "select_sede": "Veuillez sélectionner un site.",
+    "error_link_sede": "Erreur lors de la liaison au site."
   },
   "clinics": {
     "title": "Cliniques",
+    "subtitle": "Gérer les cliniques et leur configuration (calendrier, WhatsApp).",
     "new_clinic": "Nouvelle clinique",
     "clinic_name": "Nom de la clinique"
   },
@@ -107,7 +162,8 @@
     "title": "Traitements"
   },
   "profile": {
-    "title": "Mon profil"
+    "title": "Mon profil",
+    "subtitle": "Gérez vos informations personnelles et paramètres de la clinique."
   },
   "layout": {
     "app_title": "Système dentaire",

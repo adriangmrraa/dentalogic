@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Building2, Plus, Edit, Trash2, Phone, Loader2, AlertCircle, CheckCircle2, Calendar } from 'lucide-react';
 import api from '../api/axios';
+import { useTranslation } from '../context/LanguageContext';
 
 /** Clínica = Tenant en backend. Incluye config.calendar_provider: 'local' | 'google'. */
 export interface Clinica {
@@ -18,6 +19,7 @@ const CALENDAR_PROVIDER_OPTIONS: { value: 'local' | 'google'; label: string }[] 
 ];
 
 export default function ClinicsView() {
+    const { t } = useTranslation();
     const [clinicas, setClinicas] = useState<Clinica[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -110,7 +112,7 @@ export default function ClinicsView() {
         return (
             <div className="h-full flex flex-col items-center justify-center gap-3 min-h-0 overflow-y-auto">
                 <Loader2 className="animate-spin text-medical-600" size={32} />
-                <p className="text-medical-800 font-medium">Cargando clínicas...</p>
+                <p className="text-medical-800 font-medium">{t('common.loading')}</p>
             </div>
         );
     }
@@ -120,17 +122,17 @@ export default function ClinicsView() {
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold text-medical-900 border-l-4 border-medical-500 pl-3">
-                        Gestión de Clínicas
+                        {t('clinics.title')}
                     </h1>
                     <p className="text-medical-600 text-sm mt-1">
-                        Administra las clínicas y su configuración (calendario, WhatsApp).
+                        {t('clinics.subtitle')}
                     </p>
                 </div>
                 <button
                     onClick={() => handleOpenModal()}
                     className="flex items-center gap-2 bg-medical-600 text-white px-4 py-2 rounded-lg hover:bg-medical-700 transition-all shadow-sm font-medium"
                 >
-                    <Plus size={20} /> Nueva Clínica
+                    <Plus size={20} /> {t('clinics.new_clinic')}
                 </button>
             </div>
 

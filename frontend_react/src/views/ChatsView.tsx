@@ -5,6 +5,7 @@ import {
   Search, XCircle, Bell, Volume2, VolumeX
 } from 'lucide-react';
 import api, { BACKEND_URL } from '../api/axios';
+import { useTranslation } from '../context/LanguageContext';
 import { io, Socket } from 'socket.io-client';
 
 // ============================================
@@ -72,6 +73,7 @@ interface Toast {
 // ============================================
 
 export default function ChatsView() {
+  const { t } = useTranslation();
   // Clínicas (CEO puede tener varias; secretary/professional una)
   const [clinics, setClinics] = useState<ClinicOption[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<number | null>(null);
@@ -568,18 +570,18 @@ export default function ChatsView() {
       `}>
         <div className="p-4 border-b">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-lg font-bold">Conversaciones</h2>
+            <h2 className="text-lg font-bold">{t('chats.title')}</h2>
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
               className="p-2 rounded-lg hover:bg-gray-100"
-              title={soundEnabled ? 'Silenciar notificaciones' : 'Activar sonido'}
+              title={soundEnabled ? t('chats.mute_sound') : t('chats.enable_sound')}
             >
               {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
             </button>
           </div>
           {clinics.length > 1 && (
             <div className="mb-3">
-              <label className="block text-xs font-medium text-gray-500 mb-1">Clínica</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t('chats.clinic_label')}</label>
               <select
                 value={selectedTenantId ?? ''}
                 onChange={(e) => setSelectedTenantId(Number(e.target.value))}
@@ -598,7 +600,7 @@ export default function ChatsView() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             <input
               type="text"
-              placeholder="Buscar por nombre o teléfono..."
+              placeholder={t('chats.search_placeholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -608,9 +610,9 @@ export default function ChatsView() {
 
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="p-4 text-center text-gray-500">Cargando...</div>
+            <div className="p-4 text-center text-gray-500">{t('common.loading')}</div>
           ) : filteredSessions.length === 0 ? (
-            <div className="p-4 text-center text-gray-500">No hay conversaciones</div>
+            <div className="p-4 text-center text-gray-500">{t('chats.no_sessions')}</div>
           ) : (
             filteredSessions.map(session => {
               const { avatarBg } = getStatusConfig(session);
