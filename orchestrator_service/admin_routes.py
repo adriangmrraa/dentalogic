@@ -1327,6 +1327,37 @@ async def create_professional(
                         specialty, registration_id, is_active, working_hours, created_at, updated_at
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW(), NOW())
                 """, *params_no_email)
+            elif "specialty" in err_str:
+                # BD sin columna specialty: INSERT sin especialidad
+                params_no_spec = [tenant_id, user_id, first_name, last_name, email, phone_val,
+                                  matricula, professional.is_active, wh_json]
+                try:
+                    await db.pool.execute("""
+                        INSERT INTO professionals (
+                            tenant_id, user_id, first_name, last_name, email, phone_number,
+                            registration_id, is_active, working_hours, created_at, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW(), NOW())
+                    """, *params_no_spec)
+                except asyncpg.UndefinedColumnError as e2:
+                    err2 = str(e2).lower()
+                    if "phone_number" in err2:
+                        params_no_spec_phone = [tenant_id, user_id, first_name, last_name, email,
+                                                matricula, professional.is_active, wh_json]
+                        await db.pool.execute("""
+                            INSERT INTO professionals (
+                                tenant_id, user_id, first_name, last_name, email,
+                                registration_id, is_active, working_hours, created_at, updated_at
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW(), NOW())
+                        """, *params_no_spec_phone)
+                    elif "updated_at" in err2:
+                        await db.pool.execute("""
+                            INSERT INTO professionals (
+                                tenant_id, user_id, first_name, last_name, email, phone_number,
+                                registration_id, is_active, working_hours, created_at
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW())
+                        """, *params_no_spec)
+                    else:
+                        raise
             else:
                 logger.exception("create_professional INSERT column error")
                 raise HTTPException(status_code=500, detail=f"Columna no reconocida en professionals: {e}")

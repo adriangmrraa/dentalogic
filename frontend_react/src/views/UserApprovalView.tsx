@@ -16,6 +16,18 @@ interface StaffUser {
     last_name?: string;
 }
 
+const SPECIALTIES = [
+  'Odontología General',
+  'Ortodoncia',
+  'Endodoncia',
+  'Periodoncia',
+  'Cirugía Oral',
+  'Prótesis Dental',
+  'Odontopediatría',
+  'Implantología',
+  'Estética Dental',
+];
+
 interface ProfessionalRow {
     id: number;
     tenant_id?: number;
@@ -291,13 +303,16 @@ const UserApprovalView: React.FC = () => {
                                     </div>
                                     <div>
                                         <label className="block text-xs font-medium text-gray-600 mb-1">Especialidad</label>
-                                        <input
-                                            type="text"
+                                        <select
                                             value={linkFormData.specialty}
                                             onChange={(e) => setLinkFormData((p) => ({ ...p, specialty: e.target.value }))}
-                                            placeholder="Ej. Odontología General"
                                             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                        />
+                                        >
+                                            <option value="">Seleccionar (opcional)</option>
+                                            {SPECIALTIES.map((s) => (
+                                                <option key={s} value={s}>{s}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block text-xs font-medium text-gray-600 mb-1">Matrícula</label>

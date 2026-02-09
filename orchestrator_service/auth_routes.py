@@ -137,6 +137,29 @@ async def register(payload: UserRegister):
                             """, tenant_id, uid, first_name, last_name, payload.email, specialty_val, reg_id)
                         else:
                             raise
+                elif "specialty" in err_str:
+                    try:
+                        await db.pool.execute("""
+                            INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email, phone_number,
+                            registration_id, is_active, working_hours, created_at, updated_at)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, $8::jsonb, NOW(), NOW())
+                        """, tenant_id, uid, first_name, last_name, payload.email, phone_val, reg_id, wh_json)
+                    except asyncpg.UndefinedColumnError as e2:
+                        err2 = str(e2).lower()
+                        if "phone_number" in err2:
+                            await db.pool.execute("""
+                                INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email,
+                                registration_id, is_active, working_hours, created_at, updated_at)
+                                VALUES ($1, $2, $3, $4, $5, $6, FALSE, $7::jsonb, NOW(), NOW())
+                            """, tenant_id, uid, first_name, last_name, payload.email, reg_id, wh_json)
+                        elif "working_hours" in err2:
+                            await db.pool.execute("""
+                                INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email, phone_number,
+                                registration_id, is_active, created_at, updated_at)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, NOW(), NOW())
+                            """, tenant_id, uid, first_name, last_name, payload.email, phone_val, reg_id)
+                        else:
+                            raise
                 else:
                     raise
 
