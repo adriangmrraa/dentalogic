@@ -157,20 +157,23 @@ async def get_allowed_tenant_ids(user_data=Depends(verify_admin_token)) -> List[
     Lista de tenant_id que el usuario puede ver (chats, sesiones).
     CEO: todos los tenants. Secretary/Professional: solo su clínica resuelta.
     """
-    if user_data.role == "ceo":
-        rows = await db.pool.fetch("SELECT id FROM tenants ORDER BY id ASC")
-        return [int(r["id"]) for r in rows]
     try:
-        tid = await db.pool.fetchval(
-            "SELECT tenant_id FROM professionals WHERE user_id = $1",
-            uuid.UUID(user_data.user_id),
-        )
-        if tid is not None:
-            return [int(tid)]
-    except (ValueError, TypeError):
-        pass
-    first = await db.pool.fetchval("SELECT id FROM tenants ORDER BY id ASC LIMIT 1")
-    return [int(first)] if first is not None else [1]
+        if user_data.role == "ceo":
+            rows = await db.pool.fetch("SELECT id FROM tenants ORDER BY id ASC")
+            return [int(r["id"]) for r in rows] if rows else [1]
+        try:
+            tid = await db.pool.fetchval(
+                "SELECT tenant_id FROM professionals WHERE user_id = $1",
+                uuid.UUID(user_data.user_id),
+            )
+            if tid is not None:
+                return [int(tid)]
+        except (ValueError, TypeError):
+            pass
+        first = await db.pool.fetchval("SELECT id FROM tenants ORDER BY id ASC LIMIT 1")
+        return [int(first)] if first is not None else [1]
+    except Exception:
+        return [1]  # Fallback para no devolver 500
 
 
 @router.get("/patients/phone/{phone}/context")
@@ -1176,30 +1179,44 @@ async def create_professional(
     Si el body trae tenant_id y el usuario tiene acceso a esa clínica, se usa; si no, la del contexto.
     Así el agente y el sistema saben a qué clínica pertenece el profesional.
     """
-    tenant_id = (
-        professional.tenant_id
-        if professional.tenant_id is not None and professional.tenant_id in allowed_ids
-        else resolved_tenant_id
-    )
+    try:
+        tid_raw = professional.tenant_id
+        tid_int = int(tid_raw) if tid_raw is not None else None
+        tenant_id = (
+            tid_int
+            if tid_int is not None and tid_int in allowed_ids
+            else resolved_tenant_id
+        )
+    except (TypeError, ValueError):
+        tenant_id = resolved_tenant_id
+
     try:
         # 1. Crear usuario asociado
         user_id = uuid.uuid4()
-        email = professional.email or f"prof_{uuid.uuid4().hex[:8]}@dentalogic.local"
-        # first_name/last_name: el payload trae "name"; partimos o usamos todo en first_name
+        email = (professional.email or "").strip() or f"prof_{uuid.uuid4().hex[:8]}@dentalogic.local"
         name_part = (professional.name or "").strip()
         first_name = name_part.split(maxsplit=1)[0] if name_part else "Profesional"
-        last_name = name_part.split(maxsplit=1)[1] if name_part and len(name_part.split(maxsplit=1)) > 1 else ""
+        last_name = name_part.split(maxsplit=1)[1] if name_part and len(name_part.split(maxsplit=1)) > 1 else " "
 
         await db.pool.execute("""
             INSERT INTO users (id, email, password_hash, role, first_name, status, created_at)
             VALUES ($1, $2, $3, 'professional', $4, 'active', NOW())
         """, user_id, email, "hash_placeholder", first_name)
 
-        # 2. Crear profesional (tenant_id = clínica elegida en el modal)
+        # 2. Crear profesional (tenant_id = clínica elegida)
         wh = professional.working_hours or generate_default_working_hours()
-        matricula = professional.license_number  # payload usa license_number; BD puede tener registration_id o license_number
-        params = [tenant_id, user_id, first_name, last_name or " ", email, professional.phone,
-                  professional.specialty, matricula, professional.is_active, json.dumps(wh)]
+        if not isinstance(wh, dict):
+            wh = generate_default_working_hours()
+        try:
+            wh_json = json.dumps(wh)
+        except (TypeError, ValueError):
+            wh_json = json.dumps(generate_default_working_hours())
+        matricula = professional.license_number or None
+        phone_val = professional.phone or None
+        specialty_val = professional.specialty or None
+
+        params = [tenant_id, user_id, first_name, last_name, email, phone_val,
+                  specialty_val, matricula, professional.is_active, wh_json]
         try:
             await db.pool.execute("""
                 INSERT INTO professionals (
@@ -1208,22 +1225,36 @@ async def create_professional(
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, NOW(), NOW())
             """, *params)
         except asyncpg.UndefinedColumnError as e:
-            if "registration_id" in str(e):
-                # BD antigua con license_number en lugar de registration_id
+            err_str = str(e).lower()
+            if "registration_id" in err_str:
                 await db.pool.execute("""
                     INSERT INTO professionals (
                         tenant_id, user_id, first_name, last_name, email, phone_number,
                         specialty, license_number, is_active, working_hours, created_at, updated_at
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, NOW(), NOW())
                 """, *params)
+            elif "updated_at" in err_str:
+                await db.pool.execute("""
+                    INSERT INTO professionals (
+                        tenant_id, user_id, first_name, last_name, email, phone_number,
+                        specialty, registration_id, is_active, working_hours, created_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, NOW())
+                """, *params)
             else:
-                raise
+                logger.exception("create_professional INSERT column error")
+                raise HTTPException(status_code=500, detail=f"Columna no reconocida en professionals: {e}")
+        except asyncpg.UniqueViolationError as e:
+            logger.warning(f"create_professional duplicate: {e}")
+            raise HTTPException(status_code=409, detail="Ya existe un usuario o profesional con ese email o datos.")
+        except asyncpg.ForeignKeyViolationError as e:
+            logger.warning(f"create_professional FK: {e}")
+            raise HTTPException(status_code=400, detail="La clínica elegida no existe. Creá una sede primero en Sedes (Clínicas).")
 
         return {"status": "created", "user_id": str(user_id)}
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error creating professional: {e}")
+        logger.exception("Error creating professional")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/professionals/{id}", dependencies=[Depends(verify_admin_token)])

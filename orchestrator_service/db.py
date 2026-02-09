@@ -282,6 +282,16 @@ class Database:
                 END IF;
             END $$;
             """,
+            # Parche 12c: updated_at en professionals (algunos esquemas antiguos no lo tienen)
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'professionals' AND column_name = 'updated_at') THEN
+                    ALTER TABLE professionals ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
+                    UPDATE professionals SET updated_at = NOW() WHERE updated_at IS NULL;
+                END IF;
+            END $$;
+            """,
             # Parche 13: tenant_id, source y google_calendar_event_id en appointments (idempotente)
             """
             DO $$
