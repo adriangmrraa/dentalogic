@@ -103,8 +103,16 @@
   },
   "agenda": {
     "title": "Agenda",
+    "subtitle": "Gestion des rendez-vous et des créneaux",
     "new_appointment": "Nouveau rendez-vous",
-    "today": "Aujourd'hui"
+    "today": "Aujourd'hui",
+    "all_professionals": "Tous les professionnels",
+    "month": "Mois",
+    "week": "Semaine",
+    "day": "Jour",
+    "all_day": "Toute la journée",
+    "alert_past_date": "Impossible de prendre rendez-vous dans le passé. Veuillez choisir une date future.",
+    "alert_cancel_error": "Erreur lors de l'annulation du rendez-vous"
   },
   "patients": {
     "title": "Patients",
@@ -119,7 +127,12 @@
     "search_placeholder": "Rechercher par nom ou téléphone...",
     "mute_sound": "Couper les notifications",
     "enable_sound": "Activer le son",
-    "clinic_label": "Clinique"
+    "clinic_label": "Clinique",
+    "toast_handoff_title": "Dérivation humaine",
+    "toast_handoff_message_prefix": "Le bot a dérivé vers",
+    "toast_new_appointment_title": "Nouveau rendez-vous",
+    "toast_new_appointment_message_prefix": "Un rendez-vous a été pris pour",
+    "load_older_messages": "Charger les messages précédents"
   },
   "approvals": {
     "title": "Personnel",
@@ -170,6 +183,30 @@
     "branch": "Succursale",
     "branch_principal": "Principal",
     "notification_handoff": "Dérivation humaine",
+    "notification_reason": "Motif",
     "click_to_open_chat": "Cliquer pour ouvrir le chat"
+  },
+  "alerts": {
+    "error_process": "Erreur lors du traitement.",
+    "error_load_pro": "Impossible de charger les données du professionnel.",
+    "error_save": "Erreur lors de l'enregistrement.",
+    "select_sede": "Veuillez sélectionner un site.",
+    "error_link_sede": "Erreur lors de la liaison au site.",
+    "error_save_patient": "Erreur lors de l'enregistrement du patient",
+    "error_delete_patient": "Erreur lors de la suppression du patient",
+    "patient_and_appointment_ok": "Patient et premier rendez-vous enregistrés avec succès.",
+    "patient_ok_appointment_fail": "Patient créé, mais erreur lors de la prise de rendez-vous. Veuillez le prendre manuellement.",
+    "confirm_delete_patient": "Êtes-vous sûr de vouloir supprimer ce patient ?",
+    "error_save_treatment": "Erreur lors de l'enregistrement",
+    "code_name_required": "Code et nom sont obligatoires",
+    "error_create_treatment": "Erreur lors de la création du traitement",
+    "confirm_delete_treatment": "Êtes-vous sûr de vouloir supprimer le traitement {{code}} ?",
+    "error_delete_treatment": "Erreur lors de la suppression",
+    "confirm_delete_clinic": "Êtes-vous sûr de vouloir supprimer cette clinique ? Toutes les liaisons seront perdues.",
+    "confirm_delete_appointment": "Êtes-vous sûr de vouloir supprimer ce rendez-vous ?",
+    "error_save_record": "Erreur lors de l'enregistrement du dossier",
+    "error_save_professional": "Erreur lors de l'enregistrement du professionnel",
+    "url_copied": "URL copiée !",
+    "setup_complete": "Configuration terminée !"
   }
 }

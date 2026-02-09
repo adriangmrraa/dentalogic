@@ -103,8 +103,16 @@
   },
   "agenda": {
     "title": "Agenda",
+    "subtitle": "Gestión de turnos y citas",
     "new_appointment": "Nuevo turno",
-    "today": "Hoy"
+    "today": "Hoy",
+    "all_professionals": "Todos los Profesionales",
+    "month": "Mes",
+    "week": "Semana",
+    "day": "Día",
+    "all_day": "Todo el día",
+    "alert_past_date": "No se pueden agendar citas en fechas u horarios pasados. Por favor, seleccioná una fecha futura.",
+    "alert_cancel_error": "Error al cancelar turno"
   },
   "patients": {
     "title": "Pacientes",
@@ -119,7 +127,12 @@
     "search_placeholder": "Buscar por nombre o teléfono...",
     "mute_sound": "Silenciar notificaciones",
     "enable_sound": "Activar sonido",
-    "clinic_label": "Clínica"
+    "clinic_label": "Clínica",
+    "toast_handoff_title": "Derivación Humana",
+    "toast_handoff_message_prefix": "El bot derivó a",
+    "toast_new_appointment_title": "Nuevo Turno",
+    "toast_new_appointment_message_prefix": "Se agendó un turno para",
+    "load_older_messages": "Cargar mensajes anteriores"
   },
   "approvals": {
     "title": "Personal",
@@ -170,6 +183,30 @@
     "branch": "Sucursal",
     "branch_principal": "Principal",
     "notification_handoff": "Derivación Humana",
+    "notification_reason": "Motivo",
     "click_to_open_chat": "Click para abrir chat"
+  },
+  "alerts": {
+    "error_process": "Error al procesar la solicitud.",
+    "error_load_pro": "No se pudieron cargar los datos del profesional.",
+    "error_save": "Error al guardar.",
+    "select_sede": "Seleccioná una sede.",
+    "error_link_sede": "Error al vincular a sede.",
+    "error_save_patient": "Error al guardar paciente",
+    "error_delete_patient": "Error al eliminar paciente",
+    "patient_and_appointment_ok": "Paciente y Turno Inicial registrados correctamente.",
+    "patient_ok_appointment_fail": "Paciente creado, pero hubo un error al agendar el turno. Por favor agendalo manualmente.",
+    "confirm_delete_patient": "¿Estás seguro de eliminar este paciente?",
+    "error_save_treatment": "Error al guardar cambios",
+    "code_name_required": "Código y Nombre son obligatorios",
+    "error_create_treatment": "Error al crear tratamiento",
+    "confirm_delete_treatment": "¿Estás seguro de eliminar el tratamiento {{code}}?",
+    "error_delete_treatment": "Error al eliminar",
+    "confirm_delete_clinic": "¿Estás seguro de eliminar esta clínica? Se perderán las vinculaciones.",
+    "confirm_delete_appointment": "¿Está seguro de eliminar este turno?",
+    "error_save_record": "Error al guardar el registro",
+    "error_save_professional": "Error al guardar profesional",
+    "url_copied": "URL copiada!",
+    "setup_complete": "Setup Completo!"
   }
 }

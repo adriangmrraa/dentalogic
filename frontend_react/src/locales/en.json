@@ -103,8 +103,16 @@
   },
   "agenda": {
     "title": "Agenda",
+    "subtitle": "Appointments and scheduling",
     "new_appointment": "New appointment",
-    "today": "Today"
+    "today": "Today",
+    "all_professionals": "All professionals",
+    "month": "Month",
+    "week": "Week",
+    "day": "Day",
+    "all_day": "All day",
+    "alert_past_date": "Cannot schedule appointments in the past. Please select a future date.",
+    "alert_cancel_error": "Error cancelling appointment"
   },
   "patients": {
     "title": "Patients",
@@ -119,7 +127,12 @@
     "search_placeholder": "Search by name or phone...",
     "mute_sound": "Mute notifications",
     "enable_sound": "Enable sound",
-    "clinic_label": "Clinic"
+    "clinic_label": "Clinic",
+    "toast_handoff_title": "Human handoff",
+    "toast_handoff_message_prefix": "The bot handed off to",
+    "toast_new_appointment_title": "New appointment",
+    "toast_new_appointment_message_prefix": "An appointment was scheduled for",
+    "load_older_messages": "Load older messages"
   },
   "approvals": {
     "title": "Staff",
@@ -170,6 +183,30 @@
     "branch": "Branch",
     "branch_principal": "Main",
     "notification_handoff": "Human handoff",
+    "notification_reason": "Reason",
     "click_to_open_chat": "Click to open chat"
+  },
+  "alerts": {
+    "error_process": "Error processing request.",
+    "error_load_pro": "Could not load professional data.",
+    "error_save": "Error saving.",
+    "select_sede": "Please select a location.",
+    "error_link_sede": "Error linking to location.",
+    "error_save_patient": "Error saving patient",
+    "error_delete_patient": "Error deleting patient",
+    "patient_and_appointment_ok": "Patient and initial appointment registered successfully.",
+    "patient_ok_appointment_fail": "Patient created, but there was an error scheduling the appointment. Please schedule it manually.",
+    "confirm_delete_patient": "Are you sure you want to delete this patient?",
+    "error_save_treatment": "Error saving changes",
+    "code_name_required": "Code and Name are required",
+    "error_create_treatment": "Error creating treatment",
+    "confirm_delete_treatment": "Are you sure you want to delete the treatment {{code}}?",
+    "error_delete_treatment": "Error deleting",
+    "confirm_delete_clinic": "Are you sure you want to delete this clinic? All links will be lost.",
+    "confirm_delete_appointment": "Are you sure you want to delete this appointment?",
+    "error_save_record": "Error saving record",
+    "error_save_professional": "Error saving professional",
+    "url_copied": "URL copied!",
+    "setup_complete": "Setup complete!"
   }
 }

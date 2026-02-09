@@ -343,6 +343,18 @@ El proyecto está **operativo** en backend (excepto tenants), frontend (excepto 
 - **Traducciones:** `frontend_react/src/locales/es.json`, `en.json`, `fr.json` con claves nav, common, config, login, layout, etc. Sidebar, Layout y ConfigView usan `t()`; el resto de vistas pueden ir migrando a claves.
 - **Agente:** Prompt construido con `build_system_prompt(clinic_name, ...)`; `clinic_name` desde `tenants.clinic_name`. `detect_message_language(text)` devuelve es/en/fr y se inyecta la instrucción de responder en ese idioma.
 
+### 9.6 Cobertura i18n completa (selector de idioma estricto)
+
+**Objetivo:** Todo texto visible en la plataforma (incluidas notificaciones en tiempo real y diálogos) debe respetar el idioma elegido en Configuración (es/en/fr).
+
+- **Notificaciones WebSocket (ChatsView):**
+  - **HUMAN_HANDOFF:** Toast "Derivación Humana" / "Human handoff" / "Dérivation humaine" con mensaje traducido (`chats.toast_handoff_title`, `chats.toast_handoff_message_prefix` + teléfono y motivo).
+  - **NEW_APPOINTMENT:** Toast "Nuevo Turno" / "New appointment" / "Nouveau rendez-vous" con mensaje traducido (`chats.toast_new_appointment_title`, `chats.toast_new_appointment_message_prefix` + teléfono).
+  - Los listeners del socket usan `t()` en el closure; el efecto incluye `t` en dependencias para que al cambiar idioma los próximos toasts usen el idioma actual.
+- **Notificación global (Layout):** El banner de derivación humana usa `t('layout.notification_handoff')` y `t('layout.notification_reason')`; el cuerpo muestra teléfono y motivo (motivo puede venir del backend en el idioma del agente).
+- **Alertas y confirmaciones:** Todas las vistas que usan `alert()` o `confirm()` utilizan claves de `alerts.*` en es/en/fr.json: UserApprovalView, PatientsView, TreatmentsView, ClinicsView, AppointmentForm, PatientDetail, ProfessionalsView. Credentials, Tools, Stores, Setup (vistas de administración avanzada) pueden migrarse igual si se exponen en la misma SPA.
+- **Páginas con t():** Login, Dashboard, Agenda, Pacientes, Chats, Personal (Aprobaciones), Sedes, Tratamientos, Perfil, Configuración; componentes Sidebar, Layout, AppointmentForm. Ningún texto de interfaz debe quedar fuera del selector.
+
 ---
 
-*Documento generado por workflow Audit – Dentalogic / Antigravity. Última actualización doc: 2026-02-08. Secciones 9–9.5 ampliadas por workflow Update Docs (Non-Destructive Fusion).*
+*Documento generado por workflow Audit – Dentalogic / Antigravity. Última actualización doc: 2026-02-08. Secciones 9–9.6 ampliadas por workflow Update Docs (Non-Destructive Fusion).*

@@ -96,7 +96,7 @@ export default function ClinicsView() {
     };
 
     const handleDelete = async (id: number) => {
-        if (!window.confirm('¿Estás seguro de eliminar esta clínica? Se perderán las vinculaciones.')) return;
+        if (!window.confirm(t('alerts.confirm_delete_clinic'))) return;
         try {
             await api.delete(`/admin/tenants/${id}`);
             fetchClinicas();

@@ -165,7 +165,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <div className="flex-1">
               <h3 className="text-sm font-medium text-gray-900">🔔 {t('layout.notification_handoff')}</h3>
               <p className="mt-1 text-sm text-gray-500 line-clamp-2">
-                {notification.phone}: {notification.reason}
+                {notification.phone}. {t('layout.notification_reason')}: {notification.reason}
               </p>
               <div className="mt-2 text-xs text-orange-600 font-medium">
                 {t('layout.click_to_open_chat')}

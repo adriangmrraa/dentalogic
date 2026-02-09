@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Calendar, User, Clock, FileText, DollarSign, Activity, AlertTriangle, Trash2, Check } from 'lucide-react';
 import type { Appointment, Patient, Professional } from '../views/AgendaView';
 import api from '../api/axios';
+import { useTranslation } from '../context/LanguageContext';
 
 interface AppointmentFormProps {
     isOpen: boolean;
@@ -26,6 +27,7 @@ export default function AppointmentForm({
     onDelete,
     isEditing
 }: AppointmentFormProps) {
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<TabType>('general');
     const [formData, setFormData] = useState({
         patient_id: '',
@@ -122,7 +124,7 @@ export default function AppointmentForm({
 
     const handleDelete = async () => {
         if (!onDelete || !initialData.id) return;
-        if (confirm('¿Está seguro de eliminar este turno?')) {
+        if (confirm(t('alerts.confirm_delete_appointment'))) {
             setLoading(true);
             try {
                 await onDelete(initialData.id);

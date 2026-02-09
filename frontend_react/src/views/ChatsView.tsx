@@ -127,12 +127,12 @@ export default function ChatsView() {
       setHighlightedSession(data.phone_number);
       setTimeout(() => setHighlightedSession(null), 5000);
 
-      // Mostrar toast
+      // Mostrar toast (idioma según selector)
       setShowToast({
         id: Date.now().toString(),
         type: 'warning',
-        title: '🔔 Derivación Humana',
-        message: `El bot derivó a ${data.phone_number}: ${data.reason}`,
+        title: '🔔 ' + t('chats.toast_handoff_title'),
+        message: `${t('chats.toast_handoff_message_prefix')} ${data.phone_number}: ${data.reason}`,
       });
 
       // Reproducir sonido
@@ -258,12 +258,12 @@ export default function ChatsView() {
         fetchPatientContext(data.phone_number);
       }
 
-      // Mostrar toast si el turno es nuevo
+      // Mostrar toast si el turno es nuevo (idioma según selector)
       setShowToast({
         id: Date.now().toString(),
         type: 'success',
-        title: '📅 Nuevo Turno',
-        message: `Se agendó un turno para ${data.phone_number}`,
+        title: '📅 ' + t('chats.toast_new_appointment_title'),
+        message: `${t('chats.toast_new_appointment_message_prefix')} ${data.phone_number}`,
       });
     });
 
@@ -273,7 +273,7 @@ export default function ChatsView() {
         socketRef.current.disconnect();
       }
     };
-  }, [selectedSession, soundEnabled, selectedTenantId]);
+  }, [selectedSession, soundEnabled, selectedTenantId, t]);
 
   // ============================================
   // DATOS - CARGAR CLÍNICAS, SESIONES Y MENSAJES
@@ -786,7 +786,7 @@ export default function ChatsView() {
                     disabled={loadingMore}
                     className="mx-auto py-2 px-4 text-xs text-medical-600 hover:text-medical-700 font-medium bg-white rounded-full shadow-sm border border-medical-100 mb-4 transition-all disabled:opacity-50 shrink-0"
                   >
-                    {loadingMore ? 'Cargando...' : 'Cargar mensajes anteriores'}
+                    {loadingMore ? t('common.loading') : t('chats.load_older_messages')}
                   </button>
                 )}
 

@@ -118,7 +118,7 @@ const getSourceLabel = (source: string | undefined): string => {
 
 export default function AgendaView() {
   const { user } = useAuth();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [googleBlocks, setGoogleBlocks] = useState<GoogleCalendarBlock[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
@@ -442,7 +442,7 @@ export default function AgendaView() {
     // Prevenir agendamiento en fechas/horas pasadas
     const now = new Date();
     if (info.date < now) {
-      alert('⚠️ No se pueden agendar citas en fechas u horarios pasados. Por favor, seleccioná una fecha futura.');
+      alert('⚠️ ' + t('agenda.alert_past_date'));
       return;
     }
 
@@ -501,7 +501,7 @@ export default function AgendaView() {
       await fetchData();
       setShowModal(false);
     } catch (error) {
-      alert('Error al cancelar turno');
+      alert(t('agenda.alert_cancel_error'));
     }
   };
 
@@ -514,7 +514,7 @@ export default function AgendaView() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full lg:w-auto gap-4">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">{t('agenda.title')}</h1>
-              <p className="text-xs sm:text-sm text-slate-600">Gestión de turnos y citas</p>
+              <p className="text-xs sm:text-sm text-slate-600">{t('agenda.subtitle')}</p>
             </div>
 
             {/* Professional Filter (CEO/Secretary only) - Mobile Stacking */}
@@ -526,7 +526,7 @@ export default function AgendaView() {
                   onChange={(e) => setSelectedProfessionalId(e.target.value)}
                   className="bg-transparent border-none text-xs font-medium focus:ring-0 outline-none text-medical-900 cursor-pointer w-full"
                 >
-                  <option value="all">Todos los Profesionales</option>
+                  <option value="all">{t('agenda.all_professionals')}</option>
                   {professionals.map(p => (
                     <option key={p.id} value={p.id.toString()}>
                       Dr. {p.first_name} {p.last_name || ''}
@@ -721,15 +721,15 @@ export default function AgendaView() {
                   slotEventOverlap={false}
                   slotMinTime="08:00:00"
                   slotMaxTime="20:00:00"
-                  locale="es"
+                  locale={language}
                   buttonText={{
                     today: t('agenda.today'),
-                    month: 'Mes',
-                    week: 'Semana',
-                    day: 'Día',
+                    month: t('agenda.month'),
+                    week: t('agenda.week'),
+                    day: t('agenda.day'),
                     list: t('agenda.title')
                   }}
-                  allDayText="Todo el día"
+                  allDayText={t('agenda.all_day')}
                   eventContent={(eventInfo) => <AppointmentCard {...eventInfo} />}
                   eventDidMount={(info) => {
                     const { eventType, source, patient_phone, professional_name, notes } = info.event.extendedProps;

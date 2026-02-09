@@ -92,7 +92,7 @@ export default function TreatmentsView() {
       setEditForm({});
     } catch (error) {
       console.error('Error saving treatment:', error);
-      alert('Error al guardar cambios');
+      alert(t('alerts.error_save_treatment'));
     } finally {
       setSaving(false);
     }
@@ -100,7 +100,7 @@ export default function TreatmentsView() {
 
   const handleCreate = async () => {
     if (!newForm.code || !newForm.name) {
-      alert('Código y Nombre son obligatorios');
+      alert(t('alerts.code_name_required'));
       return;
     }
 
@@ -126,14 +126,14 @@ export default function TreatmentsView() {
       });
     } catch (error: any) {
       console.error('Error creating treatment:', error);
-      alert(error.response?.data?.detail || 'Error al crear tratamiento');
+      alert(error.response?.data?.detail || t('alerts.error_create_treatment'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (code: string) => {
-    if (!confirm(`¿Estás seguro de eliminar el tratamiento ${code}?`)) return;
+    if (!confirm(t('alerts.confirm_delete_treatment').replace('{{code}}', code))) return;
 
     try {
       setSaving(true);
@@ -141,7 +141,7 @@ export default function TreatmentsView() {
       await fetchTreatments();
     } catch (error) {
       console.error('Error deleting treatment:', error);
-      alert('Error al eliminar');
+      alert(t('alerts.error_delete_treatment'));
     } finally {
       setSaving(false);
     }

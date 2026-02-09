@@ -178,10 +178,10 @@ export default function PatientsView() {
             notes: "Turno inicial (Alta manual)",
             check_collisions: true
           });
-          alert('Paciente y Turno Inicial registrados correctamente.');
+          alert(t('alerts.patient_and_appointment_ok'));
         } catch (aptError) {
           console.error("Error creating appointment:", aptError);
-          alert('Paciente creado, pero hubo un error al agendar el turno. Por favor agendalo manualmente.');
+          alert(t('alerts.patient_ok_appointment_fail'));
         }
       } else if (!editingPatient) {
         // Just verify creation
@@ -191,18 +191,18 @@ export default function PatientsView() {
       closeModal();
     } catch (error) {
       console.error('Error saving patient:', error);
-      alert('Error al guardar paciente');
+      alert(t('alerts.error_save_patient'));
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('¿Estás seguro de eliminar este paciente?')) return;
+    if (!confirm(t('alerts.confirm_delete_patient'))) return;
     try {
       await api.delete(`/admin/patients/${id}`);
       fetchPatients();
     } catch (error) {
       console.error('Error deleting patient:', error);
-      alert('Error al eliminar paciente');
+      alert(t('alerts.error_delete_patient'));
     }
   };
 

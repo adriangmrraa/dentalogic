@@ -4,6 +4,7 @@ import {
   ChevronDown, ChevronUp, CheckCircle, XCircle, Save, X, ClipboardList
 } from 'lucide-react';
 import api from '../api/axios';
+import { useTranslation } from '../context/LanguageContext';
 
 interface Professional {
   id: number;
@@ -66,7 +67,8 @@ interface ClinicOption {
 }
 
 export default function ProfessionalsView() {
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const { t } = useTranslation();
+    const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [clinics, setClinics] = useState<ClinicOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
@@ -142,7 +144,7 @@ export default function ProfessionalsView() {
     } catch (error: unknown) {
       console.error('Error saving professional:', error);
       const msg = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      alert(msg || 'Error al guardar profesional');
+      alert(msg || t('alerts.error_save_professional'));
     }
   };
 

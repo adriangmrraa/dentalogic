@@ -5,6 +5,7 @@ import {
   FileText, Plus, Activity, Heart, Pill, Stethoscope
 } from 'lucide-react';
 import api from '../api/axios';
+import { useTranslation } from '../context/LanguageContext';
 
 interface Patient {
   id: number;
@@ -45,6 +46,7 @@ const criticalConditions = [
 export default function PatientDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [records, setRecords] = useState<ClinicalRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,7 +127,7 @@ export default function PatientDetail() {
       });
     } catch (error) {
       console.error('Error saving clinical record:', error);
-      alert('Error al guardar el registro');
+      alert(t('alerts.error_save_record'));
     }
   };
 

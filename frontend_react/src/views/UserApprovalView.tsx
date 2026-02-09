@@ -152,7 +152,7 @@ const UserApprovalView: React.FC = () => {
                 u.id === userId ? { ...u, status: action } : u
             ));
         } catch (err: any) {
-            alert("Error al procesar la solicitud.");
+            alert(t('alerts.error_process'));
         }
     };
 
@@ -237,7 +237,7 @@ const UserApprovalView: React.FC = () => {
             });
             setExpandedEditDays([]);
         } catch {
-            alert('No se pudieron cargar los datos del profesional.');
+            alert(t('alerts.error_load_pro'));
         }
     };
 
@@ -320,7 +320,7 @@ const UserApprovalView: React.FC = () => {
                 setProfessionalRows(res.data || []);
             }
         } catch (err: any) {
-            alert(err?.response?.data?.detail || 'Error al guardar.');
+            alert(err?.response?.data?.detail || t('alerts.error_save'));
         } finally {
             setEditFormSubmitting(false);
         }
@@ -330,7 +330,7 @@ const UserApprovalView: React.FC = () => {
         if (!selectedStaff) return;
         const tenant_id = linkFormData.tenant_id ?? clinics[0]?.id;
         if (!tenant_id) {
-            alert('Seleccioná una sede.');
+            alert(t('alerts.select_sede'));
             return;
         }
         e.preventDefault();
@@ -351,7 +351,7 @@ const UserApprovalView: React.FC = () => {
             setShowLinkForm(false);
             setLinkFormData({ tenant_id: null, phone: '', specialty: '', license_number: '' });
         } catch (err: any) {
-            const msg = err?.response?.data?.detail || err?.message || 'Error al vincular a sede.';
+            const msg = err?.response?.data?.detail || err?.message || t('alerts.error_link_sede');
             alert(msg);
         } finally {
             setLinkFormSubmitting(false);
