@@ -1,8 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import { Lock, Mail, Shield, AlertCircle, CheckCircle } from 'lucide-react';
+
+const SPECIALTIES = [
+  'Odontología General',
+  'Ortodoncia',
+  'Endodoncia',
+  'Periodoncia',
+  'Cirugía Oral',
+  'Prótesis Dental',
+  'Odontopediatría',
+  'Implantología',
+  'Estética Dental',
+];
+
+interface ClinicOption {
+  id: number;
+  clinic_name: string;
+}
 
 const LoginView: React.FC = () => {
   const { login } = useAuth();
@@ -12,13 +29,27 @@ const LoginView: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
-  const [googleCalendarId, setGoogleCalendarId] = useState('');
+  const [lastName, setLastName] = useState('');
   const [role, setRole] = useState('professional');
+  const [tenantId, setTenantId] = useState<number | ''>('');
+  const [specialty, setSpecialty] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [registrationId, setRegistrationId] = useState('');
+  const [googleCalendarId, setGoogleCalendarId] = useState('');
+  const [clinics, setClinics] = useState<ClinicOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const from = location.state?.from?.pathname || "/";
+
+  useEffect(() => {
+    if (isRegistering) {
+      api.get<ClinicOption[]>('/auth/clinics')
+        .then((res) => setClinics(res.data || []))
+        .catch(() => setClinics([]));
+    }
+  }, [isRegistering]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +70,10 @@ const LoginView: React.FC = () => {
     e.preventDefault();
     setError(null);
     setMessage(null);
+    if ((role === 'professional' || role === 'secretary') && !tenantId) {
+      setError('Elegí una sede/clínica para registrarte.');
+      return;
+    }
     setLoading(true);
     try {
       await api.post('/auth/register', {
@@ -46,8 +81,12 @@ const LoginView: React.FC = () => {
         password,
         role,
         first_name: firstName,
-        last_name: "",
-        google_calendar_id: role === 'professional' ? googleCalendarId : null
+        last_name: lastName,
+        tenant_id: role === 'professional' || role === 'secretary' ? Number(tenantId) : null,
+        specialty: role === 'professional' ? (specialty || null) : null,
+        phone_number: phoneNumber || null,
+        registration_id: registrationId || null,
+        google_calendar_id: role === 'professional' ? (googleCalendarId || null) : null,
       });
       setMessage("Registro solicitado con éxito. Un CEO debe aprobar tu cuenta antes de que puedas ingresar.");
       setIsRegistering(false);
@@ -85,18 +124,31 @@ const LoginView: React.FC = () => {
 
         <form onSubmit={isRegistering ? handleRegister : handleLogin} className="auth-form">
           {isRegistering && (
-            <div className="input-group">
-              <label>Nombre</label>
-              <div className="input-wrapper">
-                <input
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="Tu nombre completo"
-                  required
-                />
+            <>
+              <div className="input-group">
+                <label>Nombre</label>
+                <div className="input-wrapper">
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="Nombre"
+                    required
+                  />
+                </div>
               </div>
-            </div>
+              <div className="input-group">
+                <label>Apellido</label>
+                <div className="input-wrapper">
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Apellido"
+                  />
+                </div>
+              </div>
+            </>
           )}
 
           <div className="input-group">
@@ -138,20 +190,85 @@ const LoginView: React.FC = () => {
             </div>
           )}
 
-          {isRegistering && role === 'professional' && (
+          {isRegistering && (role === 'professional' || role === 'secretary') && (
             <div className="input-group">
-              <label>Google Calendar ID</label>
+              <label>Sede / Clínica <span className="required-dot">*</span></label>
+              <select
+                value={tenantId}
+                onChange={(e) => setTenantId(e.target.value === '' ? '' : Number(e.target.value))}
+                required={role === 'professional' || role === 'secretary'}
+              >
+                <option value="">Elegir sede</option>
+                {clinics.map((c) => (
+                  <option key={c.id} value={c.id}>{c.clinic_name}</option>
+                ))}
+              </select>
+              {clinics.length === 0 && (
+                <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginTop: '4px' }}>
+                  No hay sedes cargadas. Contactá al administrador.
+                </p>
+              )}
+            </div>
+          )}
+
+          {isRegistering && role === 'professional' && (
+            <>
+              <div className="input-group">
+                <label>Especialidad</label>
+                <select value={specialty} onChange={(e) => setSpecialty(e.target.value)}>
+                  <option value="">Seleccionar (opcional)</option>
+                  {SPECIALTIES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="input-group">
+                <label>Teléfono</label>
+                <div className="input-wrapper">
+                  <input
+                    type="text"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    placeholder="Ej. +54 11 1234-5678"
+                  />
+                </div>
+              </div>
+              <div className="input-group">
+                <label>Matrícula</label>
+                <div className="input-wrapper">
+                  <input
+                    type="text"
+                    value={registrationId}
+                    onChange={(e) => setRegistrationId(e.target.value)}
+                    placeholder="Opcional"
+                  />
+                </div>
+              </div>
+              <div className="input-group">
+                <label>Google Calendar ID</label>
+                <div className="input-wrapper">
+                  <input
+                    type="text"
+                    value={googleCalendarId}
+                    onChange={(e) => setGoogleCalendarId(e.target.value)}
+                    placeholder="Opcional. Configurable después en perfil."
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {isRegistering && role === 'secretary' && (
+            <div className="input-group">
+              <label>Teléfono</label>
               <div className="input-wrapper">
                 <input
                   type="text"
-                  value={googleCalendarId}
-                  onChange={(e) => setGoogleCalendarId(e.target.value)}
-                  placeholder="ej: usuario@gmail.com o ID de calendario"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="Opcional"
                 />
               </div>
-              <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                Opcional. Puedes configurarlo después en tu perfil.
-              </p>
             </div>
           )}
 
@@ -186,7 +303,7 @@ const LoginView: React.FC = () => {
         }
         .login-card {
           width: 100%;
-          max-width: 400px;
+          max-width: 440px;
           padding: 40px;
           border-radius: 24px;
           text-align: center;
@@ -295,6 +412,9 @@ const LoginView: React.FC = () => {
         .input-group select option {
           background: #1a1a2e;
           color: white;
+        }
+        .required-dot {
+          color: rgba(255, 255, 255, 0.7);
         }
         @keyframes slideUp {
           from { opacity: 0; transform: translateY(20px); }

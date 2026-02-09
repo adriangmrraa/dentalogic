@@ -2,7 +2,9 @@ from fastapi import APIRouter, HTTPException, Depends, Request, status
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import uuid
+import json
 import logging
+import asyncpg
 from db import db
 from auth_service import auth_service
 
@@ -18,9 +20,13 @@ class UserLogin(BaseModel):
 class UserRegister(BaseModel):
     email: EmailStr
     password: str
-    role: str = "professional" # Default for self-reg if enabled
+    role: str = "professional"
     first_name: str
     last_name: Optional[str] = ""
+    tenant_id: Optional[int] = None  # Obligatorio para professional/secretary
+    specialty: Optional[str] = None
+    phone_number: Optional[str] = None
+    registration_id: Optional[str] = None  # Matrícula
     google_calendar_id: Optional[str] = None
 
 class TokenResponse(BaseModel):
@@ -30,44 +36,120 @@ class TokenResponse(BaseModel):
 
 # --- ROUTES ---
 
+def _default_working_hours():
+    start = "09:00"
+    end = "18:00"
+    slot = {"start": start, "end": end}
+    wh = {}
+    for day in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]:
+        is_working_day = day != "sunday"
+        wh[day] = {"enabled": is_working_day, "slots": [slot] if is_working_day else []}
+    return wh
+
+
+@router.get("/clinics")
+async def list_clinics_public():
+    """
+    Lista de clínicas/sedes para el selector del formulario de registro.
+    Público (sin autenticación). Solo id y nombre.
+    """
+    try:
+        rows = await db.pool.fetch(
+            "SELECT id, clinic_name FROM tenants ORDER BY id ASC"
+        )
+        return [{"id": r["id"], "clinic_name": r["clinic_name"]} for r in rows]
+    except Exception as e:
+        logger.warning(f"list_clinics_public failed: {e}")
+        return []
+
+
 @router.post("/register")
 async def register(payload: UserRegister):
     """
     Registers a new user in 'pending' status.
-    Implements Protocol Omega for fail-safe activation.
+    Para professional/secretary exige tenant_id (sede). Crea fila en professionals con is_active=FALSE.
     """
-    # 1. Check if user exists
     existing = await db.fetchval("SELECT id FROM users WHERE email = $1", payload.email)
     if existing:
         raise HTTPException(status_code=400, detail="El correo ya se encuentra registrado.")
 
-    # 2. Hash password
+    if payload.role in ("professional", "secretary"):
+        if payload.tenant_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Debés elegir una sede/clínica para registrarte como profesional o secretaría.",
+            )
+        tenant_exists = await db.pool.fetchval("SELECT 1 FROM tenants WHERE id = $1", payload.tenant_id)
+        if not tenant_exists:
+            raise HTTPException(status_code=400, detail="La sede elegida no existe.")
+
     password_hash = auth_service.get_password_hash(payload.password)
     user_id = str(uuid.uuid4())
-    
-    # 3. Save User
+    first_name = (payload.first_name or "").strip() or "Usuario"
+    last_name = (payload.last_name or "").strip() or " "
+
     try:
         await db.execute("""
             INSERT INTO users (id, email, password_hash, role, status, first_name, last_name)
             VALUES ($1, $2, $3, $4, 'pending', $5, $6)
-        """, user_id, payload.email, password_hash, payload.role, payload.first_name, payload.last_name)
-        
-        # 4. If professional, create profile record
-        if payload.role == "professional":
-            await db.execute("""
-                INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email, is_active, google_calendar_id)
-                VALUES (1, $1, $2, $3, $4, FALSE, $5)
-            """, user_id, payload.first_name, payload.last_name, payload.email, payload.google_calendar_id)
+        """, user_id, payload.email, password_hash, payload.role, first_name, last_name)
 
-        # 5. Protocol Omega: Log activation token (simulated for now)
+        if payload.role in ("professional", "secretary"):
+            tenant_id = int(payload.tenant_id)
+            uid = uuid.UUID(user_id)
+            wh_json = json.dumps(_default_working_hours())
+            phone_val = (payload.phone_number or "").strip() or None
+            specialty_val = (payload.specialty or "").strip() or None
+            reg_id = (payload.registration_id or "").strip() or None
+            try:
+                await db.pool.execute("""
+                    INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email, phone_number,
+                    specialty, registration_id, is_active, working_hours, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE, $9::jsonb, NOW(), NOW())
+                """, tenant_id, uid, first_name, last_name, payload.email, phone_val, specialty_val, reg_id, wh_json)
+            except asyncpg.UndefinedColumnError as e:
+                err_str = str(e).lower()
+                if "phone_number" in err_str:
+                    await db.pool.execute("""
+                        INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email,
+                        specialty, registration_id, is_active, working_hours, created_at, updated_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, $8::jsonb, NOW(), NOW())
+                    """, tenant_id, uid, first_name, last_name, payload.email, specialty_val, reg_id, wh_json)
+                elif "updated_at" in err_str:
+                    await db.pool.execute("""
+                        INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email, phone_number,
+                        specialty, registration_id, is_active, working_hours, created_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE, $9::jsonb, NOW())
+                    """, tenant_id, uid, first_name, last_name, payload.email, phone_val, specialty_val, reg_id, wh_json)
+                elif "working_hours" in err_str:
+                    try:
+                        await db.pool.execute("""
+                            INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email, phone_number,
+                            specialty, registration_id, is_active, created_at, updated_at)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE, NOW(), NOW())
+                        """, tenant_id, uid, first_name, last_name, payload.email, phone_val, specialty_val, reg_id)
+                    except asyncpg.UndefinedColumnError as e2:
+                        if "phone_number" in str(e2).lower():
+                            await db.pool.execute("""
+                                INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email,
+                                specialty, registration_id, is_active, created_at, updated_at)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, NOW(), NOW())
+                            """, tenant_id, uid, first_name, last_name, payload.email, specialty_val, reg_id)
+                        else:
+                            raise
+                else:
+                    raise
+
         activation_token = str(uuid.uuid4())
         auth_service.log_protocol_omega_activation(payload.email, activation_token)
-        
+
         return {
             "status": "pending",
             "message": "Registro exitoso. Tu cuenta está pendiente de aprobación por el CEO.",
-            "user_id": user_id
+            "user_id": user_id,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error registering user: {e}")
         raise HTTPException(status_code=500, detail="Error interno durante el registro.")
