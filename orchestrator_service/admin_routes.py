@@ -281,22 +281,57 @@ async def get_all_users(user_data = Depends(verify_admin_token)):
 
 @router.post("/users/{user_id}/status")
 async def update_user_status(user_id: str, payload: StatusUpdate, user_data = Depends(verify_admin_token)):
-    """ Actualiza el estado de un usuario (Aprobación/Suspensión) - Solo CEO """
+    """ Actualiza el estado de un usuario (Aprobación/Suspensión) - Solo CEO.
+    Al aprobar (active): si es professional/secretary y no tiene fila en professionals, se crea una para la primera sede. """
     if user_data.role != 'ceo':
         raise HTTPException(status_code=403, detail="Solo el CEO puede cambiar el estado de los usuarios.")
 
-    # Validar que el usuario exista
-    target_user = await db.fetchrow("SELECT email, role FROM users WHERE id = $1", user_id)
+    target_user = await db.fetchrow(
+        "SELECT id, email, role, COALESCE(first_name, '') as first_name, COALESCE(last_name, '') as last_name FROM users WHERE id = $1",
+        user_id
+    )
     if not target_user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
-    # Actualizar estado
     await db.execute("UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2", payload.status, user_id)
 
-    # Si se cambia el estado de un profesional, sincronizar su perfil médico
-    if target_user['role'] == 'professional':
+    uid = uuid.UUID(user_id)
+    if target_user['role'] in ('professional', 'secretary'):
         is_active = (payload.status == 'active')
-        await db.execute("UPDATE professionals SET is_active = $1 WHERE user_id = $2", is_active, uuid.UUID(user_id))
+        # Sincronizar is_active en professionals si ya tiene fila(s)
+        await db.execute("UPDATE professionals SET is_active = $1 WHERE user_id = $2", is_active, uid)
+        # Al aprobar: si no tiene ninguna fila en professionals, crear una para la primera sede (puede usar la plataforma)
+        if payload.status == 'active':
+            has_row = await db.pool.fetchval("SELECT 1 FROM professionals WHERE user_id = $1", uid)
+            if not has_row:
+                first_tenant = await db.pool.fetchval("SELECT id FROM tenants ORDER BY id ASC LIMIT 1")
+                tenant_id = int(first_tenant) if first_tenant is not None else 1
+                first_name = (target_user["first_name"] or "").strip() or "Profesional"
+                last_name = (target_user["last_name"] or "").strip() or " "
+                email = (target_user["email"] or "").strip()
+                wh_json = json.dumps(generate_default_working_hours())
+                try:
+                    await db.pool.execute("""
+                        INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email, phone_number,
+                        specialty, registration_id, is_active, working_hours, created_at, updated_at)
+                        VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, TRUE, $6::jsonb, NOW(), NOW())
+                    """, tenant_id, uid, first_name, last_name, email, wh_json)
+                except asyncpg.UndefinedColumnError as e:
+                    err_str = str(e).lower()
+                    if "phone_number" in err_str:
+                        await db.pool.execute("""
+                            INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email,
+                            specialty, registration_id, is_active, working_hours, created_at, updated_at)
+                            VALUES ($1, $2, $3, $4, $5, NULL, NULL, TRUE, $6::jsonb, NOW(), NOW())
+                        """, tenant_id, uid, first_name, last_name, email, wh_json)
+                    elif "updated_at" in err_str:
+                        await db.pool.execute("""
+                            INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email, phone_number,
+                            specialty, registration_id, is_active, working_hours, created_at)
+                            VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, TRUE, $6::jsonb, NOW())
+                        """, tenant_id, uid, first_name, last_name, email, wh_json)
+                    else:
+                        raise
 
     return {"message": f"Usuario {target_user['email']} actualizado a {payload.status}."}
 
@@ -2039,6 +2074,57 @@ async def list_professionals(
     except Exception as e:
         logger.error(f"list_professionals all fallbacks failed: {e}", exc_info=True)
         return []
+
+
+@router.get("/professionals/by-user/{user_id}", dependencies=[Depends(verify_admin_token)])
+async def get_professionals_by_user(
+    user_id: str,
+    allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
+):
+    """
+    Devuelve las filas de professionals asociadas a un usuario (por user_id).
+    Usado por el modal de detalle al hacer clic en un miembro de Personal Activo.
+    Solo se devuelven sedes a las que el requestor tiene acceso.
+    """
+    try:
+        uid = uuid.UUID(user_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="user_id inválido")
+    try:
+        rows = await db.pool.fetch(
+            """
+            SELECT id, tenant_id, user_id, first_name, last_name, email, specialty,
+                   is_active, working_hours, created_at
+            FROM professionals
+            WHERE user_id = $1 AND tenant_id = ANY($2::int[])
+            ORDER BY tenant_id
+            """,
+            uid,
+            allowed_ids,
+        )
+        return [dict(r) for r in rows]
+    except Exception as e:
+        err_str = str(e).lower()
+        if "working_hours" in err_str or "tenant_id" in err_str:
+            try:
+                rows = await db.pool.fetch(
+                    "SELECT id, tenant_id, user_id, first_name, last_name, email, specialty, is_active FROM professionals WHERE user_id = $1 AND tenant_id = ANY($2::int[]) ORDER BY tenant_id",
+                    uid,
+                    allowed_ids,
+                )
+                return [dict(r) for r in rows]
+            except Exception:
+                pass
+        try:
+            rows = await db.pool.fetch(
+                "SELECT id, first_name, last_name, email, specialty, is_active FROM professionals WHERE user_id = $1",
+                uid,
+            )
+            return [dict(r) for r in rows]
+        except Exception as e2:
+            logger.warning(f"get_professionals_by_user failed: {e2}")
+            return []
+
 
 # ==================== ENDPOINTS GOOGLE CALENDAR ====================
 

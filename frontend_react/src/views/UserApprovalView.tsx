@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import {
     UserCheck, UserX, Clock, ShieldCheck, Mail,
-    AlertTriangle, User, Users, Lock, Unlock
+    AlertTriangle, User, Users, Lock, Unlock, X, Building2, Stethoscope, BarChart3, MessageSquare
 } from 'lucide-react';
+import { Modal } from '../components/Modal';
 
 interface StaffUser {
     id: string;
@@ -15,15 +16,47 @@ interface StaffUser {
     last_name?: string;
 }
 
+interface ProfessionalRow {
+    id: number;
+    tenant_id?: number;
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+    specialty?: string;
+    is_active?: boolean;
+}
+
 const UserApprovalView: React.FC = () => {
     const [users, setUsers] = useState<StaffUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'requests' | 'staff'>('requests');
+    const [selectedStaff, setSelectedStaff] = useState<StaffUser | null>(null);
+    const [staffDetailLoading, setStaffDetailLoading] = useState(false);
+    const [professionalRows, setProfessionalRows] = useState<ProfessionalRow[]>([]);
+    const [clinics, setClinics] = useState<{ id: number; clinic_name: string }[]>([]);
 
     useEffect(() => {
         fetchAllUsers();
     }, []);
+
+    useEffect(() => {
+        api.get<{ id: number; clinic_name: string }[]>('/admin/chat/tenants').then((res) => {
+            setClinics(res.data || []);
+        }).catch(() => setClinics([]));
+    }, []);
+
+    useEffect(() => {
+        if (!selectedStaff) {
+            setProfessionalRows([]);
+            return;
+        }
+        setStaffDetailLoading(true);
+        api.get<ProfessionalRow[]>(`/admin/professionals/by-user/${selectedStaff.id}`)
+            .then((res) => setProfessionalRows(res.data || []))
+            .catch(() => setProfessionalRows([]))
+            .finally(() => setStaffDetailLoading(false));
+    }, [selectedStaff?.id]);
 
     const fetchAllUsers = async () => {
         try {
@@ -139,12 +172,92 @@ const UserApprovalView: React.FC = () => {
                             </div>
                         ) : (
                             staff.map(user => (
-                                <UserCard key={user.id} user={user} onAction={handleAction} />
+                                <UserCard
+                                    key={user.id}
+                                    user={user}
+                                    onAction={handleAction}
+                                    onCardClick={() => setSelectedStaff(user)}
+                                />
                             ))
                         )
                     )}
                 </div>
             )}
+
+            {/* Modal: detalle del profesional (antes "página Profesionales") */}
+            <Modal
+                isOpen={!!selectedStaff}
+                onClose={() => setSelectedStaff(null)}
+                title={selectedStaff ? `${selectedStaff.first_name || 'Sin nombre'} ${selectedStaff.last_name || ''}` : 'Detalle'}
+                size="xl"
+            >
+                {selectedStaff && (
+                    <div className="space-y-6">
+                        <div className="flex flex-wrap gap-4 items-start">
+                            <div className="role-badge" data-role={selectedStaff.role}>
+                                {selectedStaff.role.toUpperCase()}
+                            </div>
+                            <div>
+                                <p className="text-sm text-gray-600 flex items-center gap-2">
+                                    <Mail size={14} />
+                                    {selectedStaff.email}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Miembro desde: {new Date(selectedStaff.created_at).toLocaleDateString()}
+                                </p>
+                            </div>
+                        </div>
+
+                        {staffDetailLoading ? (
+                            <p className="text-gray-500">Cargando datos de sedes...</p>
+                        ) : professionalRows.length > 0 ? (
+                            <>
+                                <div>
+                                    <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                        <Building2 size={16} />
+                                        Sedes asignadas
+                                    </h3>
+                                    <ul className="list-disc list-inside text-sm text-gray-600">
+                                        {professionalRows.map((p) => (
+                                            <li key={p.id}>
+                                                {clinics.find((c) => c.id === p.tenant_id)?.clinic_name || `Sede ${p.tenant_id}`}
+                                                {p.specialty && ` · ${p.specialty}`}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+                                    <div className="glass p-4 rounded-xl">
+                                        <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                                            <Stethoscope size={16} />
+                                            Sus pacientes
+                                        </h4>
+                                        <p className="text-xs text-gray-500">Resumen y métricas por paciente (próximamente).</p>
+                                    </div>
+                                    <div className="glass p-4 rounded-xl">
+                                        <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                                            <BarChart3 size={16} />
+                                            Uso de la plataforma
+                                        </h4>
+                                        <p className="text-xs text-gray-500">Tiempo de uso, interacciones, análisis IA (próximamente).</p>
+                                    </div>
+                                </div>
+                                <div className="glass p-4 rounded-xl">
+                                    <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                                        <MessageSquare size={16} />
+                                        Mensajes e interacciones
+                                    </h4>
+                                    <p className="text-xs text-gray-500">Enlace con chats de pacientes habituales (próximamente).</p>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="glass p-4 rounded-xl text-center text-gray-500 text-sm">
+                                Aún no está vinculado a ninguna sede. Al aprobar, se crea su perfil en la primera sede para que pueda usar la plataforma.
+                            </div>
+                        )}
+                    </div>
+                )}
+            </Modal>
 
             <style>{`
         .glass {
@@ -233,11 +346,16 @@ interface UserCardProps {
     user: StaffUser;
     onAction: (id: string, action: 'active' | 'suspended') => void;
     isRequest?: boolean;
+    onCardClick?: () => void;
 }
 
-const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest }) => (
+const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardClick }) => (
     <div className="glass p-5 flex items-center justify-between animate-fadeIn">
-        <div className="flex items-center gap-4">
+        <div
+            className={`flex items-center gap-4 flex-1 min-w-0 ${onCardClick ? 'cursor-pointer hover:opacity-90' : ''}`}
+            onClick={onCardClick}
+            role={onCardClick ? 'button' : undefined}
+        >
             <div className={`role-badge ${user.status === 'suspended' ? 'opacity-40' : ''}`} data-role={user.role}>
                 {user.role.toUpperCase()}
             </div>
@@ -259,7 +377,7 @@ const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest }) => (
             </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
             {isRequest ? (
                 <>
                     <button onClick={() => onAction(user.id, 'active')} className="btn-icon-labeled success">

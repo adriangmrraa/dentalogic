@@ -4,7 +4,6 @@ import DashboardView from './views/DashboardView';
 import AgendaView from './views/AgendaView';
 import PatientsView from './views/PatientsView';
 import PatientDetail from './views/PatientDetail';
-import ProfessionalsView from './views/ProfessionalsView';
 import ProfessionalAnalyticsView from './views/ProfessionalAnalyticsView';
 import ChatsView from './views/ChatsView';
 import TreatmentsView from './views/TreatmentsView';
@@ -31,7 +30,7 @@ function App() {
                   <Route path="pacientes" element={<PatientsView />} />
                   <Route path="pacientes/:id" element={<PatientDetail />} />
                   <Route path="chats" element={<ChatsView />} />
-                  <Route path="profesionales" element={<ProfessionalsView />} />
+                  <Route path="profesionales" element={<Navigate to="/aprobaciones" replace />} />
                   <Route path="analytics/professionals" element={
                     <ProtectedRoute allowedRoles={['ceo']}>
                       <ProfessionalAnalyticsView />
