@@ -138,9 +138,10 @@ export default function ProfessionalsView() {
       }
       fetchProfessionals();
       closeModal();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error saving professional:', error);
-      alert('Error al guardar profesional');
+      const msg = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      alert(msg || 'Error al guardar profesional');
     }
   };
 

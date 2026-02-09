@@ -1191,17 +1191,24 @@ async def create_professional(
         tenant_id = resolved_tenant_id
 
     try:
-        # 1. Crear usuario asociado
+        # 1. Crear usuario asociado (first_name puede no existir en BD antigua)
         user_id = uuid.uuid4()
         email = (professional.email or "").strip() or f"prof_{uuid.uuid4().hex[:8]}@dentalogic.local"
         name_part = (professional.name or "").strip()
         first_name = name_part.split(maxsplit=1)[0] if name_part else "Profesional"
-        last_name = name_part.split(maxsplit=1)[1] if name_part and len(name_part.split(maxsplit=1)) > 1 else " "
 
-        await db.pool.execute("""
-            INSERT INTO users (id, email, password_hash, role, first_name, status, created_at)
-            VALUES ($1, $2, $3, 'professional', $4, 'active', NOW())
-        """, user_id, email, "hash_placeholder", first_name)
+        try:
+            await db.pool.execute("""
+                INSERT INTO users (id, email, password_hash, role, first_name, status, created_at)
+                VALUES ($1, $2, $3, 'professional', $4, 'active', NOW())
+            """, user_id, email, "hash_placeholder", first_name)
+        except asyncpg.UndefinedColumnError:
+            await db.pool.execute("""
+                INSERT INTO users (id, email, password_hash, role, status, created_at)
+                VALUES ($1, $2, $3, 'professional', 'active', NOW())
+            """, user_id, email, "hash_placeholder")
+
+        last_name = name_part.split(maxsplit=1)[1] if name_part and len(name_part.split(maxsplit=1)) > 1 else " "
 
         # 2. Crear profesional (tenant_id = clínica elegida)
         wh = professional.working_hours or generate_default_working_hours()
@@ -1254,6 +1261,11 @@ async def create_professional(
     except HTTPException:
         raise
     except Exception as e:
+        err_msg = str(e).lower()
+        if "unique" in err_msg or "duplicate" in err_msg:
+            raise HTTPException(status_code=409, detail="Ya existe un usuario o profesional con ese email o datos.")
+        if "foreign key" in err_msg or "violates foreign key" in err_msg or "tenant" in err_msg:
+            raise HTTPException(status_code=400, detail="La clínica elegida no existe. Creá una sede primero en Sedes (Clínicas).")
         logger.exception("Error creating professional")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1910,7 +1922,8 @@ async def list_professionals(tenant_id: int = Depends(get_resolved_tenant_id)):
         return [dict(r) | {"last_name": ""} for r in rows]
     except Exception as e:
         logger.error(f"list_professionals all fallbacks failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error listando profesionales. Revisá que la tabla professionals exista y tenga columnas id, first_name, specialty, is_active. Detalle: {e}")
+        # Devolver lista vacía para que la página cargue; el usuario puede intentar crear profesional
+        return []
 
 # ==================== ENDPOINTS GOOGLE CALENDAR ====================
 
