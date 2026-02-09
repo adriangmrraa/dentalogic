@@ -61,6 +61,10 @@ INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_SERVICE_URL", "http://orchestrator_service:8000")
 
+# Buffer y respuestas (Redis + ventana de acumulación)
+DEBOUNCE_SECONDS = int(os.getenv("WHATSAPP_DEBOUNCE_SECONDS", "16"))  # Ventana sin mensajes nuevos antes de procesar
+BUBBLE_DELAY_SECONDS = float(os.getenv("WHATSAPP_BUBBLE_DELAY_SECONDS", "4"))  # Delay entre cada burbuja de respuesta
+
 # Initialize structlog
 structlog.configure(
     processors=[
@@ -199,14 +203,13 @@ async def send_sequence(messages: List[OrchestratorMessage], user_number: str, b
             if msg.imageUrl:
                 try: await client.typing_indicator(inbound_id, correlation_id)
                 except: pass
-                await asyncio.sleep(4)
+                await asyncio.sleep(BUBBLE_DELAY_SECONDS)
                 await client.send_image(user_number, msg.imageUrl, correlation_id)
                 try: await client.mark_as_read(inbound_id, correlation_id)
                 except: pass
 
-            # 2. Text Bubble(s) with Safety Splitter (Layer 2)
+            # 2. Text Bubble(s) with Safety Splitter — varias burbujas con delay entre cada una
             if msg.text:
-                # Emergency splitting if orchestrator sent a wall of text (>400 chars)
                 import re
                 if len(msg.text) > 400:
                     text_parts = re.split(r'(?<=[.!?]) +', msg.text)
@@ -225,13 +228,13 @@ async def send_sequence(messages: List[OrchestratorMessage], user_number: str, b
                 for part in refined_parts:
                     try: await client.typing_indicator(inbound_id, correlation_id)
                     except: pass
-                    await asyncio.sleep(1.5)
+                    await asyncio.sleep(BUBBLE_DELAY_SECONDS)
                     await client.send_text(user_number, part, correlation_id)
                     try: await client.mark_as_read(inbound_id, correlation_id)
                     except: pass
 
-            # Delay between messages to prevent out-of-order delivery
-            await asyncio.sleep(2)
+            # Delay entre cada mensaje/burbuja para evitar desorden
+            await asyncio.sleep(BUBBLE_DELAY_SECONDS)
 
         except Exception as e:
             logger.error("sequence_step_error", error=str(e), correlation_id=correlation_id)
@@ -314,8 +317,8 @@ async def process_user_buffer(from_number: str, business_number: str, customer_n
                 break
             else:
                 log.info("new_messages_while_responding", remaining=redis_client.llen(buffer_key))
-                # Reset timer to force a small fresh debounce for the new messages
-                redis_client.setex(timer_key, 5, "1")
+                # Nueva ventana de acumulación para los mensajes que llegaron mientras respondíamos
+                redis_client.setex(timer_key, DEBOUNCE_SECONDS, "1")
 
     except Exception as e:
         log.error("buffer_process_error", error=str(e))
@@ -368,7 +371,7 @@ async def ycloud_webhook(request: Request):
                     "wamid": msg.get("wamid") or event.get("id"),
                     "event_id": event.get("id")
                 }))
-                redis_client.setex(timer_key, 12, "1")
+                redis_client.setex(timer_key, DEBOUNCE_SECONDS, "1")
                 
                 if not redis_client.get(lock_key):
                     redis_client.setex(lock_key, 60, "1")
