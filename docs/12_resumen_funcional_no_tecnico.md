@@ -32,7 +32,10 @@ Todos los componentes trabajan juntos para que no se pierda ninguna información
 *   **Historias Clínicas Inteligentes:** Cuando la asistente charla con un paciente, ella "anota" en su memoria los síntomas que el paciente mencionó. Luego, cuando el doctor abre la ficha del paciente en el **Frontend**, ya puede ver un resumen de lo que el paciente le contó a la IA antes de entrar al consultorio.
 *   **Detección de Alertas:** Si el doctor anota que un paciente es diabético en el Frontend, la próxima vez que ese paciente hable con la IA, ella lo sabrá y podrá ser más cuidadosa o dar avisos específicos.
  
-## 5. El "Control Humano" y la Ventana de 24hs
+## 5. Registro y Aprobación de Personal
+Cuando alguien nuevo pide acceso a la plataforma (desde la pantalla de login), el formulario pide **a qué sede/clínica se une** y, si es profesional o secretaría, su especialidad, teléfono y matrícula. Esa solicitud queda pendiente hasta que un CEO la apruebe. Una vez aprobada, la persona ya aparece en **Personal Activo** y puede editar su perfil (horarios, datos de contacto) desde la misma pantalla de Aprobaciones, sin necesidad de una página aparte de "Profesionales".
+
+## 6. El "Control Humano" y la Ventana de 24hs
 Si la IA no entiende algo o si el paciente pide hablar con una persona, la IA se retira (se "silencia"). 
 
 *   **Intervención Humana:** Aparece un aviso indicando que ese paciente necesita atención manual. Una vez que el personal responde, la IA se queda esperando hasta que se le pida volver a intervenir.

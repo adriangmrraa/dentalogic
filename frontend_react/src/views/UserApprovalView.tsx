@@ -4,7 +4,6 @@ import {
     UserCheck, UserX, Clock, ShieldCheck, Mail,
     AlertTriangle, User, Users, Lock, Unlock, X, Building2, Stethoscope, BarChart3, MessageSquare, Plus, Phone, Save, Settings, ChevronDown, ChevronUp, Edit
 } from 'lucide-react';
-import { Modal } from '../components/Modal';
 
 interface DayConfig { enabled: boolean; slots: { start: string; end: string }[]; }
 interface WorkingHours {
@@ -103,6 +102,12 @@ const UserApprovalView: React.FC = () => {
     }>({ name: '', email: '', phone: '', specialty: '', license_number: '', is_active: true, working_hours: createDefaultWorkingHours() });
     const [editFormSubmitting, setEditFormSubmitting] = useState(false);
     const [expandedEditDays, setExpandedEditDays] = useState<string[]>([]);
+    const [expandedAccordion, setExpandedAccordion] = useState<'pacientes' | 'uso' | 'mensajes' | null>(null);
+    const [accordionData, setAccordionData] = useState<{
+        analytics: Record<string, { metrics: { total_appointments: number; unique_patients: number; completion_rate: number; cancellation_rate: number; revenue: number; retention_rate: number }; tags: string[] }>;
+        chatCountByTenant: Record<string, number>;
+    }>({ analytics: {}, chatCountByTenant: {} });
+    const [accordionLoading, setAccordionLoading] = useState<'pacientes' | 'uso' | 'mensajes' | null>(null);
 
     useEffect(() => {
         fetchAllUsers();
@@ -153,6 +158,57 @@ const UserApprovalView: React.FC = () => {
         setSelectedStaff(null);
         setShowLinkForm(false);
         setLinkFormData({ tenant_id: null, phone: '', specialty: '', license_number: '' });
+        setExpandedAccordion(null);
+        setAccordionData({ analytics: {}, chatCountByTenant: {} });
+    };
+
+    const getMonthRange = () => {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        return { start_date: start.toISOString().slice(0, 10), end_date: end.toISOString().slice(0, 10) };
+    };
+
+    const handleAccordionToggle = async (section: 'pacientes' | 'uso' | 'mensajes') => {
+        const next = expandedAccordion === section ? null : section;
+        setExpandedAccordion(next);
+        if (!next) return;
+        if (section === 'pacientes' || section === 'uso') {
+            const alreadyLoaded = professionalRows.length > 0 && accordionData.analytics[`${professionalRows[0].id}-${professionalRows[0].tenant_id}`];
+            if (alreadyLoaded) return;
+            setAccordionLoading(section);
+            const { start_date, end_date } = getMonthRange();
+            const results: Record<string, { metrics: any; tags: string[] }> = {};
+            for (const row of professionalRows) {
+                try {
+                    const res = await api.get(`/admin/professionals/${row.id}/analytics`, {
+                        params: { tenant_id: row.tenant_id, start_date, end_date },
+                    });
+                    results[`${row.id}-${row.tenant_id}`] = { metrics: res.data.metrics, tags: res.data.tags || [] };
+                } catch {
+                    results[`${row.id}-${row.tenant_id}`] = { metrics: null, tags: [] };
+                }
+            }
+            setAccordionData((prev) => ({ ...prev, analytics: { ...prev.analytics, ...results } }));
+            setAccordionLoading(null);
+        } else {
+            if (accordionData.chatCountByTenant['loaded']) return;
+            setAccordionLoading('mensajes');
+            const counts: Record<string, number> = { loaded: 1 };
+            for (const row of professionalRows) {
+                const tid = row.tenant_id ?? 0;
+                if (tid) {
+                    try {
+                        const res = await api.get('/admin/chat/sessions', { params: { tenant_id: tid } });
+                        counts[String(tid)] = Array.isArray(res.data) ? res.data.length : 0;
+                    } catch {
+                        counts[String(tid)] = 0;
+                    }
+                }
+            }
+            setAccordionData((prev) => ({ ...prev, chatCountByTenant: { ...prev.chatCountByTenant, ...counts } }));
+            setAccordionLoading(null);
+        }
     };
 
     const handleConfigClick = async (user: StaffUser) => {
@@ -403,183 +459,292 @@ const UserApprovalView: React.FC = () => {
                 </div>
             )}
 
-            {/* Modal: detalle del profesional (antes "página Profesionales") */}
-            <Modal
-                isOpen={!!selectedStaff}
-                onClose={closeStaffModal}
-                title={selectedStaff ? `${selectedStaff.first_name || 'Sin nombre'} ${selectedStaff.last_name || ''}` : 'Detalle'}
-                size="xl"
-            >
-                {selectedStaff && (
-                    <div className="space-y-6">
-                        <div className="flex flex-wrap gap-4 items-start justify-between">
-                            <div className="flex flex-wrap gap-4 items-start">
-                                <div className="role-badge" data-role={selectedStaff.role}>
-                                    {selectedStaff.role.toUpperCase()}
-                                </div>
-                                <div>
-                                    <p className="text-sm text-gray-600 flex items-center gap-2">
-                                        <Mail size={14} />
-                                        {selectedStaff.email}
-                                    </p>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Miembro desde: {new Date(selectedStaff.created_at).toLocaleDateString()}
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setShowLinkForm(true);
-                                    setLinkFormData((p) => ({ ...p, tenant_id: clinics[0]?.id ?? null }));
-                                }}
-                                className="btn-vincular-sede"
-                            >
-                                <Plus size={18} />
-                                {professionalRows.length > 0 ? 'Vincular a otra sede' : 'Vincular a sede'}
-                            </button>
-                        </div>
-
-                        {showLinkForm && (
-                            <form onSubmit={handleLinkToSedeSubmit} className="glass p-5 rounded-xl space-y-4">
-                                <h3 className="text-sm font-semibold text-gray-800">Crear perfil en una sede</h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Sede / Clínica</label>
-                                        <select
-                                            value={linkFormData.tenant_id ?? ''}
-                                            onChange={(e) => setLinkFormData((p) => ({ ...p, tenant_id: e.target.value ? parseInt(e.target.value, 10) : null }))}
-                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                            required
-                                        >
-                                            <option value="">Elegir sede</option>
-                                            {clinics.map((c) => (
-                                                <option key={c.id} value={c.id}>{c.clinic_name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><Phone size={12} /> Teléfono</label>
-                                        <input
-                                            type="text"
-                                            value={linkFormData.phone}
-                                            onChange={(e) => setLinkFormData((p) => ({ ...p, phone: e.target.value }))}
-                                            placeholder="Ej. +54 11 1234-5678"
-                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Especialidad</label>
-                                        <select
-                                            value={linkFormData.specialty}
-                                            onChange={(e) => setLinkFormData((p) => ({ ...p, specialty: e.target.value }))}
-                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                        >
-                                            <option value="">Seleccionar (opcional)</option>
-                                            {SPECIALTIES.map((s) => (
-                                                <option key={s} value={s}>{s}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Matrícula</label>
-                                        <input
-                                            type="text"
-                                            value={linkFormData.license_number}
-                                            onChange={(e) => setLinkFormData((p) => ({ ...p, license_number: e.target.value }))}
-                                            placeholder="Opcional"
-                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button type="submit" disabled={linkFormSubmitting} className="btn-icon-labeled success">
-                                        <Save size={18} />
-                                        {linkFormSubmitting ? 'Guardando...' : 'Guardar y vincular'}
-                                    </button>
-                                    <button type="button" onClick={() => { setShowLinkForm(false); setLinkFormData({ tenant_id: null, phone: '', specialty: '', license_number: '' }); }} className="btn-icon-labeled">
-                                        Cancelar
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-
-                        {staffDetailLoading ? (
-                            <p className="text-gray-500">Cargando datos de sedes...</p>
-                        ) : professionalRows.length > 0 ? (
-                            <>
-                                <div>
-                                    <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                                        <Building2 size={16} />
-                                        Sedes asignadas
-                                    </h3>
-                                    <ul className="list-disc list-inside text-sm text-gray-600">
-                                        {professionalRows.map((p) => (
-                                            <li key={p.id}>
-                                                {clinics.find((c) => c.id === p.tenant_id)?.clinic_name || `Sede ${p.tenant_id}`}
-                                                {p.specialty && ` · ${p.specialty}`}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
-                                    <div className="glass p-4 rounded-xl">
-                                        <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                                            <Stethoscope size={16} />
-                                            Sus pacientes
-                                        </h4>
-                                        <p className="text-xs text-gray-500">Resumen y métricas por paciente (próximamente).</p>
-                                    </div>
-                                    <div className="glass p-4 rounded-xl">
-                                        <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                                            <BarChart3 size={16} />
-                                            Uso de la plataforma
-                                        </h4>
-                                        <p className="text-xs text-gray-500">Tiempo de uso, interacciones, análisis IA (próximamente).</p>
-                                    </div>
-                                </div>
-                                <div className="glass p-4 rounded-xl">
-                                    <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                                        <MessageSquare size={16} />
-                                        Mensajes e interacciones
-                                    </h4>
-                                    <p className="text-xs text-gray-500">Enlace con chats de pacientes habituales (próximamente).</p>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="glass p-4 rounded-xl text-center text-gray-500 text-sm">
-                                Aún no está vinculado a ninguna sede. Usá el botón <strong>Vincular a sede</strong> arriba para elegir una clínica y guardar sus datos de contacto; así podrá usar la agenda y la plataforma.
-                            </div>
-                        )}
-                    </div>
-                )}
-            </Modal>
-
-            {/* Modal Editar Perfil (estilo captura: claro, grande, tres columnas) */}
-            {editingProfessionalRow && (
+            {/* Modal: detalle del profesional (optimizado mobile: full-height, scroll aislado, touch targets) */}
+            {selectedStaff && (
                 <div
-                    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                    onClick={(e) => e.target === e.currentTarget && closeEditProfileModal()}
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+                    onClick={(e) => e.target === e.currentTarget && closeStaffModal()}
                 >
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
-                        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
-                                    <Edit size={24} />
-                                </div>
-                                <div>
-                                    <h2 className="text-xl font-bold text-gray-900">
-                                        Editar Perfil: {editFormData.name || (staffForEditModal?.first_name && staffForEditModal?.last_name ? `${staffForEditModal.first_name} ${staffForEditModal.last_name}` : staffForEditModal?.email) || 'Profesional'}
-                                    </h2>
-                                    <p className="text-sm text-gray-500 mt-0.5">Completa la información del staff médico.</p>
-                                </div>
-                            </div>
-                            <button type="button" onClick={closeEditProfileModal} className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors">
+                    <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-6xl h-[92dvh] sm:h-auto sm:max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5 border-b border-gray-100 shrink-0">
+                            <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate min-w-0">
+                                {selectedStaff.first_name || 'Sin nombre'} {selectedStaff.last_name || ''}
+                            </h2>
+                            <button type="button" onClick={closeStaffModal} className="shrink-0 p-2.5 min-w-[44px] min-h-[44px] rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors touch-manipulation" aria-label="Cerrar">
                                 <X size={24} />
                             </button>
                         </div>
-                        <form onSubmit={handleEditProfileSubmit} className="flex-1 overflow-y-auto min-h-0">
-                            <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4 sm:px-6 sm:py-5 space-y-6 overscroll-contain">
+                            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-4 items-stretch sm:items-start justify-between">
+                                <div className="flex flex-wrap gap-3 items-start min-w-0">
+                                    <div className="role-badge shrink-0" data-role={selectedStaff.role}>
+                                        {selectedStaff.role.toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-sm text-gray-600 flex items-center gap-2 truncate">
+                                            <Mail size={14} className="shrink-0" />
+                                            <span className="truncate">{selectedStaff.email}</span>
+                                        </p>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Miembro desde: {new Date(selectedStaff.created_at).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowLinkForm(true);
+                                        setLinkFormData((p) => ({ ...p, tenant_id: clinics[0]?.id ?? null }));
+                                    }}
+                                    className="btn-vincular-sede min-h-[44px] touch-manipulation shrink-0"
+                                >
+                                    <Plus size={18} />
+                                    {professionalRows.length > 0 ? 'Vincular a otra sede' : 'Vincular a sede'}
+                                </button>
+                            </div>
+
+                            {showLinkForm && (
+                                <form onSubmit={handleLinkToSedeSubmit} className="glass p-4 sm:p-5 rounded-xl space-y-4">
+                                    <h3 className="text-sm font-semibold text-gray-800">Crear perfil en una sede</h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Sede / Clínica</label>
+                                            <select
+                                                value={linkFormData.tenant_id ?? ''}
+                                                onChange={(e) => setLinkFormData((p) => ({ ...p, tenant_id: e.target.value ? parseInt(e.target.value, 10) : null }))}
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                                required
+                                            >
+                                                <option value="">Elegir sede</option>
+                                                {clinics.map((c) => (
+                                                    <option key={c.id} value={c.id}>{c.clinic_name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><Phone size={12} /> Teléfono</label>
+                                            <input
+                                                type="text"
+                                                value={linkFormData.phone}
+                                                onChange={(e) => setLinkFormData((p) => ({ ...p, phone: e.target.value }))}
+                                                placeholder="Ej. +54 11 1234-5678"
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Especialidad</label>
+                                            <select
+                                                value={linkFormData.specialty}
+                                                onChange={(e) => setLinkFormData((p) => ({ ...p, specialty: e.target.value }))}
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                            >
+                                                <option value="">Seleccionar (opcional)</option>
+                                                {SPECIALTIES.map((s) => (
+                                                    <option key={s} value={s}>{s}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Matrícula</label>
+                                            <input
+                                                type="text"
+                                                value={linkFormData.license_number}
+                                                onChange={(e) => setLinkFormData((p) => ({ ...p, license_number: e.target.value }))}
+                                                placeholder="Opcional"
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button type="submit" disabled={linkFormSubmitting} className="btn-icon-labeled success">
+                                            <Save size={18} />
+                                            {linkFormSubmitting ? 'Guardando...' : 'Guardar y vincular'}
+                                        </button>
+                                        <button type="button" onClick={() => { setShowLinkForm(false); setLinkFormData({ tenant_id: null, phone: '', specialty: '', license_number: '' }); }} className="btn-icon-labeled">
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+
+                            {staffDetailLoading ? (
+                                <p className="text-gray-500">Cargando datos de sedes...</p>
+                            ) : professionalRows.length > 0 ? (
+                                <>
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                            <Building2 size={16} />
+                                            Sedes asignadas
+                                        </h3>
+                                        <ul className="list-disc list-inside text-sm text-gray-600">
+                                            {professionalRows.map((p) => (
+                                                <li key={p.id}>
+                                                    {clinics.find((c) => c.id === p.tenant_id)?.clinic_name || `Sede ${p.tenant_id}`}
+                                                    {p.specialty && ` · ${p.specialty}`}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+
+                                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleAccordionToggle('pacientes')}
+                                            className="w-full flex items-center justify-between gap-2 p-4 min-h-[48px] text-left bg-gray-50 hover:bg-gray-100 active:bg-gray-200 transition-colors touch-manipulation"
+                                        >
+                                            <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                                                <Stethoscope size={16} />
+                                                Sus pacientes
+                                            </span>
+                                            {expandedAccordion === 'pacientes' ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                        </button>
+                                        {expandedAccordion === 'pacientes' && (
+                                            <div className="p-4 border-t border-gray-200 bg-white">
+                                                {accordionLoading === 'pacientes' ? (
+                                                    <p className="text-sm text-gray-500">Cargando métricas...</p>
+                                                ) : (
+                                                    <div className="space-y-4">
+                                                        {professionalRows.map((row) => {
+                                                            const key = `${row.id}-${row.tenant_id}`;
+                                                            const d = accordionData.analytics[key];
+                                                            const m = d?.metrics;
+                                                            const clinicName = clinics.find((c) => c.id === row.tenant_id)?.clinic_name || `Sede ${row.tenant_id}`;
+                                                            return (
+                                                                <div key={key} className="text-sm">
+                                                                    <p className="font-medium text-gray-700 mb-1">{clinicName}</p>
+                                                                    {m ? (
+                                                                        <ul className="text-gray-600 space-y-0.5">
+                                                                            <li>Pacientes únicos (mes): <strong>{m.unique_patients}</strong></li>
+                                                                            <li>Turnos totales (mes): <strong>{m.total_appointments}</strong></li>
+                                                                            <li>Tasa de finalización: <strong>{m.completion_rate}%</strong></li>
+                                                                            <li>Retención: <strong>{m.retention_rate}%</strong></li>
+                                                                        </ul>
+                                                                    ) : (
+                                                                        <p className="text-gray-500">Sin datos en este período.</p>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleAccordionToggle('uso')}
+                                            className="w-full flex items-center justify-between gap-2 p-4 min-h-[48px] text-left bg-gray-50 hover:bg-gray-100 active:bg-gray-200 transition-colors touch-manipulation"
+                                        >
+                                            <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                                                <BarChart3 size={16} />
+                                                Uso de la plataforma
+                                            </span>
+                                            {expandedAccordion === 'uso' ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                        </button>
+                                        {expandedAccordion === 'uso' && (
+                                            <div className="p-4 border-t border-gray-200 bg-white">
+                                                {accordionLoading === 'uso' ? (
+                                                    <p className="text-sm text-gray-500">Cargando métricas...</p>
+                                                ) : (
+                                                    <div className="space-y-4">
+                                                        {professionalRows.map((row) => {
+                                                            const key = `${row.id}-${row.tenant_id}`;
+                                                            const d = accordionData.analytics[key];
+                                                            const m = d?.metrics;
+                                                            const clinicName = clinics.find((c) => c.id === row.tenant_id)?.clinic_name || `Sede ${row.tenant_id}`;
+                                                            return (
+                                                                <div key={key} className="text-sm">
+                                                                    <p className="font-medium text-gray-700 mb-1">{clinicName}</p>
+                                                                    {m ? (
+                                                                        <ul className="text-gray-600 space-y-0.5">
+                                                                            <li>Turnos completados: <strong>{m.total_appointments}</strong> (finalización {m.completion_rate}%)</li>
+                                                                            <li>Cancelaciones: <strong>{m.cancellation_rate}%</strong></li>
+                                                                            <li>Ingresos estimados: <strong>${typeof m.revenue === 'number' ? m.revenue.toLocaleString() : m.revenue}</strong></li>
+                                                                            {d?.tags?.length ? <li>Tags: {d.tags.join(', ')}</li> : null}
+                                                                        </ul>
+                                                                    ) : (
+                                                                        <p className="text-gray-500">Sin datos en este período.</p>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleAccordionToggle('mensajes')}
+                                            className="w-full flex items-center justify-between gap-2 p-4 min-h-[48px] text-left bg-gray-50 hover:bg-gray-100 active:bg-gray-200 transition-colors touch-manipulation"
+                                        >
+                                            <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                                                <MessageSquare size={16} />
+                                                Mensajes e interacciones
+                                            </span>
+                                            {expandedAccordion === 'mensajes' ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                        </button>
+                                        {expandedAccordion === 'mensajes' && (
+                                            <div className="p-4 border-t border-gray-200 bg-white">
+                                                {accordionLoading === 'mensajes' ? (
+                                                    <p className="text-sm text-gray-500">Cargando...</p>
+                                                ) : (
+                                                    <div className="space-y-2 text-sm text-gray-600">
+                                                        {professionalRows.map((row) => {
+                                                            const tid = row.tenant_id ?? 0;
+                                                            const count = tid ? (accordionData.chatCountByTenant[String(tid)] ?? '—') : '—';
+                                                            const clinicName = clinics.find((c) => c.id === row.tenant_id)?.clinic_name || `Sede ${row.tenant_id}`;
+                                                            return (
+                                                                <p key={row.id}>
+                                                                    <strong>{clinicName}:</strong> {typeof count === 'number' ? `${count} conversaciones` : count}
+                                                                </p>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="glass p-4 rounded-xl text-center text-gray-500 text-sm">
+                                    Aún no está vinculado a ninguna sede. Usá el botón <strong>Vincular a sede</strong> arriba para elegir una clínica y guardar sus datos de contacto; así podrá usar la agenda y la plataforma.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Editar Perfil (optimizado mobile: bottom-sheet en móvil, tres columnas en desktop) */}
+            {editingProfessionalRow && (
+                <div
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+                    onClick={(e) => e.target === e.currentTarget && closeEditProfileModal()}
+                >
+                    <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-6xl h-[92dvh] sm:h-auto sm:max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5 border-b border-gray-100 shrink-0">
+                            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                                    <Edit size={22} className="sm:w-6 sm:h-6" />
+                                </div>
+                                <div className="min-w-0">
+                                    <h2 className="text-base sm:text-xl font-bold text-gray-900 truncate">
+                                        Editar Perfil: {editFormData.name || (staffForEditModal?.first_name && staffForEditModal?.last_name ? `${staffForEditModal.first_name} ${staffForEditModal.last_name}` : staffForEditModal?.email) || 'Profesional'}
+                                    </h2>
+                                    <p className="text-xs sm:text-sm text-gray-500 mt-0.5 hidden sm:block">Completa la información del staff médico.</p>
+                                </div>
+                            </div>
+                            <button type="button" onClick={closeEditProfileModal} className="shrink-0 p-2.5 min-w-[44px] min-h-[44px] rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors touch-manipulation" aria-label="Cerrar">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleEditProfileSubmit} className="flex-1 overflow-y-auto min-h-0 overscroll-contain">
+                            <div className="p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
                                 <div className="lg:col-span-4 space-y-5">
                                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Datos Principales</h3>
                                     <div>
@@ -629,14 +794,14 @@ const UserApprovalView: React.FC = () => {
                                             const isExpanded = expandedEditDays.includes(dayKey);
                                             return (
                                                 <div key={day.key} className="rounded-2xl border border-gray-200 overflow-hidden bg-white">
-                                                    <div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50/80 transition-colors">
-                                                        <label className="flex items-center gap-3 cursor-pointer flex-1">
+                                                    <div className="flex items-center justify-between px-4 py-3 min-h-[48px] hover:bg-gray-50/80 transition-colors">
+                                                        <label className="flex items-center gap-3 cursor-pointer flex-1 touch-manipulation py-1">
                                                             <input type="checkbox" checked={config.enabled} onChange={() => toggleEditDayEnabled(dayKey)} className="w-4 h-4 rounded border-gray-300 text-blue-600" />
                                                             <span className="text-sm font-medium text-gray-800">{day.label}</span>
                                                         </label>
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-xs text-gray-500 tabular-nums">{config.slots.length} slots</span>
-                                                            <button type="button" onClick={() => setExpandedEditDays((prev) => isExpanded ? prev.filter((d) => d !== dayKey) : [...prev, dayKey])} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500">
+                                                            <button type="button" onClick={() => setExpandedEditDays((prev) => isExpanded ? prev.filter((d) => d !== dayKey) : [...prev, dayKey])} className="p-2.5 min-w-[44px] min-h-[44px] rounded-lg hover:bg-gray-200 text-gray-500 touch-manipulation flex items-center justify-center">
                                                                 <ChevronDown size={18} className={isExpanded ? 'rotate-180' : ''} />
                                                             </button>
                                                         </div>
@@ -660,11 +825,11 @@ const UserApprovalView: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
-                            <div className="px-6 md:px-8 py-5 border-t border-gray-100 bg-gray-50/50 flex gap-3 justify-end rounded-b-3xl">
-                                <button type="button" onClick={closeEditProfileModal} className="px-5 py-2.5 rounded-xl border border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-50">
+                            <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-5 border-t border-gray-100 bg-gray-50/50 flex flex-col-reverse sm:flex-row gap-3 justify-end rounded-b-3xl shrink-0">
+                                <button type="button" onClick={closeEditProfileModal} className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-xl border border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-50 touch-manipulation">
                                     Cancelar
                                 </button>
-                                <button type="submit" disabled={editFormSubmitting} className="px-5 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50">
+                                <button type="submit" disabled={editFormSubmitting} className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 touch-manipulation">
                                     {editFormSubmitting ? 'Guardando...' : 'Guardar Cambios'}
                                 </button>
                             </div>

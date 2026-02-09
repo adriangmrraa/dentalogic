@@ -46,6 +46,7 @@ Para **professional** y **secretary** la **sede es obligatoria**: se crea una fi
   - INSERT en `users` con `status = 'pending'`.  
   - Si `role` es `professional` o `secretary`: INSERT en `professionals` con `tenant_id` del body, `is_active = FALSE`, y los campos anteriores (specialty, phone_number, registration_id, working_hours por defecto).  
   - Al aprobar, el CEO ya no tiene que elegir sede: la solicitud ya la trae.
+- El backend aplica fallbacks si la tabla `professionals` no tiene columnas `phone_number`, `specialty` o `updated_at` (parches 12d/12e en db.py).
 
 ## 4. Criterios de aceptación
 
@@ -67,3 +68,4 @@ Para **professional** y **secretary** la **sede es obligatoria**: se crea una fi
 - AGENTS.md: Regla de Soberanía (tenant_id).
 - docs/20_professionals_personal_activo_sync.spec.md: flujo de aprobación y profesionales.
 - Esquema: `professionals` (tenant_id, user_id, first_name, last_name, email, phone_number, specialty, registration_id, is_active, working_hours, created_at, updated_at).
+- docs/22_professionals_ceo_control_vision.spec.md: flujo Personal Activo y modal Editar Perfil.

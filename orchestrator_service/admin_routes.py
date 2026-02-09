@@ -2157,6 +2157,36 @@ async def get_professionals_by_user(
             return []
 
 
+@router.get("/professionals/{id}/analytics", dependencies=[Depends(verify_admin_token)])
+async def get_professional_analytics(
+    id: int,
+    tenant_id: int,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
+):
+    """
+    Métricas de un solo profesional para un tenant y rango de fechas.
+    Usado por el modal de datos del profesional (acordeón). Solo sedes permitidas.
+    """
+    if tenant_id not in allowed_ids:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta sede.")
+    if not start_date or not end_date:
+        today = datetime.now()
+        start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if today.month == 12:
+            end = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            end = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
+    else:
+        start = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+    result = await analytics_service.get_professional_summary(id, start, end, tenant_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Profesional no encontrado en esta sede.")
+    return result
+
+
 # ==================== ENDPOINTS GOOGLE CALENDAR ====================
 
 @router.post("/calendar/connect-sovereign", dependencies=[Depends(verify_admin_token)])

@@ -3,6 +3,36 @@
 ## Autenticación
 Todas las rutas administrativas requieren el header `X-Admin-Token`.
 
+## Auth (público y registro)
+
+### Listar clínicas (público)
+`GET /auth/clinics`
+
+**Sin autenticación.** Devuelve el listado de clínicas para el selector de registro.
+
+**Response:**
+```json
+[
+  { "id": 1, "clinic_name": "Clínica Centro" },
+  { "id": 2, "clinic_name": "Sede Norte" }
+]
+```
+
+### Registro
+`POST /auth/register`
+
+Crea usuario con `status = 'pending'`. Para roles `professional` y `secretary` es **obligatorio** enviar `tenant_id`; se crea una fila en `professionals` con `is_active = FALSE` y los datos indicados.
+
+**Payload (campos ampliados):**
+- `email`, `password`, `role` (`professional` | `secretary` | `ceo`)
+- `first_name`, `last_name`
+- **`tenant_id`** (obligatorio si role es professional o secretary)
+- `specialty` (opcional; recomendado para professional)
+- `phone_number` (opcional)
+- `registration_id` / matrícula (opcional)
+
+El backend aplica fallbacks si la tabla `professionals` no tiene columnas `phone_number`, `specialty` o `updated_at` (parches 12d/12e en db.py).
+
 ## Tratamientos (Services)
 
 ### Listar Tratamientos
@@ -62,26 +92,20 @@ Modifica las propiedades de un tratamiento existente.
 ### Listar Profesionales
 `GET /admin/professionals`
 
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "name": "Dr. Smith",
-    "specialty": "Ortodoncia",
-    "is_active": true,
-    "working_hours": {
-      "monday": { "enabled": true, "slots": [{ "start": "09:00", "end": "18:00" }] },
-      "sunday": { "enabled": false, "slots": [] }
-    }
-  }
-]
-```
+- **CEO:** devuelve profesionales de **todas** las sedes permitidas (`allowed_ids`).
+- **Secretary/Professional:** solo los de su clínica.
+
+**Response:** Lista de profesionales con `id`, `tenant_id`, `name`, `specialty`, `is_active`, `working_hours`, etc. (incluye `phone_number`, `registration_id` cuando existen en BD).
+
+### Profesionales por usuario
+`GET /admin/professionals/by-user/{user_id}`
+
+Devuelve las filas de `professionals` asociadas a ese `user_id`. Usado por el modal de detalle y Editar Perfil en Aprobaciones (Personal Activo). Incluye `phone_number`, `registration_id`, `working_hours`, `tenant_id`, etc.
 
 ### Crear/Actualizar Profesional
 `POST /admin/professionals` | `PUT /admin/professionals/{id}`
 
-Permite gestionar el staff y su disponibilidad horaria (JSONB).
+Crea o actualiza profesional (tenant_id, nombre, contacto, especialidad, matrícula, working_hours). El backend aplica fallbacks si faltan columnas `phone_number`, `specialty`, `updated_at` en la tabla `professionals`.
 
 ### Sincronización Automática JIT
 `POST /admin/calendar/sync`

@@ -40,7 +40,8 @@
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| POST | `/auth/register` | Registro usuario (status `pending`), Protocolo Omega. |
+| GET | `/auth/clinics` | **Público.** Lista clínicas (id, clinic_name) para selector de registro. |
+| POST | `/auth/register` | Registro usuario (status `pending`), Protocolo Omega. **Body ampliado:** `tenant_id` (obligatorio si role professional/secretary), `specialty`, `phone_number`, `registration_id`. Crea fila en `professionals` con `is_active=FALSE` para esa sede. |
 | POST | `/auth/login` | Login, retorna JWT + user. |
 | GET | `/auth/me` | Usuario actual (JWT). |
 | GET | `/auth/profile` | Perfil extendido. |
@@ -52,7 +53,7 @@
 |--------|------|-------------|
 | GET | `/admin/users/pending` | Usuarios pendientes de aprobación. |
 | GET | `/admin/users` | Listado de usuarios. |
-| POST | `/admin/users/{user_id}/status` | Actualizar status (ej. aprobar). |
+| POST | `/admin/users/{user_id}/status` | Actualizar status (ej. aprobar). **Al aprobar (active):** si el usuario es professional/secretary y no tiene fila en `professionals`, se crea una para la primera sede (working_hours por defecto). |
 
 #### Admin – Tenants (Sedes/Clínicas)
 
@@ -108,9 +109,10 @@
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| GET | `/admin/professionals` | Listar profesionales (por tenant). |
-| POST | `/admin/professionals` | Crear profesional. |
-| PUT | `/admin/professionals/{id}` | Actualizar profesional. |
+| GET | `/admin/professionals` | Listar profesionales. **CEO:** todos los de sus sedes (`allowed_ids`). **Secretary/Professional:** solo los de su clínica. |
+| GET | `/admin/professionals/by-user/{user_id}` | Filas de `professionals` para ese usuario (para modal detalle y Editar Perfil). Devuelve id, tenant_id, first_name, last_name, email, specialty, is_active, working_hours, phone_number, registration_id. |
+| POST | `/admin/professionals` | Crear profesional (o vincular usuario existente por email). **Body:** tenant_id, email, name, phone, specialty, license_number, etc. Fallbacks si faltan columnas `phone_number`, `specialty`, `updated_at` en BD. |
+| PUT | `/admin/professionals/{id}` | Actualizar profesional (nombre, contacto, working_hours, etc.). Fallbacks para BD sin phone_number. |
 
 #### Admin – Calendario / Google Calendar
 
@@ -177,17 +179,17 @@
 
 | Ruta | Vista | Roles | Descripción breve |
 |------|--------|-------|-------------------|
-| `/login` | LoginView | Público | Login (email/password) → JWT + ADMIN_TOKEN en localStorage. |
+| `/login` | LoginView | Público | Login (email/password) → JWT + ADMIN_TOKEN en localStorage. **Registro:** Nombre, Apellido, Rol; si rol professional/secretary: **Sede/Clínica** (selector GET `/auth/clinics`), Especialidad (dropdown), Teléfono, Matrícula. POST `/auth/register` con tenant_id y datos de profesional; crea fila en `professionals` pendiente de aprobación. |
 | `/` | DashboardView | ceo, professional, secretary | KPIs (conversaciones IA, turnos, urgencias, ingresos), gráfico de crecimiento, lista de urgencias. |
 | `/agenda` | AgendaView | ceo, professional, secretary | Calendario (FullCalendar + resource-timegrid), bloques GCal, crear/editar/cancelar turnos, Socket.IO para refresco. Vista móvil con MobileAgenda. |
 | `/pacientes` | PatientsView | ceo, professional, secretary | Listado de pacientes. |
 | `/pacientes/:id` | PatientDetail | ceo, professional, secretary | Detalle paciente, historial, notas. |
 | `/chats` | ChatsView | ceo, professional, secretary | Sesiones de chat, mensajes por teléfono, envío manual, human intervention. |
-| `/profesionales` | ProfessionalsView | ceo, secretary | CRUD profesionales. |
+| `/profesionales` | (redirige) | — | Redirige a `/aprobaciones`. La gestión de profesionales se hace desde **Personal Activo** (modal detalle + Vincular a sede / Editar Perfil). |
 | `/analytics/professionals` | ProfessionalAnalyticsView | ceo | Analytics por profesional (métricas, filtros fechas, tags). |
 | `/tratamientos` | TreatmentsView | ceo, secretary | CRUD tipos de tratamiento. |
 | `/perfil` | ProfileView | Todos los roles | Perfil del usuario. |
-| `/aprobaciones` | UserApprovalView | ceo | Aprobación de usuarios pendientes. |
+| `/aprobaciones` | UserApprovalView | ceo | Aprobación de usuarios pendientes. **Personal Activo:** clic en tarjeta → modal detalle; botón **Vincular a sede** (sede, teléfono, especialidad dropdown, matrícula); botón **tuerca** → modal **Editar Perfil** (Datos Principales, Contacto & Estado, Disponibilidad). Profesionales listados vía GET `/admin/professionals` (CEO: todas sus sedes). |
 | `/sedes` | ClinicsView | ceo | CRUD de tenants (sedes/clínicas). Llama a `/admin/tenants` → afectado por bug `get_current_user`. |
 | `/configuracion` | (inline) | ceo | Placeholder: “Configuración – Próximamente…”. |
 
@@ -216,11 +218,11 @@
 | Pacientes | ✅ | /admin/patients | Listado y filtros. |
 | Detalle paciente | ✅ | /admin/patients/{id}, /admin/patients/{id}/records | Notas clínicas. |
 | Chats | ✅ | /admin/chat/tenants, /admin/chat/sessions?tenant_id=, messages, send, human-intervention, remove-silence, PUT sessions/read | Selector de Clínica (CEO varias); sesiones y override por tenant_id. |
-| Profesionales | ✅ | /admin/professionals | CRUD. |
+| Profesionales | ✅ | /admin/professionals, /admin/professionals/by-user/:id | Gestión desde Aprobaciones (modal Vincular a sede / Editar Perfil). Ruta `/profesionales` redirige a `/aprobaciones`. |
 | Analytics profesionales | ✅ | /admin/analytics/professionals/summary | Solo CEO. |
 | Tratamientos | ✅ | /admin/treatment-types | CRUD por código. |
 | Perfil | ✅ | /auth/profile, PATCH /auth/profile | Edición perfil. |
-| Aprobaciones | ✅ | /admin/users/pending, /admin/users/{id}/status | Solo CEO. |
+| Aprobaciones | ✅ | /admin/users/pending, /admin/users/{id}/status, /admin/professionals, /admin/professionals/by-user/:id, PUT /admin/professionals/:id | Solo CEO. Personal Activo + modal detalle, Vincular a sede, tuerca → Editar Perfil (3 columnas, max-w-6xl). |
 | Sedes (Clinics) | ✅ | /admin/tenants | Corregido: backend usa `verify_admin_token`. |
 | Configuración | ⚠️ | — | Solo placeholder. |
 
@@ -233,7 +235,7 @@
 - **Mensajes y chat:** `inbound_messages`, `chat_messages` (desde parche 15: `chat_messages.tenant_id` para conversaciones por clínica).  
 - **Tenant y config:** `tenants`, `credentials`, `system_events`.  
 - **RBAC:** `users` (id UUID, email, role: ceo|professional|secretary, status: pending|active|suspended, professional_id).  
-- **Profesionales:** `professionals` (tenant_id, user_id, first_name, last_name, email, is_active, google_calendar_id, etc.).  
+- **Profesionales:** `professionals` (tenant_id, user_id, first_name, last_name, email, is_active, google_calendar_id, **phone_number**, **specialty**, **registration_id**, **updated_at**, working_hours, etc.). Columnas añadidas por parches 12d (phone_number), 12e (specialty) si no existen.  
 - **Pacientes:** `patients` (tenant_id, phone_number, dni, first_name, last_name, human_handoff_requested, human_override_until, etc.).  
 - **Historias clínicas:** `clinical_records` (tenant_id, patient_id, professional_id, odontogram, treatment_plan, etc.).  
 - **Turnos:** `appointments` (tenant_id, patient_id, professional_id, appointment_datetime, duration_minutes, google_calendar_event_id, status, urgency_level, source, etc.).  
@@ -245,7 +247,7 @@
 ### 4.2 Mantenimiento (db.py)
 
 - **Maintenance Robot:** Al arrancar, comprueba existencia del esquema; si no existe aplica `dentalogic_schema.sql`.  
-- **Evolution pipeline:** Parches idempotentes (user_id en professionals, Protocolo Omega Prime, DNI/last_name nullable, **parches 12–15:** `tenant_id` + índice en `professionals`, `appointments`, `treatment_types`, `chat_messages`; en `appointments` columnas `source` y `google_calendar_event_id`). `get_chat_history` acepta `tenant_id` opcional para historial por clínica.  
+- **Evolution pipeline:** Parches idempotentes (user_id en professionals, Protocolo Omega Prime, DNI/last_name nullable, **parches 12–15:** `tenant_id` + índice en `professionals`, `appointments`, `treatment_types`, `chat_messages`; en `appointments` columnas `source` y `google_calendar_event_id`). **Parches 12d/12e:** añaden `phone_number` y `specialty` a `professionals` si no existen. `get_chat_history` acepta `tenant_id` opcional para historial por clínica.  
 - Conexión vía `POSTGRES_DSN` (asyncpg).
 
 ### 4.3 Aislamiento multi-tenant
@@ -258,7 +260,7 @@
 
 ## 5. Lógica de negocio (resumen)
 
-- **Auth:** Registro → pending; CEO aprueba en Aprobaciones; login solo si status active.  
+- **Auth:** Registro → pending; para professional/secretary se pide **sede (tenant_id)** y datos de profesional (especialidad, teléfono, matrícula); se crea fila en `professionals` con is_active=FALSE. CEO aprueba en Aprobaciones (POST users/:id/status → active); si no hay fila en professionals se crea para la primera sede. Login solo si status active.  
 - **Tenant:** Usuario tiene contexto de tenant (por profesional o por defecto); backend filtra por ese tenant en datos clínicos y operativos.  
 - **Agenda:** Turnos en DB + bloques en GCal; sincronización bidireccional; creación/edición desde UI con chequeo de colisiones y next-slots.  
 - **IA/WhatsApp:** Mensajes entrantes → LangChain agent con tools (disponibilidad, reserva, triaje, derivhumano); human override 24h; mensajes guardados en chat_messages.  
@@ -277,6 +279,8 @@
 | Mobile scroll fix | docs/18_mobile_scroll_fix.spec.md | Parcial | MobileAgenda y patrones de scroll; auditar todas las vistas móviles. |
 | Mobile agenda range fix | docs/17_mobile_agenda_range_fix.spec.md | Parcial | Rango de fechas en agenda móvil. |
 | Treatments optimization | docs/19_treatments_optimization.spec.md | Implementado | treatment_types CRUD y duración por urgencia. |
+| Professionals CEO control / Personal Activo | docs/22_professionals_ceo_control_vision.spec.md | Implementado | Personal Activo como fuente de verdad; modal detalle, Vincular a sede, tuerca → Editar Perfil; GET by-user; CEO ve profesionales de todas sus sedes. |
+| Registro con sede y datos profesional | docs/23_registro_con_sede_y_datos_profesional.spec.md | Implementado | GET /auth/clinics, POST /auth/register con tenant_id y datos pro; formulario registro con selector sede y especialidad. |
 | Dashboard Analytics Sovereign | Dashboard_Analytics_Sovereign/docs/specs/ | Módulo aparte | Dashboard_Analytics_Sovereign con vistas CEO/Secretary; no integrado en frontend_react principal. |
 
 ---
@@ -299,4 +303,29 @@ El proyecto está **operativo** en backend (excepto tenants), frontend (excepto 
 
 ---
 
-*Documento generado por workflow Audit – Dentalogic / Antigravity. Última actualización doc: 2026-02-08.*
+## 9. Actualizaciones post-audit (flujo Personal Activo y registro)
+
+*Documentación ampliada sin eliminar contenido previo (Non-Destructive Fusion).*
+
+### 9.1 Backend
+
+- **Auth:** `GET /auth/clinics` (público) devuelve id y clinic_name para el selector de registro. `POST /auth/register` acepta `tenant_id` (obligatorio para professional/secretary), `specialty`, `phone_number`, `registration_id`; crea usuario y, si aplica, fila en `professionals` con `is_active=false`; fallbacks si faltan columnas en BD.
+- **Profesionales:** `GET /admin/professionals` para CEO devuelve profesionales de **todas** las sedes permitidas (`allowed_ids`). `GET /admin/professionals/by-user/:user_id` devuelve las filas de `professionals` del usuario (para modal detalle y Editar Perfil), incluyendo `phone_number` y `registration_id`. En create/update se usan fallbacks cuando no existen columnas `phone_number`, `specialty`, `updated_at`, `working_hours`.
+- **Aprobación:** Al aprobar usuario (POST `/admin/users/:id/status` con `active`), si es professional/secretary y no tiene fila en `professionals`, se crea una para el primer tenant.
+- **Base de datos (db.py):** Parches 12d (columna `phone_number` en `professionals`) y 12e (columna `specialty`) aplicados en arranque si no existen.
+
+### 9.2 Frontend
+
+- **Login/Registro (LoginView):** Formulario de registro con Nombre, Apellido, Rol; si rol es professional o secretary: selector **Sede/Clínica** (GET `/auth/clinics`), **Especialidad** (dropdown), Teléfono, Matrícula.
+- **Aprobaciones (UserApprovalView):** Clic en tarjeta de Personal Activo abre **modal de detalle**. Botón azul **“Vincular a sede”** con formulario (sede, teléfono, especialidad dropdown, matrícula). Botón **tuerca** (icono engranaje) a la izquierda de “Suspender Acceso” abre el **modal Editar Perfil** (o formulario Vincular si no tiene sede); modal grande (max-w-6xl, max-h-92vh), tres columnas (Datos Principales con Sede en solo lectura, Contacto & Estado, Disponibilidad con días y slots).
+- **Navegación:** Eliminado ítem “Profesionales” del menú; ruta `/profesionales` redirige a `/aprobaciones`. La gestión de profesionales se realiza desde Personal Activo (modal detalle + Vincular a sede / Editar Perfil).
+- **ProfessionalsView:** Si se accede por ruta directa, al editar se muestra **Sede/Clínica** en solo lectura; al crear, selector de clínica.
+
+### 9.3 Especificaciones añadidas
+
+- **docs/22_professionals_ceo_control_vision.spec.md:** Visión CEO, Personal Activo como fuente de verdad, modal detalle, Vincular a sede, tuerca → Editar Perfil.
+- **docs/23_registro_con_sede_y_datos_profesional.spec.md:** Registro con sede obligatoria y datos de profesional (especialidad, teléfono, matrícula).
+
+---
+
+*Documento generado por workflow Audit – Dentalogic / Antigravity. Última actualización doc: 2026-02-08. Sección 9 añadida por workflow Update Docs (Non-Destructive Fusion).*

@@ -22,8 +22,9 @@ El cerebro central. Gestiona el agente LangChain, la memoria y la base de datos.
 Maneja la integración con YCloud y la IA de audio (Whisper).
 
 ### 🎨 Control (Frontend React)
-- **Routing:** Usa `path="/*"` en el router raíz de `App.tsx` para permitir rutas anidadas.
+- **Routing:** Usa `path="/*"` en el router raíz de `App.tsx` para permitir rutas anidadas. La ruta `/profesionales` redirige a `/aprobaciones`; la gestión de profesionales se hace desde **Personal Activo** (modal detalle, Vincular a sede, botón tuerca → Editar Perfil).
 - **AuthContext:** Gestiona el estado de sesión y rol del usuario.
+- **Registro:** LoginView pide **Sede/Clínica** (GET `/auth/clinics`), especialidad (dropdown), teléfono y matrícula para professional/secretary; POST `/auth/register` con `tenant_id` y datos de profesional crea fila en `professionals` pendiente de aprobación.
 - **Chats por clínica:** ChatsView usa GET `/admin/chat/tenants` y GET `/admin/chat/sessions?tenant_id=`. Selector de Clínicas para CEO (varias clínicas); secretaria/profesional ven una sola. Mensajes, human-intervention y remove-silence usan `tenant_id`; override 24h independiente por clínica.
 
 ---
@@ -41,7 +42,7 @@ Maneja la integración con YCloud y la IA de audio (Whisper).
 
 ### 🤖 Maintenance Robot (Self-Healing)
 - **Protocolo Omega Prime:** Se auto-activa al primer administrador (CEO) para evitar bloqueos en despliegues nuevos.
-- **Parches 12–15 (idempotentes):** Añaden `tenant_id` + índice en `professionals`, `appointments`, `treatment_types`, `chat_messages`; en `appointments` aseguran columnas `source` y `google_calendar_event_id`. Usan bloques `DO $$ BEGIN ... END $$` para no romper datos existentes.
+- **Parches 12–15 (idempotentes):** Añaden `tenant_id` + índice en `professionals`, `appointments`, `treatment_types`, `chat_messages`; en `appointments` aseguran columnas `source` y `google_calendar_event_id`. **Parches 12d/12e:** añaden `phone_number` y `specialty` a `professionals` si no existen. Usan bloques `DO $$ BEGIN ... END $$` para no romper datos existentes.
 
 ---
 
@@ -89,4 +90,4 @@ Maneja la integración con YCloud y la IA de audio (Whisper).
 | **Mobile Adaptation Architect**| *v8.0, DKG* | v8.0: Senior UI/UX Architect. Especialista en Blueprint Universal y Scroll Isolation. |
 
 ---
-*Actualizado: 2026-02-08 - Protocolo Platinum Resilience v7.6 (Cerebro Híbrido, Chats por clínica, connect-sovereign)*
+*Actualizado: 2026-02-08 - Protocolo Platinum Resilience v7.6 (Cerebro Híbrido, Chats por clínica, connect-sovereign; registro con sede, Personal Activo → modal Editar Perfil/Vincular a sede, parches 12d/12e)*

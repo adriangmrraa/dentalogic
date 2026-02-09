@@ -75,6 +75,14 @@ Scenario: Profesional recién creado aparece en Profesionales
 
 - Sigue aplicando la Regla de Oro: todas las consultas usan `tenant_id`; el CEO solo ve profesionales de sus sedes (`allowed_ids`).
 
+### 5.2 Frontend y flujo Personal Activo (2026-02-08)
+
+- **Página Profesionales eliminada del menú:** La ruta `/profesionales` redirige a `/aprobaciones`. La gestión de profesionales se realiza desde **Personal Activo** (UserApprovalView).
+- **Modal de detalle:** Al hacer clic en una tarjeta de Personal Activo se abre un modal con datos del usuario (nombre, email, sedes vinculadas). Desde ahí se puede **Vincular a sede** (formulario: sede, teléfono, especialidad dropdown, matrícula) o abrir **Editar Perfil**.
+- **Botón tuerca (config):** En cada tarjeta de Personal Activo, a la izquierda de "Suspender Acceso", un botón redondo con icono de engranaje abre el **modal Editar Perfil** (o el formulario Vincular si el usuario no tiene ninguna fila en `professionals`). Se usa `GET /admin/professionals/by-user/:user_id` para cargar datos.
+- **Modal Editar Perfil:** Diseño en tres columnas (Datos Principales con Sede en solo lectura, Contacto & Estado, Disponibilidad con días y slots), modal grande (`max-w-6xl`, `max-h-[92vh]`), guardado vía `PUT /admin/professionals/:id`. Especialidad siempre como selector (dropdown).
+- **Backend:** Fallbacks en create/update de profesionales cuando la BD no tiene columnas `phone_number`, `specialty`, `updated_at`, `working_hours`. Parches 12d y 12e en `db.py` añaden `phone_number` y `specialty` a `professionals` si no existen. Al aprobar usuario (POST `/admin/users/:id/status` con `active`), si es professional/secretary y no tiene fila en `professionals`, se crea una para el primer tenant.
+
 ## 6. Referencias
 
 - AGENTS.md: Regla de Soberanía, aislamiento por `tenant_id`.
