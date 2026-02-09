@@ -79,6 +79,8 @@ interface ProfessionalRow {
     specialty?: string;
     is_active?: boolean;
     working_hours?: unknown;
+    phone_number?: string;
+    registration_id?: string;
 }
 
 const UserApprovalView: React.FC = () => {
@@ -93,6 +95,14 @@ const UserApprovalView: React.FC = () => {
     const [showLinkForm, setShowLinkForm] = useState(false);
     const [linkFormData, setLinkFormData] = useState({ tenant_id: null as number | null, phone: '', specialty: '', license_number: '' });
     const [linkFormSubmitting, setLinkFormSubmitting] = useState(false);
+    const [editingProfessionalRow, setEditingProfessionalRow] = useState<ProfessionalRow | null>(null);
+    const [staffForEditModal, setStaffForEditModal] = useState<StaffUser | null>(null);
+    const [editFormData, setEditFormData] = useState<{
+        name: string; email: string; phone: string; specialty: string; license_number: string;
+        is_active: boolean; working_hours: WorkingHours;
+    }>({ name: '', email: '', phone: '', specialty: '', license_number: '', is_active: true, working_hours: createDefaultWorkingHours() });
+    const [editFormSubmitting, setEditFormSubmitting] = useState(false);
+    const [expandedEditDays, setExpandedEditDays] = useState<string[]>([]);
 
     useEffect(() => {
         fetchAllUsers();
@@ -143,6 +153,119 @@ const UserApprovalView: React.FC = () => {
         setSelectedStaff(null);
         setShowLinkForm(false);
         setLinkFormData({ tenant_id: null, phone: '', specialty: '', license_number: '' });
+    };
+
+    const handleConfigClick = async (user: StaffUser) => {
+        try {
+            const res = await api.get<ProfessionalRow[]>(`/admin/professionals/by-user/${user.id}`);
+            const rows = res.data || [];
+            if (rows.length === 0) {
+                setSelectedStaff(user);
+                setShowLinkForm(true);
+                return;
+            }
+            const row = rows[0];
+            setStaffForEditModal(user);
+            setEditingProfessionalRow(row);
+            const name = `${row.first_name || ''} ${row.last_name || ''}`.trim() || (user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : user.email);
+            setEditFormData({
+                name,
+                email: row.email || user.email || '',
+                phone: row.phone_number || '',
+                specialty: row.specialty || '',
+                license_number: row.registration_id || '',
+                is_active: row.is_active ?? true,
+                working_hours: parseWorkingHours(row.working_hours),
+            });
+            setExpandedEditDays([]);
+        } catch {
+            alert('No se pudieron cargar los datos del profesional.');
+        }
+    };
+
+    const closeEditProfileModal = () => {
+        setEditingProfessionalRow(null);
+        setStaffForEditModal(null);
+    };
+
+    const toggleEditDayEnabled = (dayKey: keyof WorkingHours) => {
+        setEditFormData(prev => ({
+            ...prev,
+            working_hours: {
+                ...prev.working_hours,
+                [dayKey]: {
+                    ...prev.working_hours[dayKey],
+                    enabled: !prev.working_hours[dayKey].enabled,
+                    slots: !prev.working_hours[dayKey].enabled && prev.working_hours[dayKey].slots.length === 0
+                        ? [{ start: '09:00', end: '18:00' }] : prev.working_hours[dayKey].slots,
+                },
+            },
+        }));
+    };
+    const addEditTimeSlot = (dayKey: keyof WorkingHours) => {
+        setEditFormData(prev => ({
+            ...prev,
+            working_hours: {
+                ...prev.working_hours,
+                [dayKey]: {
+                    ...prev.working_hours[dayKey],
+                    slots: [...prev.working_hours[dayKey].slots, { start: '09:00', end: '18:00' }],
+                },
+            },
+        }));
+    };
+    const removeEditTimeSlot = (dayKey: keyof WorkingHours, index: number) => {
+        setEditFormData(prev => ({
+            ...prev,
+            working_hours: {
+                ...prev.working_hours,
+                [dayKey]: {
+                    ...prev.working_hours[dayKey],
+                    slots: prev.working_hours[dayKey].slots.filter((_, i) => i !== index),
+                },
+            },
+        }));
+    };
+    const updateEditTimeSlot = (dayKey: keyof WorkingHours, index: number, field: 'start' | 'end', value: string) => {
+        setEditFormData(prev => ({
+            ...prev,
+            working_hours: {
+                ...prev.working_hours,
+                [dayKey]: {
+                    ...prev.working_hours[dayKey],
+                    slots: prev.working_hours[dayKey].slots.map((slot, i) =>
+                        i === index ? { ...slot, [field]: value } : slot
+                    ),
+                },
+            },
+        }));
+    };
+
+    const handleEditProfileSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingProfessionalRow) return;
+        setEditFormSubmitting(true);
+        try {
+            await api.put(`/admin/professionals/${editingProfessionalRow.id}`, {
+                name: editFormData.name,
+                email: editFormData.email,
+                phone: editFormData.phone,
+                specialty: editFormData.specialty || undefined,
+                license_number: editFormData.license_number || undefined,
+                is_active: editFormData.is_active,
+                availability: {},
+                working_hours: editFormData.working_hours,
+            });
+            closeEditProfileModal();
+            if (selectedStaff?.id === staffForEditModal?.id) {
+                const res = await api.get<ProfessionalRow[]>(`/admin/professionals/by-user/${selectedStaff.id}`);
+                setProfessionalRows(res.data || []);
+            }
+        } catch (err: any) {
+            alert(err?.response?.data?.detail || 'Error al guardar.');
+        } finally {
+            setEditFormSubmitting(false);
+        }
     };
 
     const handleLinkToSedeSubmit = async (e: React.FormEvent) => {
@@ -272,6 +395,7 @@ const UserApprovalView: React.FC = () => {
                                     user={user}
                                     onAction={handleAction}
                                     onCardClick={() => setSelectedStaff(user)}
+                                    onConfigClick={() => handleConfigClick(user)}
                                 />
                             ))
                         )
@@ -431,6 +555,109 @@ const UserApprovalView: React.FC = () => {
                 )}
             </Modal>
 
+            {/* Modal Editar Perfil (abre desde la tuerca) */}
+            <Modal
+                isOpen={!!editingProfessionalRow}
+                onClose={closeEditProfileModal}
+                title={staffForEditModal ? `Editar Perfil: ${editFormData.name || (staffForEditModal.first_name && staffForEditModal.last_name ? `${staffForEditModal.first_name} ${staffForEditModal.last_name}` : staffForEditModal.email)}` : 'Editar Perfil'}
+                size="xl"
+            >
+                {editingProfessionalRow && (
+                    <form onSubmit={handleEditProfileSubmit} className="space-y-6">
+                        <p className="text-xs text-gray-500 -mt-2">Completa la información del staff médico.</p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Datos Principales</h3>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Sede / Clínica</label>
+                                    <div className="py-2 px-3 bg-gray-100 rounded-lg text-sm text-gray-800">
+                                        {clinics.find((c) => c.id === editingProfessionalRow.tenant_id)?.clinic_name || `Sede ${editingProfessionalRow.tenant_id ?? '—'}`}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Nombre completo *</label>
+                                    <input type="text" value={editFormData.name} onChange={(e) => setEditFormData((p) => ({ ...p, name: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Especialidad</label>
+                                    <select value={editFormData.specialty} onChange={(e) => setEditFormData((p) => ({ ...p, specialty: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                        <option value="">Seleccionar...</option>
+                                        {SPECIALTIES.map((s) => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Matrícula</label>
+                                    <input type="text" value={editFormData.license_number} onChange={(e) => setEditFormData((p) => ({ ...p, license_number: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="MN 12345" />
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Contacto & Estado</h3>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">E-mail</label>
+                                    <input type="email" value={editFormData.email} onChange={(e) => setEditFormData((p) => ({ ...p, email: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><Phone size={12} /> Teléfono</label>
+                                    <input type="text" value={editFormData.phone} onChange={(e) => setEditFormData((p) => ({ ...p, phone: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="+54 9..." />
+                                </div>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={editFormData.is_active} onChange={(e) => setEditFormData((p) => ({ ...p, is_active: e.target.checked }))} className="rounded border-gray-300" />
+                                    <span className="text-sm font-medium text-gray-700">Activo</span>
+                                </label>
+                            </div>
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2"><Clock size={14} /> Disponibilidad</h3>
+                                <p className="text-[11px] text-gray-500">Intervalos para el bot de IA por WhatsApp.</p>
+                                <div className="space-y-2">
+                                    {DAYS_HORARIOS.map((day) => {
+                                        const dayKey = day.key;
+                                        const config = editFormData.working_hours[dayKey];
+                                        const isExpanded = expandedEditDays.includes(dayKey);
+                                        return (
+                                            <div key={day.key} className="border border-gray-200 rounded-lg overflow-hidden">
+                                                <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" checked={config.enabled} onChange={() => toggleEditDayEnabled(dayKey)} className="rounded border-gray-300" />
+                                                        <span className="text-sm font-medium">{day.label}</span>
+                                                    </label>
+                                                    <div className="flex items-center gap-2">
+                                                        {config.enabled && <span className="text-xs text-gray-500">{config.slots.length} slot(s)</span>}
+                                                        <button type="button" onClick={() => setExpandedEditDays((prev) => isExpanded ? prev.filter((d) => d !== dayKey) : [...prev, dayKey])} className="p-1">
+                                                            <ChevronDown size={16} className={isExpanded ? 'rotate-180' : ''} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                {isExpanded && config.enabled && (
+                                                    <div className="p-3 space-y-2 bg-white border-t border-gray-100">
+                                                        {config.slots.map((slot, idx) => (
+                                                            <div key={idx} className="flex items-center gap-2">
+                                                                <input type="time" value={slot.start} onChange={(e) => updateEditTimeSlot(dayKey, idx, 'start', e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-sm w-24" />
+                                                                <span className="text-gray-400">–</span>
+                                                                <input type="time" value={slot.end} onChange={(e) => updateEditTimeSlot(dayKey, idx, 'end', e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-sm w-24" />
+                                                                <button type="button" onClick={() => removeEditTimeSlot(dayKey, idx)} className="text-red-500 hover:text-red-700 text-sm">Quitar</button>
+                                                            </div>
+                                                        ))}
+                                                        <button type="button" onClick={() => addEditTimeSlot(dayKey)} className="text-sm text-medical-600 hover:text-medical-800">+ Agregar horario</button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 pt-4 border-t border-gray-200">
+                            <button type="submit" disabled={editFormSubmitting} className="btn-icon-labeled success">
+                                <Save size={18} />
+                                {editFormSubmitting ? 'Guardando...' : 'Guardar Cambios'}
+                            </button>
+                            <button type="button" onClick={closeEditProfileModal} className="btn-icon-labeled">Cancelar</button>
+                        </div>
+                    </form>
+                )}
+            </Modal>
+
             <style>{`
         .glass {
           background: white;
@@ -522,6 +749,26 @@ const UserApprovalView: React.FC = () => {
           transform: translateY(-1px);
           box-shadow: 0 2px 6px rgba(0,0,0,0.15);
         }
+        .btn-gear {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          border: 1px solid #dee2e6;
+          background: #fff;
+          color: #495057;
+          cursor: pointer;
+          transition: all 0.2s;
+          flex-shrink: 0;
+        }
+        .btn-gear:hover {
+          background: #f8f9fa;
+          border-color: #adb5bd;
+          color: #2563eb;
+          transform: translateY(-1px);
+        }
         .animate-fadeIn {
           animation: fadeIn 0.4s ease-out;
         }
@@ -539,9 +786,10 @@ interface UserCardProps {
     onAction: (id: string, action: 'active' | 'suspended') => void;
     isRequest?: boolean;
     onCardClick?: () => void;
+    onConfigClick?: () => void;
 }
 
-const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardClick }) => (
+const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardClick, onConfigClick }) => (
     <div className="glass p-5 flex items-center justify-between animate-fadeIn">
         <div
             className={`flex items-center gap-4 flex-1 min-w-0 ${onCardClick ? 'cursor-pointer hover:opacity-90' : ''}`}
@@ -569,7 +817,18 @@ const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardCl
             </div>
         </div>
 
-        <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+            {!isRequest && onConfigClick && (
+                <button
+                    type="button"
+                    onClick={onConfigClick}
+                    className="btn-gear"
+                    title="Editar perfil y horarios"
+                    aria-label="Editar perfil"
+                >
+                    <Settings size={20} />
+                </button>
+            )}
             {isRequest ? (
                 <>
                     <button onClick={() => onAction(user.id, 'active')} className="btn-icon-labeled success">

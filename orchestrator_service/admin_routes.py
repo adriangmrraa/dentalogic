@@ -2125,7 +2125,7 @@ async def get_professionals_by_user(
         rows = await db.pool.fetch(
             """
             SELECT id, tenant_id, user_id, first_name, last_name, email, specialty,
-                   is_active, working_hours, created_at
+                   is_active, working_hours, created_at, phone_number, registration_id
             FROM professionals
             WHERE user_id = $1 AND tenant_id = ANY($2::int[])
             ORDER BY tenant_id
@@ -2136,10 +2136,10 @@ async def get_professionals_by_user(
         return [dict(r) for r in rows]
     except Exception as e:
         err_str = str(e).lower()
-        if "working_hours" in err_str or "tenant_id" in err_str:
+        if "working_hours" in err_str or "tenant_id" in err_str or "phone_number" in err_str or "registration_id" in err_str:
             try:
                 rows = await db.pool.fetch(
-                    "SELECT id, tenant_id, user_id, first_name, last_name, email, specialty, is_active FROM professionals WHERE user_id = $1 AND tenant_id = ANY($2::int[]) ORDER BY tenant_id",
+                    "SELECT id, tenant_id, user_id, first_name, last_name, email, specialty, is_active, working_hours FROM professionals WHERE user_id = $1 AND tenant_id = ANY($2::int[]) ORDER BY tenant_id",
                     uid,
                     allowed_ids,
                 )
