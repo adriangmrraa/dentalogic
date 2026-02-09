@@ -240,7 +240,7 @@ export default function TreatmentsView() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 ml-1">Nombre</label>
+                <label className="block text-sm font-semibold text-slate-700 ml-1">{t('treatments.name')}</label>
                 <input
                   type="text"
                   value={newForm.name || ''}
@@ -255,7 +255,7 @@ export default function TreatmentsView() {
                   type="text"
                   value={newForm.code || ''}
                   onChange={(e) => setNewForm({ ...newForm, code: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-                  placeholder="ej: limpieza_profunda"
+                  placeholder={t('treatments.placeholder_code')}
                   className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-medical-500/10 focus:border-medical-500 outline-none transition-all placeholder:text-slate-300 font-mono text-sm"
                 />
               </div>
@@ -581,14 +581,14 @@ export default function TreatmentsView() {
                             <button
                               onClick={() => handleEdit(treatment)}
                               className="p-3 text-slate-400 hover:text-medical-600 hover:bg-medical-50 rounded-2xl transition-all shadow-sm bg-white/50 border border-white"
-                              title="Editar"
+                              title={t('common.edit')}
                             >
                               <Edit2 size={18} />
                             </button>
                             <button
                               onClick={() => handleDelete(treatment.code)}
                               className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all shadow-sm bg-white/50 border border-white"
-                              title="Eliminar"
+                              title={t('common.delete')}
                             >
                               <X size={18} />
                             </button>
@@ -609,16 +609,16 @@ export default function TreatmentsView() {
             <div className="w-24 h-24 bg-medical-50 text-medical-200 rounded-full flex items-center justify-center mx-auto mb-8">
               <Activity size={48} strokeWidth={1.5} />
             </div>
-            <h3 className="text-2xl font-bold text-slate-800 mb-3">No hay tratamientos definidos</h3>
+            <h3 className="text-2xl font-bold text-slate-800 mb-3">{t('treatments.no_treatments_defined')}</h3>
             <p className="text-slate-500 max-w-sm mx-auto mb-8 font-medium">
-              Comienza configurando tu primer servicio médico para habilitar el agendamiento inteligente.
+              {t('treatments.empty_hint')}
             </p>
             <button
               onClick={() => setIsCreating(true)}
               className="px-8 py-4 bg-medical-600 text-white rounded-2xl font-bold shadow-lg shadow-medical-900/20 hover:bg-medical-700 transition-all flex items-center gap-2 mx-auto active:scale-95"
             >
               <Zap size={20} fill="currentColor" />
-              Configurar Primer Servicio
+              {t('treatments.setup_first_service')}
             </button>
             <div className="mt-12 p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50 inline-block text-blue-600 text-xs font-bold uppercase tracking-widest">
               Tip: Revisa la migración 006_treatment_config.sql

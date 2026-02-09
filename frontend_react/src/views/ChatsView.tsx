@@ -326,8 +326,8 @@ export default function ChatsView() {
       setShowToast({
         id: Date.now().toString(),
         type: 'error',
-        title: 'Error de Conexión',
-        message: 'No se pudieron cargar las conversaciones. Verificá la conexión con el servidor.',
+        title: t('chats.error_connection_title'),
+        message: t('chats.error_connection_message'),
       });
     } finally {
       setLoading(false);
@@ -717,7 +717,7 @@ export default function ChatsView() {
                   <button
                     onClick={() => setShowMobileContext(!showMobileContext)}
                     className="p-2 text-medical-600 hover:bg-medical-50 rounded-full lg:hidden transition-colors"
-                    title="Ver ficha clínica"
+                    title={t('chats.view_clinical_chart')}
                   >
                     <Activity size={20} />
                   </button>
@@ -731,9 +731,9 @@ export default function ChatsView() {
                       }`}
                   >
                     {selectedSession.status === 'human_handling' || selectedSession.status === 'silenced' ? (
-                      <><Play size={14} className="fill-current" /> <span className="hidden sm:inline">Activar IA</span></>
+                      <><Play size={14} className="fill-current" /> <span className="hidden sm:inline">{t('chats.activate_ai')}</span></>
                     ) : (
-                      <><Pause size={14} className="fill-current" /> <span className="hidden sm:inline">Manual</span></>
+                      <><Pause size={14} className="fill-current" /> <span className="hidden sm:inline">{t('chats.manual')}</span></>
                     )}
                   </button>
                 </div>
@@ -744,26 +744,26 @@ export default function ChatsView() {
                 <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center gap-2">
                   <AlertCircle size={16} className="text-orange-500" />
                   <span className="text-sm text-orange-700">
-                    ⚠️ Derivación Automática: El bot derivó este chat a las {new Date(selectedSession.last_derivhumano_at).toLocaleTimeString()}
+                    ⚠️ {t('chats.handoff_banner').replace('{{time}}', new Date(selectedSession.last_derivhumano_at).toLocaleTimeString())}
                   </span>
                   <button
                     onClick={handleRemoveSilence}
                     className="ml-auto text-xs text-orange-600 hover:underline"
                   >
-                    Quitar silencio
+                    {t('chats.remove_silence')}
                   </button>
                 </div>
               ) : (selectedSession.status === 'silenced' || selectedSession.status === 'human_handling') && (
                 <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex items-center gap-2">
                   <Pause size={16} className="text-blue-500" />
                   <span className="text-sm text-blue-700">
-                    ✋ Modo Manual Activo. El asistente no responderá.
+                    ✋ {t('chats.manual_mode_active')}
                   </span>
                   <button
                     onClick={handleToggleHumanMode}
                     className="ml-auto text-xs text-blue-600 hover:underline"
                   >
-                    Activar IA
+                    {t('chats.activate_ai')}
                   </button>
                 </div>
               )}
@@ -773,7 +773,7 @@ export default function ChatsView() {
                 <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 flex items-center gap-2">
                   <Clock size={16} className="text-yellow-600" />
                   <span className="text-sm text-yellow-700">
-                    ⏳ <strong>Ventana de 24hs cerrada:</strong> No puedes enviar mensajes manuales hasta que el paciente te escriba de nuevo.
+                    ⏳ {t('chats.window_24h_closed')}
                   </span>
                 </div>
               )}
@@ -808,7 +808,7 @@ export default function ChatsView() {
                       {message.is_derivhumano && (
                         <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
                           <User size={12} />
-                          <span className="font-medium">Derivación automática</span>
+                          <span className="font-medium">{t('chats.auto_handoff')}</span>
                         </div>
                       )}
                       <p className="text-sm">{message.content}</p>
@@ -864,7 +864,7 @@ export default function ChatsView() {
             <div className="p-4 border-b flex justify-between items-center xl:hidden">
               <div className="flex items-center gap-2">
                 <User className="text-medical-600" size={20} />
-                <h3 className="font-bold">Perfil del Paciente</h3>
+                <h3 className="font-bold">{t('chats.patient_profile_title')}</h3>
               </div>
               <button
                 onClick={() => setShowMobileContext(false)}

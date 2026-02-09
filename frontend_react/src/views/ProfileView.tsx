@@ -116,7 +116,7 @@ const ProfileView: React.FC = () => {
                                         value={firstName}
                                         onChange={(e) => setFirstName(e.target.value)}
                                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-medical-500 focus:bg-white transition-all outline-none"
-                                        placeholder="Tu nombre"
+                                        placeholder={t('profile.placeholder_first_name')}
                                         required
                                     />
                                 </div>
@@ -127,7 +127,7 @@ const ProfileView: React.FC = () => {
                                         value={lastName}
                                         onChange={(e) => setLastName(e.target.value)}
                                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-medical-500 focus:bg-white transition-all outline-none"
-                                        placeholder="Tu apellido"
+                                        placeholder={t('profile.placeholder_last_name')}
                                     />
                                 </div>
                             </div>
@@ -136,19 +136,19 @@ const ProfileView: React.FC = () => {
                                 <div className="pt-6 border-t border-gray-100">
                                     <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                                         <Calendar size={20} className="text-medical-600" />
-                                        Configuración de Agenda
+                                        {t('profile.agenda_settings')}
                                     </h3>
                                     <div className="bg-blue-50 p-4 rounded-xl mb-4 text-sm text-blue-700 leading-relaxed border border-blue-100">
-                                        <p><strong>Importante:</strong> Para que el asistente IA pueda agendar en tu calendario, ingresa el ID de tu calendario de Google (generalmente es tu correo de Gmail o un código largo si es un calendario secundario).</p>
+                                        <p>{t('profile.calendar_help')}</p>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Google Calendar ID</label>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">{t('profile.calendar_id_label')}</label>
                                         <input
                                             type="text"
                                             value={calendarId}
                                             onChange={(e) => setCalendarId(e.target.value)}
                                             className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-medical-500 focus:bg-white transition-all font-mono text-sm outline-none"
-                                            placeholder="ejemplo@gmail.com o xxxx@group.calendar.google.com"
+                                            placeholder={t('profile.calendar_id_placeholder')}
                                         />
                                     </div>
                                 </div>

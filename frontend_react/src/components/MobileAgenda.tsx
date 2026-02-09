@@ -2,6 +2,7 @@ import DateStrip from './DateStrip';
 import type { Appointment, Professional, GoogleCalendarBlock } from '../views/AgendaView';
 import { Clock, User, Phone, Lock } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { useTranslation } from '../context/LanguageContext';
 
 interface MobileAgendaProps {
     appointments: Appointment[];
@@ -20,6 +21,7 @@ export default function MobileAgenda({
     onEventClick,
     professionals
 }: MobileAgendaProps) {
+    const { t } = useTranslation();
 
     // Filter appointments for the selected date - FIX 4: Normalización robusta
     const dailyAppointments = appointments.filter(apt => {
@@ -70,7 +72,7 @@ export default function MobileAgenda({
                 {allDailyEvents.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-48 text-gray-400">
                         <Clock size={48} className="mb-2 opacity-20" />
-                        <p className="text-sm">No hay turnos para este día</p>
+                        <p className="text-sm">{t('agenda.no_appointments_today')}</p>
                     </div>
                 ) : (
                     allDailyEvents.map((evt: any) => (

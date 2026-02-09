@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTranslation } from '../context/LanguageContext';
 
 interface ProtectedRouteProps {
     children: React.ReactNode;
@@ -8,6 +9,7 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
+    const { t } = useTranslation();
     const { isAuthenticated, user, isLoading } = useAuth();
     const location = useLocation();
 
@@ -15,7 +17,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
         return (
             <div className="loading-screen">
                 <div className="loader"></div>
-                <p>Verificando sesión...</p>
+                <p>{t('common.verifying_session')}</p>
             </div>
         );
     }

@@ -292,7 +292,7 @@ export default function PatientsView() {
       {/* Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-gray-500">Cargando pacientes...</div>
+          <div className="p-8 text-center text-gray-500">{t('patients.loading')}</div>
         ) : filteredPatients.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             {t('patients.no_patients_found')}
@@ -360,21 +360,21 @@ export default function PatientsView() {
                           <button
                             onClick={() => navigate(`/pacientes/${patient.id}`)}
                             className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Ver Ficha"
+                            title={t('patients.view_chart')}
                           >
                             <FileText size={18} />
                           </button>
                           <button
                             onClick={() => openEditModal(patient)}
                             className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Editar"
+                            title={t('common.edit')}
                           >
                             <Edit size={18} />
                           </button>
                           <button
                             onClick={() => handleDelete(patient.id)}
                             className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Eliminar"
+                            title={t('common.delete')}
                           >
                             <Trash2 size={18} />
                           </button>
@@ -425,11 +425,11 @@ export default function PatientsView() {
 
                   <div className="grid grid-cols-2 gap-2 text-xs text-gray-500 mb-3 bg-gray-50 p-2 rounded-lg">
                     <div>
-                      <span className="block text-[10px] text-gray-400 uppercase font-semibold">Teléfono</span>
+                      <span className="block text-[10px] text-gray-400 uppercase font-semibold">{t('patients.phone_label')}</span>
                       {patient.phone_number}
                     </div>
                     <div>
-                      <span className="block text-[10px] text-gray-400 uppercase font-semibold">Obra Social</span>
+                      <span className="block text-[10px] text-gray-400 uppercase font-semibold">{t('patients.obra_social')}</span>
                       {patient.obra_social || '-'}
                     </div>
                   </div>

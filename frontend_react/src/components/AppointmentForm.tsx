@@ -300,14 +300,14 @@ export default function AppointmentForm({
                     {activeTab === 'anamnesis' && (
                         <div className="text-center py-10 text-gray-400">
                             <Activity size={48} className="mx-auto mb-3 opacity-20" />
-                            <p className="text-sm">Historial Médico disponible próximamente</p>
+                            <p className="text-sm">{t('agenda.medical_history_coming')}</p>
                         </div>
                     )}
 
                     {activeTab === 'billing' && (
                         <div className="text-center py-10 text-gray-400">
                             <DollarSign size={48} className="mx-auto mb-3 opacity-20" />
-                            <p className="text-sm">Módulo de Facturación disponible próximamente</p>
+                            <p className="text-sm">{t('agenda.billing_coming')}</p>
                         </div>
                     )}
                 </div>

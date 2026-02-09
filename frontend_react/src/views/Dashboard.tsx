@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
+import { useTranslation } from '../context/LanguageContext';
 import { Activity, Server, MessageSquare, Users } from 'lucide-react';
 
 interface Stats {
@@ -20,10 +21,11 @@ interface HealthData {
 }
 
 export const Dashboard: React.FC = () => {
+    const { t } = useTranslation();
     const { fetchApi, loading } = useApi();
     const [stats, setStats] = useState<Stats | null>(null);
     const [health, setHealth] = useState<HealthData | null>(null);
-    const [lastSync, setLastSync] = useState<string>('Nunca');
+    const [lastSync, setLastSync] = useState<string>('');
 
     useEffect(() => {
         const loadData = async () => {
@@ -67,40 +69,40 @@ export const Dashboard: React.FC = () => {
                     })}
                 </div>
                 <div className="last-signals">
-                    <span className="signal-label">Última sinc: {lastSync}</span>
+                    <span className="signal-label">{t('dashboard.last_sync')}: {lastSync || t('dashboard.never')}</span>
                 </div>
             </div>
 
-            <h1 className="view-title">Panel General</h1>
+            <h1 className="view-title">{t('dashboard.panel_title')}</h1>
 
             <div className="stats-grid">
                 <div className="stat-card glass accent">
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="stat-label">Tenants Activos</span>
+                        <span className="stat-label">{t('dashboard.active_tenants')}</span>
                         <Users className="stat-icon" size={20} color="var(--accent)" />
                     </div>
                     <span className="stat-value">{stats?.active_tenants || 0}</span>
-                    <span className="stat-meta">Tiendas conectadas</span>
+                    <span className="stat-meta">{t('dashboard.stores_connected')}</span>
                 </div>
 
                 <div className="stat-card glass">
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="stat-label">Total Mensajes</span>
+                        <span className="stat-label">{t('dashboard.total_messages')}</span>
                         <MessageSquare className="stat-icon" size={20} color="var(--text-secondary)" />
                     </div>
                     <span className="stat-value">{stats?.total_messages || 0}</span>
-                    <span className="stat-meta">Procesados hoy</span>
+                    <span className="stat-meta">{t('dashboard.processed_today')}</span>
                 </div>
 
                 <div className="stat-card glass">
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="stat-label">Tasa de Éxito</span>
+                        <span className="stat-label">{t('dashboard.success_rate')}</span>
                         <Activity className="stat-icon" size={20} color="var(--success)" />
                     </div>
                     <span className="stat-value">
                         {stats?.total_messages ? Math.round((stats.processed_messages / stats.total_messages) * 100) : 0}%
                     </span>
-                    <span className="stat-meta">Respuestas generadas</span>
+                    <span className="stat-meta">{t('dashboard.responses_generated')}</span>
                 </div>
             </div>
         </div>

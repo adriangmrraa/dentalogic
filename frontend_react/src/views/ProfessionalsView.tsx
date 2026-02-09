@@ -39,26 +39,19 @@ interface TimeSlot {
   end: string;    // HH:mm
 }
 
-const DAYS = [
-  { key: 'monday', label: 'Lunes' },
-  { key: 'tuesday', label: 'Martes' },
-  { key: 'wednesday', label: 'Miércoles' },
-  { key: 'thursday', label: 'Jueves' },
-  { key: 'friday', label: 'Viernes' },
-  { key: 'saturday', label: 'Sábado' },
-  { key: 'sunday', label: 'Domingo' },
-] as const;
+const DAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+const DAYS = DAY_KEYS.map((key) => ({ key }));
 
-const SPECIALTIES = [
-  'Odontología General',
-  'Ortodoncia',
-  'Endodoncia',
-  'Periodoncia',
-  'Cirugía Oral',
-  'Prótesis Dental',
-  'Odontopediatría',
-  'Implantología',
-  'Estética Dental',
+const SPECIALTIES: { value: string; key: string }[] = [
+  { value: 'Odontología General', key: 'specialty_general' },
+  { value: 'Ortodoncia', key: 'specialty_orthodontics' },
+  { value: 'Endodoncia', key: 'specialty_endodontics' },
+  { value: 'Periodoncia', key: 'specialty_periodontics' },
+  { value: 'Cirugía Oral', key: 'specialty_oral_surgery' },
+  { value: 'Prótesis Dental', key: 'specialty_prosthodontics' },
+  { value: 'Odontopediatría', key: 'specialty_pediatric' },
+  { value: 'Implantología', key: 'specialty_implantology' },
+  { value: 'Estética Dental', key: 'specialty_aesthetic' },
 ];
 
 interface ClinicOption {
@@ -87,10 +80,10 @@ export default function ProfessionalsView() {
 
   function createDefaultWorkingHours(): WorkingHours {
     const wh: any = {};
-    DAYS.forEach(day => {
-      wh[day.key] = {
-        enabled: day.key !== 'sunday',
-        slots: day.key !== 'sunday' ? [{ start: '09:00', end: '18:00' }] : []
+    DAY_KEYS.forEach((key) => {
+      wh[key] = {
+        enabled: key !== 'sunday',
+        slots: key !== 'sunday' ? [{ start: '09:00', end: '18:00' }] : []
       };
     });
     return wh as WorkingHours;
@@ -292,30 +285,30 @@ export default function ProfessionalsView() {
         {/* Header - Fixed internally with padding */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Profesionales</h1>
-            <p className="text-sm text-gray-500">Gestión del staff médico y disponibilidad</p>
+            <h1 className="text-2xl font-bold text-gray-800">{t('professionals.title')}</h1>
+            <p className="text-sm text-gray-500">{t('professionals.subtitle')}</p>
           </div>
           <button
             onClick={openCreateModal}
             className="w-full sm:w-auto flex items-center justify-center gap-2 bg-medical-600 hover:bg-medical-700 text-white px-6 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 text-sm font-semibold"
           >
             <Plus size={20} />
-            Nuevo Profesional
+            {t('professionals.new_professional')}
           </button>
         </div>
 
         {/* Stats Grid - Responsive behavior */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-primary">
-            <div className="text-xs text-gray-500 uppercase font-bold tracking-tight">Total Staff</div>
+            <div className="text-xs text-gray-500 uppercase font-bold tracking-tight">{t('professionals.total_staff')}</div>
             <div className="text-3xl font-black mt-1 text-gray-900">{professionals.length}</div>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-green-500">
-            <div className="text-xs text-gray-500 uppercase font-bold tracking-tight">Médicos Activos</div>
+            <div className="text-xs text-gray-500 uppercase font-bold tracking-tight">{t('professionals.active_doctors')}</div>
             <div className="text-3xl font-black mt-1 text-green-600">{getActiveProfessionals()}</div>
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-gray-300 sm:col-span-2 lg:col-span-1">
-            <div className="text-xs text-gray-500 uppercase font-bold tracking-tight">En Pausa</div>
+            <div className="text-xs text-gray-500 uppercase font-bold tracking-tight">{t('professionals.on_pause')}</div>
             <div className="text-3xl font-black mt-1 text-gray-400">
               {professionals.length - getActiveProfessionals()}
             </div>
@@ -327,7 +320,7 @@ export default function ProfessionalsView() {
           <div className="flex items-center justify-center p-12 bg-white rounded-2xl border border-gray-100 shadow-sm">
             <div className="flex flex-col items-center gap-3">
               <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-gray-500 font-medium">Cargando equipo médico...</p>
+              <p className="text-gray-500 font-medium">{t('professionals.loading_team')}</p>
             </div>
           </div>
         ) : professionals.length === 0 ? (
@@ -335,14 +328,14 @@ export default function ProfessionalsView() {
             <div className="mx-auto w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 mb-4">
               <ClipboardList size={32} />
             </div>
-            <h3 className="text-lg font-bold text-gray-800">No hay profesionales</h3>
-            <p className="text-gray-500 max-w-xs mx-auto text-sm mb-6">Comienza agregando el primer miembro del staff médico para gestionar turnos.</p>
+            <h3 className="text-lg font-bold text-gray-800">{t('professionals.no_professionals')}</h3>
+            <p className="text-gray-500 max-w-xs mx-auto text-sm mb-6">{t('professionals.empty_hint')}</p>
             <button
               onClick={openCreateModal}
               className="inline-flex items-center justify-center gap-2 bg-medical-600 hover:bg-medical-700 text-white px-6 py-3 rounded-xl font-semibold shadow-md hover:shadow-lg transition-all"
             >
               <Plus size={20} />
-              Agregar primer profesional
+              {t('professionals.add_first')}
             </button>
           </div>
         ) : (
@@ -376,7 +369,7 @@ export default function ProfessionalsView() {
                     <div className="grid grid-cols-2 gap-3 mt-3 sm:hidden">
                       {professional.email && (
                         <div>
-                          <span className="block text-[9px] font-black text-gray-400 uppercase tracking-tight mb-0.5">E-mail</span>
+                          <span className="block text-[9px] font-black text-gray-400 uppercase tracking-tight mb-0.5">{t('professionals.email')}</span>
                           <div className="flex items-center gap-1.5 text-xs text-gray-600 truncate font-semibold">
                             <Mail size={10} className="text-primary/60" /> {professional.email}
                           </div>
@@ -384,7 +377,7 @@ export default function ProfessionalsView() {
                       )}
                       {professional.phone && (
                         <div>
-                          <span className="block text-[9px] font-black text-gray-400 uppercase tracking-tight mb-0.5">WhatsApp</span>
+                          <span className="block text-[9px] font-black text-gray-400 uppercase tracking-tight mb-0.5">{t('professionals.whatsapp')}</span>
                           <div className="flex items-center gap-1.5 text-xs text-gray-600 font-semibold">
                             <Phone size={10} className="text-primary/60" /> {professional.phone}
                           </div>
@@ -500,10 +493,10 @@ export default function ProfessionalsView() {
                 </div>
                 <div>
                   <h2 className="text-xl font-black text-gray-900">
-                    {editingProfessional.id ? 'Editar Perfil Médico' : 'Nuevo Miembro del Equipo'}
+                    {editingProfessional.id ? t('professionals.edit_profile_medical') : t('professionals.new_team_member')}
                   </h2>
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">
-                    {editingProfessional.id ? `ID: PROF-${editingProfessional.id}` : 'Registro de nuevo profesional'}
+                    {editingProfessional.id ? `ID: PROF-${editingProfessional.id}` : t('professionals.register_new')}
                   </p>
                 </div>
               </div>
@@ -523,7 +516,7 @@ export default function ProfessionalsView() {
                 <div className="lg:col-span-5 space-y-8">
                   <div className="bg-white p-6 rounded-3xl border border-gray-200/60 shadow-sm space-y-6">
                     <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2 mb-2">
-                      <ClipboardList size={16} className="text-primary" /> Perfil Profesional
+                      <ClipboardList size={16} className="text-primary" /> {t('professionals.profile_professional')}
                     </h3>
 
                     <div className="space-y-4">
@@ -531,17 +524,17 @@ export default function ProfessionalsView() {
                       {editingProfessional.id ? (
                         <div className="group">
                           <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
-                            Sede / Clínica
+                            {t('professionals.clinic_label')}
                           </label>
                           <div className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-2xl text-sm font-semibold text-gray-800">
-                            {clinics.find((c) => c.id === (editingProfessional.tenant_id ?? formData.tenant_id))?.clinic_name ?? `Sede ${editingProfessional.tenant_id ?? formData.tenant_id ?? '—'}`}
+                            {clinics.find((c) => c.id === (editingProfessional.tenant_id ?? formData.tenant_id))?.clinic_name ?? t('approvals.location_id').replace('{{id}}', String(editingProfessional.tenant_id ?? formData.tenant_id ?? '—'))}
                           </div>
-                          <p className="text-[11px] text-gray-400 mt-1 ml-1">Perfil vinculado a esta sede (turnos y agente por sede).</p>
+                          <p className="text-[11px] text-gray-400 mt-1 ml-1">{t('professionals.profile_linked_hint')}</p>
                         </div>
                       ) : clinics.length > 0 && (
                         <div className="group">
                           <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
-                            Clínica / Sucursal <span className="text-red-500">*</span>
+                            {t('professionals.clinic_branch')} <span className="text-red-500">*</span>
                           </label>
                           <select
                             required
@@ -549,18 +542,18 @@ export default function ProfessionalsView() {
                             onChange={(e) => setFormData({ ...formData, tenant_id: e.target.value ? parseInt(e.target.value, 10) : null })}
                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none text-sm font-semibold text-gray-800 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%236b7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.25rem_1.25rem] bg-[right_0.75rem_center] bg-no-repeat"
                           >
-                            <option value="">Seleccionar clínica...</option>
+                            <option value="">{t('professionals.select_clinic')}</option>
                             {clinics.map((c) => (
                               <option key={c.id} value={c.id}>{c.clinic_name}</option>
                             ))}
                           </select>
-                          <p className="text-[11px] text-gray-400 mt-1 ml-1">Vincular este profesional a la clínica elegida (turnos y agente por sede).</p>
+                          <p className="text-[11px] text-gray-400 mt-1 ml-1">{t('professionals.link_professional_hint')}</p>
                         </div>
                       )}
 
                       <div className="group">
                         <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
-                          Nombre y Apellido <span className="text-red-500">*</span>
+                          {t('professionals.name_lastname')} <span className="text-red-500">*</span>
                         </label>
                         <input
                           type="text"
@@ -568,37 +561,37 @@ export default function ProfessionalsView() {
                           value={formData.name}
                           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                           className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none text-sm font-semibold text-gray-800"
-                          placeholder="Dr. Nombre Apellido"
+                          placeholder={t('professionals.placeholder_name')}
                         />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="group">
                           <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
-                            Especialidad
+                            {t('professionals.specialty')}
                           </label>
                           <select
                             value={formData.specialty}
                             onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none text-sm font-semibold text-gray-800 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%236b7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.25rem_1.25rem] bg-[right_0.75rem_center] bg-no-repeat"
                           >
-                            <option value="">Seleccionar...</option>
-                            {SPECIALTIES.map(spec => (
-                              <option key={spec} value={spec}>{spec}</option>
+                            <option value="">{t('professionals.select')}</option>
+                            {SPECIALTIES.map(s => (
+                              <option key={s.value} value={s.value}>{t('approvals.' + s.key)}</option>
                             ))}
                           </select>
                         </div>
 
                         <div className="group">
                           <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
-                            Nro. Matrícula
+                            {t('professionals.license_number')}
                           </label>
                           <input
                             type="text"
                             value={formData.license_number}
                             onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none text-sm font-semibold text-gray-800"
-                            placeholder="MN 00000"
+                            placeholder={t('professionals.placeholder_license')}
                           />
                         </div>
                       </div>
@@ -607,13 +600,13 @@ export default function ProfessionalsView() {
 
                   <div className="bg-white p-6 rounded-3xl border border-gray-200/60 shadow-sm space-y-6">
                     <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2 mb-2">
-                      <Mail size={16} className="text-primary" /> Contacto Oficial
+                      <Mail size={16} className="text-primary" /> {t('professionals.contact_official')}
                     </h3>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="group">
                         <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
-                          Email
+                          {t('professionals.email')}
                         </label>
                         <input
                           type="email"
@@ -626,7 +619,7 @@ export default function ProfessionalsView() {
 
                       <div className="group">
                         <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1.5 ml-1 transition-colors group-focus-within:text-primary">
-                          WhatsApp
+                          {t('professionals.whatsapp')}
                         </label>
                         <input
                           type="tel"
@@ -650,8 +643,8 @@ export default function ProfessionalsView() {
                           <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-sm font-bold text-gray-800 group-hover:text-green-600 transition-colors">Personal Activo</span>
-                          <span className="text-[10px] text-gray-400 uppercase font-black">Habilitado para la agenda global</span>
+                          <span className="text-sm font-bold text-gray-800 group-hover:text-green-600 transition-colors">{t('professionals.active_staff')}</span>
+                          <span className="text-[10px] text-gray-400 uppercase font-black">{t('professionals.enabled_global_agenda')}</span>
                         </div>
                       </label>
                     </div>
@@ -665,9 +658,9 @@ export default function ProfessionalsView() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                        <Clock size={16} className="text-primary" /> Configurar Calendarios
+                        <Clock size={16} className="text-primary" /> {t('professionals.configure_calendars')}
                       </h3>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-wider">Define la disponibilidad semanal</p>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-wider">{t('professionals.define_weekly')}</p>
                     </div>
                   </div>
 
@@ -705,7 +698,7 @@ export default function ProfessionalsView() {
                               </label>
                               <span className={`text-sm font-black uppercase tracking-widest ${config.enabled ? 'text-gray-900' : 'text-gray-400'
                                 }`}>
-                                {day.label}
+                                {t('approvals.day_' + day.key)}
                               </span>
                             </div>
 
@@ -732,7 +725,7 @@ export default function ProfessionalsView() {
                                 <div key={index} className="flex items-center gap-3 animate-in fade-in duration-500">
                                   <div className="flex-1 grid grid-cols-2 gap-px bg-gray-200 rounded-2xl overflow-hidden shadow-sm border border-gray-100">
                                     <div className="bg-white p-3 flex flex-col items-center">
-                                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">Entrada</span>
+                                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">{t('professionals.entrada')}</span>
                                       <input
                                         type="time"
                                         value={slot.start}
@@ -741,7 +734,7 @@ export default function ProfessionalsView() {
                                       />
                                     </div>
                                     <div className="bg-white p-3 flex flex-col items-center border-l border-gray-50">
-                                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">Salida</span>
+                                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">{t('professionals.salida')}</span>
                                       <input
                                         type="time"
                                         value={slot.end}
@@ -764,7 +757,7 @@ export default function ProfessionalsView() {
                                 onClick={() => addTimeSlot(dayKey)}
                                 className="w-full py-3 bg-white border-2 border-dashed border-primary/20 rounded-2xl text-[11px] font-black uppercase tracking-widest text-primary/60 hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all shadow-sm"
                               >
-                                + Agregar Bloque Horario
+                                + {t('professionals.add_time_block')}
                               </button>
                             </div>
                           )}
@@ -783,7 +776,7 @@ export default function ProfessionalsView() {
                 onClick={closeModal}
                 className="w-full sm:w-auto px-8 py-3.5 text-sm font-black uppercase tracking-widest text-gray-400 hover:text-gray-900 border border-transparent hover:border-gray-100 rounded-2xl transition-all min-h-[44px]"
               >
-                Cerrar
+                {t('professionals.close')}
               </button>
               <button
                 type="submit"
@@ -791,7 +784,7 @@ export default function ProfessionalsView() {
                 className="w-full sm:w-auto px-10 py-3.5 text-sm font-black uppercase tracking-widest text-white bg-primary hover:bg-primary-dark rounded-2xl shadow-xl shadow-primary/20 hover:shadow-primary/40 transform hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-3 min-h-[44px]"
               >
                 <Save size={20} />
-                {editingProfessional?.id ? 'Guardar Cambios' : 'Firmar Alta Médica'}
+                {editingProfessional?.id ? t('professionals.save_changes') : t('professionals.sign_medical_alta')}
               </button>
             </div>
           </div>

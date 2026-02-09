@@ -76,20 +76,20 @@ export default function ClinicsView() {
                     bot_phone_number: formData.bot_phone_number,
                     calendar_provider: formData.calendar_provider,
                 });
-                setSuccess('Clínica actualizada correctamente');
+                setSuccess(t('clinics.toast_updated'));
             } else {
                 await api.post('/admin/tenants', {
                     clinic_name: formData.clinic_name,
                     bot_phone_number: formData.bot_phone_number,
                     calendar_provider: formData.calendar_provider,
                 });
-                setSuccess('Clínica creada correctamente');
+                setSuccess(t('clinics.toast_created'));
             }
             setIsModalOpen(false);
             fetchClinicas();
             setTimeout(() => setSuccess(null), 3000);
         } catch (err: any) {
-            setError(err.response?.data?.detail || 'Error al guardar la clínica');
+            setError(err.response?.data?.detail || t('clinics.toast_error'));
         } finally {
             setSaving(false);
         }

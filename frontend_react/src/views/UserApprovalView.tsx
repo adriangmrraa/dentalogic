@@ -11,24 +11,17 @@ interface WorkingHours {
   monday: DayConfig; tuesday: DayConfig; wednesday: DayConfig; thursday: DayConfig;
   friday: DayConfig; saturday: DayConfig; sunday: DayConfig;
 }
-const DAYS_HORARIOS = [
-  { key: 'monday' as const, label: 'Lunes' },
-  { key: 'tuesday' as const, label: 'Martes' },
-  { key: 'wednesday' as const, label: 'Miércoles' },
-  { key: 'thursday' as const, label: 'Jueves' },
-  { key: 'friday' as const, label: 'Viernes' },
-  { key: 'saturday' as const, label: 'Sábado' },
-  { key: 'sunday' as const, label: 'Domingo' },
-];
+const DAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+const DAYS_HORARIOS = DAY_KEYS.map((key) => ({ key }));
 function createDefaultWorkingHours(): WorkingHours {
-  const wh: Record<string, DayConfig> = {};
-  DAYS_HORARIOS.forEach(day => {
-    wh[day.key] = {
-      enabled: day.key !== 'sunday',
-      slots: day.key !== 'sunday' ? [{ start: '09:00', end: '18:00' }] : [],
+  const wh = {} as WorkingHours;
+  DAY_KEYS.forEach((key) => {
+    wh[key] = {
+      enabled: key !== 'sunday',
+      slots: key !== 'sunday' ? [{ start: '09:00', end: '18:00' }] : [],
     };
   });
-  return wh as WorkingHours;
+  return wh;
 }
 function parseWorkingHours(raw: unknown): WorkingHours {
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
@@ -58,16 +51,16 @@ interface StaffUser {
     last_name?: string;
 }
 
-const SPECIALTIES = [
-  'Odontología General',
-  'Ortodoncia',
-  'Endodoncia',
-  'Periodoncia',
-  'Cirugía Oral',
-  'Prótesis Dental',
-  'Odontopediatría',
-  'Implantología',
-  'Estética Dental',
+const SPECIALTIES: { value: string; key: string }[] = [
+  { value: 'Odontología General', key: 'specialty_general' },
+  { value: 'Ortodoncia', key: 'specialty_orthodontics' },
+  { value: 'Endodoncia', key: 'specialty_endodontics' },
+  { value: 'Periodoncia', key: 'specialty_periodontics' },
+  { value: 'Cirugía Oral', key: 'specialty_oral_surgery' },
+  { value: 'Prótesis Dental', key: 'specialty_prosthodontics' },
+  { value: 'Odontopediatría', key: 'specialty_pediatric' },
+  { value: 'Implantología', key: 'specialty_implantology' },
+  { value: 'Estética Dental', key: 'specialty_aesthetic' },
 ];
 
 interface ProfessionalRow {
@@ -139,7 +132,7 @@ const UserApprovalView: React.FC = () => {
             const response = await api.get('/admin/users');
             setUsers(response.data);
         } catch (err: any) {
-            setError("No se pudieron cargar los usuarios. Asegúrese de tener permisos de CEO.");
+            setError(t('approvals.error_load_users'));
         } finally {
             setLoading(false);
         }
@@ -315,7 +308,7 @@ const UserApprovalView: React.FC = () => {
                 working_hours: editFormData.working_hours,
             });
             closeEditProfileModal();
-            if (selectedStaff?.id === staffForEditModal?.id) {
+            if (selectedStaff && selectedStaff.id === staffForEditModal?.id) {
                 const res = await api.get<ProfessionalRow[]>(`/admin/professionals/by-user/${selectedStaff.id}`);
                 setProfessionalRows(res.data || []);
             }
@@ -524,35 +517,35 @@ const UserApprovalView: React.FC = () => {
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><Phone size={12} /> Teléfono</label>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><Phone size={12} /> {t('approvals.phone')}</label>
                                             <input
                                                 type="text"
                                                 value={linkFormData.phone}
                                                 onChange={(e) => setLinkFormData((p) => ({ ...p, phone: e.target.value }))}
-                                                placeholder="Ej. +54 11 1234-5678"
+                                                placeholder={t('approvals.phone_placeholder')}
                                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Especialidad</label>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">{t('approvals.specialty')}</label>
                                             <select
                                                 value={linkFormData.specialty}
                                                 onChange={(e) => setLinkFormData((p) => ({ ...p, specialty: e.target.value }))}
                                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                                             >
-                                                <option value="">Seleccionar (opcional)</option>
+                                                <option value="">{t('approvals.select_optional')}</option>
                                                 {SPECIALTIES.map((s) => (
-                                                    <option key={s} value={s}>{s}</option>
+                                                    <option key={s.value} value={s.value}>{t('approvals.' + s.key)}</option>
                                                 ))}
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Matrícula</label>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">{t('approvals.license_number')}</label>
                                             <input
                                                 type="text"
                                                 value={linkFormData.license_number}
                                                 onChange={(e) => setLinkFormData((p) => ({ ...p, license_number: e.target.value }))}
-                                                placeholder="Opcional"
+                                                placeholder={t('approvals.optional')}
                                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                                             />
                                         </div>
@@ -570,18 +563,18 @@ const UserApprovalView: React.FC = () => {
                             )}
 
                             {staffDetailLoading ? (
-                                <p className="text-gray-500">Cargando datos de sedes...</p>
+                                <p className="text-gray-500">{t('approvals.loading_clinics')}</p>
                             ) : professionalRows.length > 0 ? (
                                 <>
                                     <div>
                                         <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                                             <Building2 size={16} />
-                                            Sedes asignadas
+                                            {t('approvals.assigned_locations')}
                                         </h3>
                                         <ul className="list-disc list-inside text-sm text-gray-600">
                                             {professionalRows.map((p) => (
                                                 <li key={p.id}>
-                                                    {clinics.find((c) => c.id === p.tenant_id)?.clinic_name || `Sede ${p.tenant_id}`}
+                                                    {clinics.find((c) => c.id === p.tenant_id)?.clinic_name || t('approvals.location_id').replace('{{id}}', String(p.tenant_id))}
                                                     {p.specialty && ` · ${p.specialty}`}
                                                 </li>
                                             ))}
@@ -596,33 +589,33 @@ const UserApprovalView: React.FC = () => {
                                         >
                                             <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                                                 <Stethoscope size={16} />
-                                                Sus pacientes
+                                                {t('approvals.their_patients')}
                                             </span>
                                             {expandedAccordion === 'pacientes' ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                                         </button>
                                         {expandedAccordion === 'pacientes' && (
                                             <div className="p-4 border-t border-gray-200 bg-white">
                                                 {accordionLoading === 'pacientes' ? (
-                                                    <p className="text-sm text-gray-500">Cargando métricas...</p>
+                                                    <p className="text-sm text-gray-500">{t('approvals.loading_metrics')}</p>
                                                 ) : (
                                                     <div className="space-y-4">
                                                         {professionalRows.map((row) => {
                                                             const key = `${row.id}-${row.tenant_id}`;
                                                             const d = accordionData.analytics[key];
                                                             const m = d?.metrics;
-                                                            const clinicName = clinics.find((c) => c.id === row.tenant_id)?.clinic_name || `Sede ${row.tenant_id}`;
+                                                            const clinicName = clinics.find((c) => c.id === row.tenant_id)?.clinic_name || t('approvals.location_id').replace('{{id}}', String(row.tenant_id));
                                                             return (
                                                                 <div key={key} className="text-sm">
                                                                     <p className="font-medium text-gray-700 mb-1">{clinicName}</p>
                                                                     {m ? (
                                                                         <ul className="text-gray-600 space-y-0.5">
-                                                                            <li>Pacientes únicos (mes): <strong>{m.unique_patients}</strong></li>
-                                                                            <li>Turnos totales (mes): <strong>{m.total_appointments}</strong></li>
-                                                                            <li>Tasa de finalización: <strong>{m.completion_rate}%</strong></li>
-                                                                            <li>Retención: <strong>{m.retention_rate}%</strong></li>
+                                                                            <li>{t('approvals.metrics_unique_patients')}: <strong>{m.unique_patients}</strong></li>
+                                                                            <li>{t('approvals.metrics_total_appointments')}: <strong>{m.total_appointments}</strong></li>
+                                                                            <li>{t('approvals.metrics_completion_rate')}: <strong>{m.completion_rate}%</strong></li>
+                                                                            <li>{t('approvals.metrics_retention')}: <strong>{m.retention_rate}%</strong></li>
                                                                         </ul>
                                                                     ) : (
-                                                                        <p className="text-gray-500">Sin datos en este período.</p>
+                                                                        <p className="text-gray-500">{t('approvals.no_data_period')}</p>
                                                                     )}
                                                                 </div>
                                                             );
@@ -641,33 +634,33 @@ const UserApprovalView: React.FC = () => {
                                         >
                                             <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                                                 <BarChart3 size={16} />
-                                                Uso de la plataforma
+                                                {t('approvals.platform_usage')}
                                             </span>
                                             {expandedAccordion === 'uso' ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                                         </button>
                                         {expandedAccordion === 'uso' && (
                                             <div className="p-4 border-t border-gray-200 bg-white">
                                                 {accordionLoading === 'uso' ? (
-                                                    <p className="text-sm text-gray-500">Cargando métricas...</p>
+                                                    <p className="text-sm text-gray-500">{t('approvals.loading_metrics')}</p>
                                                 ) : (
                                                     <div className="space-y-4">
                                                         {professionalRows.map((row) => {
                                                             const key = `${row.id}-${row.tenant_id}`;
                                                             const d = accordionData.analytics[key];
                                                             const m = d?.metrics;
-                                                            const clinicName = clinics.find((c) => c.id === row.tenant_id)?.clinic_name || `Sede ${row.tenant_id}`;
+                                                            const clinicName = clinics.find((c) => c.id === row.tenant_id)?.clinic_name || t('approvals.location_id').replace('{{id}}', String(row.tenant_id));
                                                             return (
                                                                 <div key={key} className="text-sm">
                                                                     <p className="font-medium text-gray-700 mb-1">{clinicName}</p>
                                                                     {m ? (
                                                                         <ul className="text-gray-600 space-y-0.5">
-                                                                            <li>Turnos completados: <strong>{m.total_appointments}</strong> (finalización {m.completion_rate}%)</li>
-                                                                            <li>Cancelaciones: <strong>{m.cancellation_rate}%</strong></li>
-                                                                            <li>Ingresos estimados: <strong>${typeof m.revenue === 'number' ? m.revenue.toLocaleString() : m.revenue}</strong></li>
+                                                                            <li>{t('approvals.completed_appointments')}: <strong>{m.total_appointments}</strong> ({t('approvals.completion')} {m.completion_rate}%)</li>
+                                                                            <li>{t('approvals.cancellations')}: <strong>{m.cancellation_rate}%</strong></li>
+                                                                            <li>{t('approvals.estimated_revenue')}: <strong>${typeof m.revenue === 'number' ? m.revenue.toLocaleString() : m.revenue}</strong></li>
                                                                             {d?.tags?.length ? <li>Tags: {d.tags.join(', ')}</li> : null}
                                                                         </ul>
                                                                     ) : (
-                                                                        <p className="text-gray-500">Sin datos en este período.</p>
+                                                                        <p className="text-gray-500">{t('approvals.no_data_period')}</p>
                                                                     )}
                                                                 </div>
                                                             );
@@ -686,23 +679,23 @@ const UserApprovalView: React.FC = () => {
                                         >
                                             <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                                                 <MessageSquare size={16} />
-                                                Mensajes e interacciones
+                                                {t('approvals.messages_interactions')}
                                             </span>
                                             {expandedAccordion === 'mensajes' ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                                         </button>
                                         {expandedAccordion === 'mensajes' && (
                                             <div className="p-4 border-t border-gray-200 bg-white">
                                                 {accordionLoading === 'mensajes' ? (
-                                                    <p className="text-sm text-gray-500">Cargando...</p>
+                                                    <p className="text-sm text-gray-500">{t('approvals.loading_short')}</p>
                                                 ) : (
                                                     <div className="space-y-2 text-sm text-gray-600">
                                                         {professionalRows.map((row) => {
                                                             const tid = row.tenant_id ?? 0;
                                                             const count = tid ? (accordionData.chatCountByTenant[String(tid)] ?? '—') : '—';
-                                                            const clinicName = clinics.find((c) => c.id === row.tenant_id)?.clinic_name || `Sede ${row.tenant_id}`;
+                                                            const clinicName = clinics.find((c) => c.id === row.tenant_id)?.clinic_name || t('approvals.location_id').replace('{{id}}', String(row.tenant_id));
                                                             return (
                                                                 <p key={row.id}>
-                                                                    <strong>{clinicName}:</strong> {typeof count === 'number' ? `${count} conversaciones` : count}
+                                                                    <strong>{clinicName}:</strong> {typeof count === 'number' ? t('approvals.conversations_count').replace('{{count}}', String(count)) : count}
                                                                 </p>
                                                             );
                                                         })}
@@ -714,7 +707,7 @@ const UserApprovalView: React.FC = () => {
                                 </>
                             ) : (
                                 <div className="glass p-4 rounded-xl text-center text-gray-500 text-sm">
-                                    Aún no está vinculado a ninguna sede. Usá el botón <strong>Vincular a sede</strong> arriba para elegir una clínica y guardar sus datos de contacto; así podrá usar la agenda y la plataforma.
+                                    {t('approvals.not_linked_hint')}
                                 </div>
                             )}
                         </div>
@@ -736,9 +729,9 @@ const UserApprovalView: React.FC = () => {
                                 </div>
                                 <div className="min-w-0">
                                     <h2 className="text-base sm:text-xl font-bold text-gray-900 truncate">
-                                        Editar Perfil: {editFormData.name || (staffForEditModal?.first_name && staffForEditModal?.last_name ? `${staffForEditModal.first_name} ${staffForEditModal.last_name}` : staffForEditModal?.email) || 'Profesional'}
+                                        {t('approvals.edit_profile_title')}: {editFormData.name || (staffForEditModal?.first_name && staffForEditModal?.last_name ? `${staffForEditModal.first_name} ${staffForEditModal.last_name}` : staffForEditModal?.email) || t('approvals.professional_fallback')}
                                     </h2>
-                                    <p className="text-xs sm:text-sm text-gray-500 mt-0.5 hidden sm:block">Completa la información del staff médico.</p>
+                                    <p className="text-xs sm:text-sm text-gray-500 mt-0.5 hidden sm:block">{t('approvals.complete_staff_info')}</p>
                                 </div>
                             </div>
                             <button type="button" onClick={closeEditProfileModal} className="shrink-0 p-2.5 min-w-[44px] min-h-[44px] rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors touch-manipulation" aria-label="Cerrar">
@@ -748,47 +741,47 @@ const UserApprovalView: React.FC = () => {
                         <form onSubmit={handleEditProfileSubmit} className="flex-1 overflow-y-auto min-h-0 overscroll-contain">
                             <div className="p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
                                 <div className="lg:col-span-4 space-y-5">
-                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Datos Principales</h3>
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('approvals.main_data')}</h3>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Sede / Clínica</label>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('approvals.clinic_label')}</label>
                                         <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-medium text-gray-800">
-                                            {clinics.find((c) => c.id === editingProfessionalRow.tenant_id)?.clinic_name || `Sede ${editingProfessionalRow.tenant_id ?? '—'}`}
+                                            {clinics.find((c) => c.id === editingProfessionalRow.tenant_id)?.clinic_name || t('approvals.location_id').replace('{{id}}', String(editingProfessionalRow.tenant_id ?? '—'))}
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Nombre completo <span className="text-red-500">*</span></label>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('approvals.full_name_required')}</label>
                                         <input type="text" value={editFormData.name} onChange={(e) => setEditFormData((p) => ({ ...p, name: e.target.value }))} className="edit-profile-input" required />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Especialidad</label>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('approvals.specialty')}</label>
                                         <select value={editFormData.specialty} onChange={(e) => setEditFormData((p) => ({ ...p, specialty: e.target.value }))} className="edit-profile-input">
-                                            <option value="">Seleccionar...</option>
-                                            {SPECIALTIES.map((s) => <option key={s} value={s}>{s}</option>)}
+                                            <option value="">{t('approvals.select')}</option>
+                                            {SPECIALTIES.map((s) => <option key={s.value} value={s.value}>{t('approvals.' + s.key)}</option>)}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Matrícula</label>
-                                        <input type="text" value={editFormData.license_number} onChange={(e) => setEditFormData((p) => ({ ...p, license_number: e.target.value }))} className="edit-profile-input" placeholder="MN 12345" />
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('approvals.license_number')}</label>
+                                        <input type="text" value={editFormData.license_number} onChange={(e) => setEditFormData((p) => ({ ...p, license_number: e.target.value }))} className="edit-profile-input" placeholder={t('approvals.license_placeholder')} />
                                     </div>
                                 </div>
                                 <div className="lg:col-span-4 space-y-5">
-                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Contacto & Estado</h3>
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('approvals.contact_status')}</h3>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">E-mail</label>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('approvals.email')}</label>
                                         <input type="email" value={editFormData.email} onChange={(e) => setEditFormData((p) => ({ ...p, email: e.target.value }))} className="edit-profile-input" />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Teléfono</label>
-                                        <input type="text" value={editFormData.phone} onChange={(e) => setEditFormData((p) => ({ ...p, phone: e.target.value }))} className="edit-profile-input" placeholder="+54 9..." />
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('approvals.phone')}</label>
+                                        <input type="text" value={editFormData.phone} onChange={(e) => setEditFormData((p) => ({ ...p, phone: e.target.value }))} className="edit-profile-input" placeholder={t('approvals.phone_edit_placeholder')} />
                                     </div>
                                     <label className="flex items-center gap-3 cursor-pointer mt-4">
                                         <input type="checkbox" checked={editFormData.is_active} onChange={(e) => setEditFormData((p) => ({ ...p, is_active: e.target.checked }))} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                                        <span className="text-sm font-medium text-gray-700">Activo</span>
+                                        <span className="text-sm font-medium text-gray-700">{t('approvals.active')}</span>
                                     </label>
                                 </div>
                                 <div className="lg:col-span-4 space-y-4">
-                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Clock size={14} /> Disponibilidad</h3>
-                                    <p className="text-xs text-gray-500">Intervalos para el bot de IA por WhatsApp.</p>
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Clock size={14} /> {t('approvals.availability')}</h3>
+                                    <p className="text-xs text-gray-500">{t('approvals.availability_help')}</p>
                                     <div className="space-y-2">
                                         {DAYS_HORARIOS.map((day) => {
                                             const dayKey = day.key;
@@ -799,10 +792,10 @@ const UserApprovalView: React.FC = () => {
                                                     <div className="flex items-center justify-between px-4 py-3 min-h-[48px] hover:bg-gray-50/80 transition-colors">
                                                         <label className="flex items-center gap-3 cursor-pointer flex-1 touch-manipulation py-1">
                                                             <input type="checkbox" checked={config.enabled} onChange={() => toggleEditDayEnabled(dayKey)} className="w-4 h-4 rounded border-gray-300 text-blue-600" />
-                                                            <span className="text-sm font-medium text-gray-800">{day.label}</span>
+                                                            <span className="text-sm font-medium text-gray-800">{t('approvals.day_' + day.key)}</span>
                                                         </label>
                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-xs text-gray-500 tabular-nums">{config.slots.length} slots</span>
+                                                            <span className="text-xs text-gray-500 tabular-nums">{config.slots.length} {t('approvals.slots')}</span>
                                                             <button type="button" onClick={() => setExpandedEditDays((prev) => isExpanded ? prev.filter((d) => d !== dayKey) : [...prev, dayKey])} className="p-2.5 min-w-[44px] min-h-[44px] rounded-lg hover:bg-gray-200 text-gray-500 touch-manipulation flex items-center justify-center">
                                                                 <ChevronDown size={18} className={isExpanded ? 'rotate-180' : ''} />
                                                             </button>
@@ -815,10 +808,10 @@ const UserApprovalView: React.FC = () => {
                                                                     <input type="time" value={slot.start} onChange={(e) => updateEditTimeSlot(dayKey, idx, 'start', e.target.value)} className="edit-profile-input w-28" />
                                                                     <span className="text-gray-400">–</span>
                                                                     <input type="time" value={slot.end} onChange={(e) => updateEditTimeSlot(dayKey, idx, 'end', e.target.value)} className="edit-profile-input w-28" />
-                                                                    <button type="button" onClick={() => removeEditTimeSlot(dayKey, idx)} className="text-sm text-red-500 hover:text-red-700">Quitar</button>
+                                                                    <button type="button" onClick={() => removeEditTimeSlot(dayKey, idx)} className="text-sm text-red-500 hover:text-red-700">{t('approvals.remove')}</button>
                                                                 </div>
                                                             ))}
-                                                            <button type="button" onClick={() => addEditTimeSlot(dayKey)} className="text-sm font-medium text-blue-600 hover:text-blue-800">+ Agregar horario</button>
+                                                            <button type="button" onClick={() => addEditTimeSlot(dayKey)} className="text-sm font-medium text-blue-600 hover:text-blue-800">+ {t('approvals.add_schedule')}</button>
                                                         </div>
                                                     )}
                                                 </div>
@@ -986,7 +979,9 @@ interface UserCardProps {
     onConfigClick?: () => void;
 }
 
-const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardClick, onConfigClick }) => (
+const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardClick, onConfigClick }) => {
+    const { t } = useTranslation();
+    return (
     <div className="glass p-5 flex items-center justify-between animate-fadeIn">
         <div
             className={`flex items-center gap-4 flex-1 min-w-0 ${onCardClick ? 'cursor-pointer hover:opacity-90' : ''}`}
@@ -999,9 +994,9 @@ const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardCl
             <div>
                 <div className={`font-medium flex items-center gap-2 ${user.status === 'suspended' ? 'text-secondary line-through' : ''}`}>
                     <User size={14} className="opacity-50" />
-                    {user.first_name || 'Sin Nombre'} {user.last_name || ''}
+                    {user.first_name || t('approvals.no_name')} {user.last_name || ''}
                     {user.status === 'suspended' && (
-                        <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full uppercase ml-2">Suspendido</span>
+                        <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full uppercase ml-2">{t('approvals.suspended')}</span>
                     )}
                 </div>
                 <div className="text-sm flex items-center gap-2 opacity-70">
@@ -1020,8 +1015,8 @@ const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardCl
                     type="button"
                     onClick={onConfigClick}
                     className="btn-gear"
-                    title="Editar perfil y horarios"
-                    aria-label="Editar perfil"
+                    title={t('approvals.edit_profile_schedules')}
+                    aria-label={t('approvals.edit_profile_schedules')}
                 >
                     <Settings size={20} />
                 </button>
@@ -1029,10 +1024,10 @@ const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardCl
             {isRequest ? (
                 <>
                     <button onClick={() => onAction(user.id, 'active')} className="btn-icon-labeled success">
-                        <UserCheck size={18} /> Aprobar
+                        <UserCheck size={18} /> {t('approvals.approve')}
                     </button>
                     <button onClick={() => onAction(user.id, 'suspended')} className="btn-icon-labeled danger">
-                        <UserX size={18} /> Rechazar
+                        <UserX size={18} /> {t('approvals.reject')}
                     </button>
                 </>
             ) : (
@@ -1042,12 +1037,13 @@ const UserCard: React.FC<UserCardProps> = ({ user, onAction, isRequest, onCardCl
                     </button>
                 ) : (
                     <button onClick={() => onAction(user.id, 'active')} className="btn-icon-labeled success">
-                        <Unlock size={18} /> Reactivar Acceso
+                        <Unlock size={18} /> {t('approvals.reactivate')}
                     </button>
                 )
             )}
         </div>
     </div>
-);
+    );
+};
 
 export default UserApprovalView;
