@@ -951,14 +951,17 @@ async def update_tenant(tenant_id: int, data: Dict[str, Any], user_data=Depends(
         cp = str(data["calendar_provider"]).lower() if data["calendar_provider"] else "local"
         if cp not in ("local", "google"):
             cp = "local"
-        params.append(cp)
-        updates.append(f"config = COALESCE(config, '{{}}')::jsonb || jsonb_build_object('calendar_provider', ${len(params)}::text)")
+        # Persistir config como JSON explícito para evitar problemas de tipo en PostgreSQL
+        config_patch = json.dumps({"calendar_provider": cp})
+        params.append(config_patch)
+        updates.append(f"config = COALESCE(config, '{{}}')::jsonb || ${len(params)}::jsonb")
     if not updates:
         return {"status": "updated"}
     params.append(tenant_id)
     updates.append("updated_at = NOW()")
     query = f"UPDATE tenants SET {', '.join(updates)} WHERE id = ${len(params)}"
     await db.pool.execute(query, *params)
+    logger.info(f"Tenant {tenant_id} updated: calendar_provider={data.get('calendar_provider')} (persisted)")
     return {"status": "updated"}
 
 @router.delete("/tenants/{tenant_id}")

@@ -300,11 +300,18 @@ async def get_tenant_calendar_provider(tenant_id: int) -> str:
         "SELECT config FROM tenants WHERE id = $1",
         tenant_id,
     )
-    if not row or not row.get("config"):
+    if not row or row.get("config") is None:
         return "local"
     cfg = row["config"]
     if isinstance(cfg, dict):
         cp = (cfg.get("calendar_provider") or "local").lower()
+    elif isinstance(cfg, str):
+        try:
+            cfg = json.loads(cfg)
+            cp = (cfg.get("calendar_provider") if isinstance(cfg, dict) else "local") or "local"
+            cp = str(cp).lower()
+        except Exception:
+            cp = "local"
     else:
         cp = "local"
     return cp if cp in ("google", "local") else "local"
@@ -333,10 +340,14 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
             clean_name = re.sub(r'^(dr|dra|doctor|doctora)\.?\s+', '', professional_name, flags=re.IGNORECASE).strip()
         
         tenant_id = current_tenant_id.get()
-        query = "SELECT id, first_name, last_name, google_calendar_id, working_hours FROM professionals WHERE is_active = true AND tenant_id = $1"
+        # Solo profesionales aprobados (users.status = 'active') y activos en la sede
+        query = """SELECT p.id, p.first_name, p.last_name, p.google_calendar_id, p.working_hours
+                   FROM professionals p
+                   INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' AND u.status = 'active'
+                   WHERE p.is_active = true AND p.tenant_id = $1"""
         params = [tenant_id]
         if clean_name:
-            query += " AND (first_name ILIKE $2 OR last_name ILIKE $2 OR (first_name || ' ' || last_name) ILIKE $2)"
+            query += " AND (p.first_name ILIKE $2 OR p.last_name ILIKE $2 OR (p.first_name || ' ' || COALESCE(p.last_name, '')) ILIKE $2)"
             params.append(f"%{clean_name}%")
         
         active_professionals = await db.pool.fetch(query, *params)
@@ -515,7 +526,7 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
     except Exception as e:
         import traceback
         logger.exception(f"Error en check_availability (tenant_id={current_tenant_id.get()}): {e}")
-        logger.warning(f"check_availability FAIL date_query={date_query!r} error={e!r}")
+        logger.warning(f"check_availability FAIL date_query={date_query!r} error={e!r} traceback={traceback.format_exc()}")
         return f"No pude consultar la disponibilidad para {date_query}. ¿Probamos una fecha diferente?"
 
 @tool
@@ -576,12 +587,15 @@ async def book_appointment(date_time: str, treatment_reason: str,
             """, tenant_id, phone, first_name, last_name, dni, insurance_provider)
             patient_id = row["id"]
 
-        # 3. Profesionales del tenant
+        # 3. Profesionales del tenant (solo aprobados: u.status = 'active')
         clean_p_name = re.sub(r"^(dr|dra|doctor|doctora)\.?\s+", "", (professional_name or ""), flags=re.IGNORECASE).strip()
-        p_query = "SELECT id, first_name, last_name, google_calendar_id, working_hours FROM professionals WHERE tenant_id = $1 AND is_active = true"
+        p_query = """SELECT p.id, p.first_name, p.last_name, p.google_calendar_id, p.working_hours
+                     FROM professionals p
+                     INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' AND u.status = 'active'
+                     WHERE p.tenant_id = $1 AND p.is_active = true"""
         p_params = [tenant_id]
         if clean_p_name:
-            p_query += " AND (first_name ILIKE $2 OR last_name ILIKE $2 OR (first_name || ' ' || last_name) ILIKE $2)"
+            p_query += " AND (p.first_name ILIKE $2 OR p.last_name ILIKE $2 OR (p.first_name || ' ' || COALESCE(p.last_name, '')) ILIKE $2)"
             p_params.append(f"%{clean_p_name}%")
         candidates = await db.pool.fetch(p_query, *p_params)
         if not candidates:

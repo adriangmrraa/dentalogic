@@ -86,8 +86,8 @@ export default function ClinicsView() {
                 });
                 setSuccess(t('clinics.toast_created'));
             }
+            await fetchClinicas();
             setIsModalOpen(false);
-            fetchClinicas();
             setTimeout(() => setSuccess(null), 3000);
         } catch (err: any) {
             setError(err.response?.data?.detail || t('clinics.toast_error'));
