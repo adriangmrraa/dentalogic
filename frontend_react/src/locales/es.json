@@ -348,7 +348,9 @@
     "no_name": "Sin Nombre",
     "edit_profile_schedules": "Editar perfil y horarios",
     "license_placeholder": "MN 12345",
-    "phone_edit_placeholder": "+54 9..."
+    "phone_edit_placeholder": "+54 9...",
+    "google_calendar_id": "ID Calendario (Google)",
+    "google_calendar_id_placeholder": "Ej: primary o email@resource.calendar.google.com"
   },
   "clinics": {
     "title": "Sedes",

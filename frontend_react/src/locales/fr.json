@@ -347,6 +347,8 @@
     "edit_profile_schedules": "Modifier profil et horaires",
     "license_placeholder": "MN 12345",
     "phone_edit_placeholder": "+33 9...",
+    "google_calendar_id": "ID Calendrier (Google)",
+    "google_calendar_id_placeholder": "Ex. primary ou email@resource.calendar.google.com",
     "reactivate": "Réactiver l'accès"
   },
   "clinics": {

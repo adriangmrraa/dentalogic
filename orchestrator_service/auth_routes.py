@@ -101,15 +101,22 @@ async def register(payload: UserRegister):
             phone_val = (payload.phone_number or "").strip() or None
             specialty_val = (payload.specialty or "").strip() or None
             reg_id = (payload.registration_id or "").strip() or None
+            gcal_id = (payload.google_calendar_id or "").strip() or None
             try:
                 await db.pool.execute("""
                     INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email, phone_number,
-                    specialty, registration_id, is_active, working_hours, created_at, updated_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE, $9::jsonb, NOW(), NOW())
-                """, tenant_id, uid, first_name, last_name, payload.email, phone_val, specialty_val, reg_id, wh_json)
+                    specialty, registration_id, is_active, working_hours, google_calendar_id, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE, $9::jsonb, $10, NOW(), NOW())
+                """, tenant_id, uid, first_name, last_name, payload.email, phone_val, specialty_val, reg_id, wh_json, gcal_id)
             except asyncpg.UndefinedColumnError as e:
                 err_str = str(e).lower()
-                if "phone_number" in err_str:
+                if "google_calendar_id" in err_str:
+                    await db.pool.execute("""
+                        INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email, phone_number,
+                        specialty, registration_id, is_active, working_hours, created_at, updated_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE, $9::jsonb, NOW(), NOW())
+                    """, tenant_id, uid, first_name, last_name, payload.email, phone_val, specialty_val, reg_id, wh_json)
+                elif "phone_number" in err_str:
                     await db.pool.execute("""
                         INSERT INTO professionals (tenant_id, user_id, first_name, last_name, email,
                         specialty, registration_id, is_active, working_hours, created_at, updated_at)

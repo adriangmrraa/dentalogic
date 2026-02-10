@@ -74,6 +74,7 @@ interface ProfessionalRow {
     working_hours?: unknown;
     phone_number?: string;
     registration_id?: string;
+    google_calendar_id?: string;
 }
 
 const UserApprovalView: React.FC = () => {
@@ -93,8 +94,8 @@ const UserApprovalView: React.FC = () => {
     const [staffForEditModal, setStaffForEditModal] = useState<StaffUser | null>(null);
     const [editFormData, setEditFormData] = useState<{
         name: string; email: string; phone: string; specialty: string; license_number: string;
-        is_active: boolean; working_hours: WorkingHours;
-    }>({ name: '', email: '', phone: '', specialty: '', license_number: '', is_active: true, working_hours: createDefaultWorkingHours() });
+        google_calendar_id: string; is_active: boolean; working_hours: WorkingHours;
+    }>({ name: '', email: '', phone: '', specialty: '', license_number: '', google_calendar_id: '', is_active: true, working_hours: createDefaultWorkingHours() });
     const [editFormSubmitting, setEditFormSubmitting] = useState(false);
     const [expandedEditDays, setExpandedEditDays] = useState<string[]>([]);
     const [expandedAccordion, setExpandedAccordion] = useState<'pacientes' | 'uso' | 'mensajes' | null>(null);
@@ -225,6 +226,7 @@ const UserApprovalView: React.FC = () => {
                 phone: row.phone_number || '',
                 specialty: row.specialty || '',
                 license_number: row.registration_id || '',
+                google_calendar_id: row.google_calendar_id ?? '',
                 is_active: row.is_active ?? true,
                 working_hours: parseWorkingHours(row.working_hours),
             });
@@ -303,6 +305,7 @@ const UserApprovalView: React.FC = () => {
                 phone: editFormData.phone,
                 specialty: editFormData.specialty || undefined,
                 license_number: editFormData.license_number || undefined,
+                google_calendar_id: editFormData.google_calendar_id?.trim() || undefined,
                 is_active: editFormData.is_active,
                 availability: {},
                 working_hours: editFormData.working_hours,
@@ -773,6 +776,10 @@ const UserApprovalView: React.FC = () => {
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('approvals.phone')}</label>
                                         <input type="text" value={editFormData.phone} onChange={(e) => setEditFormData((p) => ({ ...p, phone: e.target.value }))} className="edit-profile-input" placeholder={t('approvals.phone_edit_placeholder')} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('approvals.google_calendar_id')}</label>
+                                        <input type="text" value={editFormData.google_calendar_id} onChange={(e) => setEditFormData((p) => ({ ...p, google_calendar_id: e.target.value }))} className="edit-profile-input" placeholder={t('approvals.google_calendar_id_placeholder')} />
                                     </div>
                                     <label className="flex items-center gap-3 cursor-pointer mt-4">
                                         <input type="checkbox" checked={editFormData.is_active} onChange={(e) => setEditFormData((p) => ({ ...p, is_active: e.target.checked }))} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />

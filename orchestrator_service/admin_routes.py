@@ -386,6 +386,7 @@ class ProfessionalUpdate(BaseModel):
     is_active: bool
     availability: Dict[str, Any]
     working_hours: Optional[Dict[str, Any]] = None
+    google_calendar_id: Optional[str] = None
 
 def generate_default_working_hours():
     """Genera el JSON de horarios por defecto (Mon-Sat, 09:00-18:00)"""
@@ -1470,38 +1471,65 @@ async def update_professional(id: int, payload: ProfessionalUpdate):
         if not exists:
             raise HTTPException(status_code=404, detail="Profesional no encontrado")
 
-        # Actualizar datos básicos y disponibilidad
+        # Actualizar datos básicos, disponibilidad y google_calendar_id
         current_wh = payload.working_hours
+        gcal_id = (payload.google_calendar_id or "").strip() or None
         if current_wh:
              sql_update = """
                 UPDATE professionals SET
                     first_name = $1, specialty = $2, license_number = $3,
                     phone_number = $4, email = $5, is_active = $6,
                     availability = $7::jsonb, working_hours = $8::jsonb,
+                    google_calendar_id = $9,
                     updated_at = NOW()
-                WHERE id = $9
+                WHERE id = $10
             """
              params = [payload.name, payload.specialty, payload.license_number, 
                       payload.phone, payload.email, payload.is_active, 
-                      json.dumps(payload.availability), json.dumps(current_wh), id]
+                      json.dumps(payload.availability), json.dumps(current_wh), gcal_id, id]
         else:
              sql_update = """
                 UPDATE professionals SET
                     first_name = $1, specialty = $2, license_number = $3,
                     phone_number = $4, email = $5, is_active = $6,
                     availability = $7::jsonb,
+                    google_calendar_id = $8,
                     updated_at = NOW()
-                WHERE id = $8
+                WHERE id = $9
             """
              params = [payload.name, payload.specialty, payload.license_number, 
                       payload.phone, payload.email, payload.is_active, 
-                      json.dumps(payload.availability), id]
+                      json.dumps(payload.availability), gcal_id, id]
 
         try:
             await db.pool.execute(sql_update, *params)
         except asyncpg.UndefinedColumnError as e:
             err_str = str(e).lower()
-            if "phone_number" in err_str:
+            if "google_calendar_id" in err_str:
+                # BD sin columna google_calendar_id: actualizar sin ella
+                if current_wh:
+                    await db.pool.execute("""
+                        UPDATE professionals SET
+                            first_name = $1, specialty = $2, license_number = $3,
+                            phone_number = $4, email = $5, is_active = $6,
+                            availability = $7::jsonb, working_hours = $8::jsonb,
+                            updated_at = NOW()
+                        WHERE id = $9
+                    """, payload.name, payload.specialty, payload.license_number,
+                         payload.phone, payload.email, payload.is_active,
+                         json.dumps(payload.availability), json.dumps(current_wh), id)
+                else:
+                    await db.pool.execute("""
+                        UPDATE professionals SET
+                            first_name = $1, specialty = $2, license_number = $3,
+                            phone_number = $4, email = $5, is_active = $6,
+                            availability = $7::jsonb,
+                            updated_at = NOW()
+                        WHERE id = $8
+                    """, payload.name, payload.specialty, payload.license_number,
+                         payload.phone, payload.email, payload.is_active,
+                         json.dumps(payload.availability), id)
+            elif "phone_number" in err_str:
                 # BD sin columna phone_number: actualizar sin ella
                 if current_wh:
                     await db.pool.execute("""
@@ -2204,7 +2232,7 @@ async def get_professionals_by_user(
         rows = await db.pool.fetch(
             """
             SELECT id, tenant_id, user_id, first_name, last_name, email, specialty,
-                   is_active, working_hours, created_at, phone_number, registration_id
+                   is_active, working_hours, created_at, phone_number, registration_id, google_calendar_id
             FROM professionals
             WHERE user_id = $1 AND tenant_id = ANY($2::int[])
             ORDER BY tenant_id
@@ -2215,10 +2243,10 @@ async def get_professionals_by_user(
         return [dict(r) for r in rows]
     except Exception as e:
         err_str = str(e).lower()
-        if "working_hours" in err_str or "tenant_id" in err_str or "phone_number" in err_str or "registration_id" in err_str:
+        if "working_hours" in err_str or "tenant_id" in err_str or "phone_number" in err_str or "registration_id" in err_str or "google_calendar_id" in err_str:
             try:
                 rows = await db.pool.fetch(
-                    "SELECT id, tenant_id, user_id, first_name, last_name, email, specialty, is_active, working_hours FROM professionals WHERE user_id = $1 AND tenant_id = ANY($2::int[]) ORDER BY tenant_id",
+                    "SELECT id, tenant_id, user_id, first_name, last_name, email, specialty, is_active, working_hours, phone_number, registration_id FROM professionals WHERE user_id = $1 AND tenant_id = ANY($2::int[]) ORDER BY tenant_id",
                     uid,
                     allowed_ids,
                 )

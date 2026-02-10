@@ -348,7 +348,9 @@
     "no_name": "No name",
     "edit_profile_schedules": "Edit profile and schedules",
     "license_placeholder": "MN 12345",
-    "phone_edit_placeholder": "+54 9..."
+    "phone_edit_placeholder": "+54 9...",
+    "google_calendar_id": "Calendar ID (Google)",
+    "google_calendar_id_placeholder": "E.g. primary or email@resource.calendar.google.com"
   },
   "clinics": {
     "title": "Clinics",
