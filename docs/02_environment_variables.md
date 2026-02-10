@@ -17,15 +17,17 @@ Este proyecto se configura completamente mediante variables de entorno. En despl
 
 | Variable | Descripción | Ejemplo | Requerida |
 | :--- | :--- | :--- | :--- |
-| `STORE_NAME` | Nombre de la clínica | `Dentalogic` | ✅ |
-| `BOT_PHONE_NUMBER` | Número de WhatsApp del bot | `+5493756123456` | ✅ |
+| `STORE_NAME` | Nombre de la clínica (legacy/fallback) | `Dentalogic` | ❌ |
+| `BOT_PHONE_NUMBER` | Número de WhatsApp del bot (fallback cuando no viene `to_number` en la petición) | `+5493756123456` | ❌ |
+| `CLINIC_NAME` | Nombre de clínica usado como fallback si la sede no tiene `clinic_name` en BD | `Clínica Dental` | ❌ |
+| `CLINIC_LOCATION` | Ubicación (usado en respuestas de configuración; opcional) | `República de Francia 2899, Mercedes, Buenos Aires` | ❌ |
 | `STORE_LOCATION` | Ciudad/País | `Paraná, Entre Ríos, Argentina` | ❌ |
 | `STORE_WEBSITE` | URL de la clínica | `https://www.odontolea.com` | ❌ |
 | `STORE_DESCRIPTION` | Especialidad clínica | `Salud Bucal e Implantología` | ❌ |
 | `STORE_CATALOG_KNOWLEDGE` | Categorías/marcas principales (para inyectar en prompt) | `Puntas Grishko, Bloch, Capezio...` | ❌ |
 | `SHIPPING_PARTNERS` | Empresas de envío (comma-separated) | `Andreani, Correo Argentino` | ❌ |
 
-**Nota:** El sistema inyecta estas variables en el `system_prompt` del agente LangChain.
+**Multi-tenant (Dentalogic):** En este proyecto, el **número del bot** y el **nombre de la clínica** por sede son la fuente de verdad en la base de datos: `tenants.bot_phone_number` y `tenants.clinic_name`. Se configuran en **Sedes (Clinics)** en el panel. Las variables `BOT_PHONE_NUMBER` y `CLINIC_NAME` (y `CLINIC_LOCATION`) se usan solo como **respaldo** cuando no hay valor en BD o cuando la petición no trae `to_number` (ej. pruebas manuales). No es obligatorio definirlas si todas las sedes tienen ya sus datos cargados en la plataforma. `CLINIC_PHONE` no se utiliza en el orquestador y puede omitirse.
    
 ### 2.2 Integración Tienda Nube
 

@@ -134,7 +134,7 @@ Para optimizar el rendimiento en conversaciones extensas, Dentalogic utiliza un 
 **Idiomas (i18n):** El selector de idioma (Español / English / Français) está en **Configuración** (solo CEO). Se persiste en `tenants.config.ui_language` vía GET/PATCH `/admin/settings/clinic`. `LanguageProvider` envuelve toda la app; todas las vistas y componentes compartidos usan `useTranslation()` y `t('clave')` con archivos `src/locales/es.json`, `en.json`, `fr.json`. El cambio de idioma aplica de inmediato a toda la plataforma.
 
 **Vistas Principales:**
-- **Agenda Inteligente:** Calendario interactivo con sincronización de Google Calendar; leyenda de origen (IA, Manual, GCal) y tooltips traducidos.
+- **Agenda Inteligente:** Calendario interactivo con sincronización de Google Calendar; leyenda de origen (IA, Manual, GCal) y tooltips traducidos. **Filtro por profesional** en vistas semanal y mensual (CEO y secretaria pueden elegir profesional); **profesionales solo ven su propio calendario** (una columna en vista día, sin selector de profesional). Actualización en tiempo real vía Socket.IO.
 - **Perfil 360° del Paciente:** Acceso a historias clínicas, antecedentes y notas de evolución.
 - **Monitor de Triaje:** Alertas inmediatas cuando la IA detecta una urgencia grave.
 - **Modales IA-Aware:** Los modales de edición (especialmente en Personal Activo / Profesionales) están sincronizados con la lógica de la IA, permitiendo configurar `working_hours` que el agente respeta estrictamente durante la reserva de turnos.

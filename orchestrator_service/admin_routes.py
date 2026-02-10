@@ -2144,11 +2144,11 @@ async def list_professionals(
     allowed_ids: List[int] = Depends(get_allowed_tenant_ids),
 ):
     """
-    Lista profesionales. CEO ve todos los de sus sedes; secretary/professional solo los de su clínica.
-    Así un profesional creado en cualquier sede aparece en la página Profesionales para el CEO.
+    Lista profesionales aprobados y activos. CEO ve todos los de sus sedes; secretary/professional solo los de su clínica.
+    Solo se incluyen profesionales cuyo usuario tiene status = 'active' (aprobados por el CEO).
     """
-    # Solo listar profesionales dentales (excluir secretarias: u.role = 'professional').
-    base_join = "FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional'"
+    # Solo listar profesionales dentales aprobados (u.role = 'professional' y u.status = 'active').
+    base_join = "FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' AND u.status = 'active'"
     # CEO (varias sedes): listar profesionales de todas las sedes permitidas
     if len(allowed_ids) > 1:
         try:
@@ -2170,7 +2170,7 @@ async def list_professionals(
                     pass
             try:
                 rows = await db.pool.fetch(
-                    "SELECT p.id, p.first_name, p.last_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' WHERE p.tenant_id = ANY($1::int[])",
+                    "SELECT p.id, p.first_name, p.last_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' AND u.status = 'active' WHERE p.tenant_id = ANY($1::int[])",
                     allowed_ids,
                 )
                 return [dict(row) for row in rows]
@@ -2178,7 +2178,7 @@ async def list_professionals(
                 pass
         try:
             rows = await db.pool.fetch(
-                "SELECT p.id, p.first_name, p.last_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional'"
+                "SELECT p.id, p.first_name, p.last_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' AND u.status = 'active'"
             )
             return [dict(row) for row in rows]
         except Exception as e2:
@@ -2197,7 +2197,7 @@ async def list_professionals(
 
     try:
         rows = await db.pool.fetch(
-            "SELECT p.id, p.first_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' WHERE p.tenant_id = $1",
+            "SELECT p.id, p.first_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' AND u.status = 'active' WHERE p.tenant_id = $1",
             tenant_id,
         )
         return [dict(r) | {"last_name": ""} for r in rows]
@@ -2206,14 +2206,14 @@ async def list_professionals(
 
     try:
         rows = await db.pool.fetch(
-            "SELECT p.id, p.first_name, p.last_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional'"
+            "SELECT p.id, p.first_name, p.last_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' AND u.status = 'active'"
         )
         return [dict(row) for row in rows]
     except Exception as e:
         logger.warning(f"list_professionals fallback (no tenant) failed: {e}")
     try:
         rows = await db.pool.fetch(
-            "SELECT p.id, p.first_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional'"
+            "SELECT p.id, p.first_name, p.specialty, p.is_active FROM professionals p INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' AND u.status = 'active'"
         )
         return [dict(r) | {"last_name": ""} for r in rows]
     except Exception as e:

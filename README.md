@@ -17,7 +17,7 @@ Sistema de coordinación clínica inteligente, impulsado por IA (**LangChain + O
 | Módulo | Descripción |
 | :--- | :--- |
 | **Dashboard** | Vista general: urgencias recientes, conversaciones IA, turnos del día, ingresos; métricas en tiempo real y panel soberano para CEO. |
-| **Agenda** | Vista semanal/mensual/día; turnos por profesional; colores por origen (IA, manual, Google Calendar); creación/edición de turnos; sincronización híbrida (local o Google Calendar por sede). |
+| **Agenda** | Vista semanal, mensual y día; **filtro por profesional** en semanal/mensual (CEO y secretaria); **profesionales solo ven su propio calendario** (una columna en vista día). Turnos por profesional; colores por origen (IA, manual, Google Calendar); creación/edición de turnos; sincronización híbrida (local o Google Calendar por sede); actualización en tiempo real vía Socket.IO. |
 | **Pacientes** | Listado, búsqueda, ficha clínica digital; historial de evoluciones, anamnesis, antecedentes; alta y edición de pacientes; primer turno opcional al crear. |
 | **Conversaciones (Chats)** | Chats por sede; historial de mensajes con la IA; handoff a humano y silencio 24h; contexto clínico y próximo turno; activar/desactivar IA por conversación. |
 | **Analíticas (CEO)** | Métricas por profesional: turnos, tasa de realización, retención, ingresos estimados; comparativa entre profesionales; filtros por rango de fechas y profesionales. |
@@ -60,6 +60,13 @@ Resumen: **consulta → saludo/clínica → definir servicio (máx. 3 si se list
 
 - **Interfaz (UI):** Tres idiomas soportados: **Español (es)**, **Inglés (en)** y **Francés (fr)**. La preferencia se configura en **Configuración** (solo CEO) y se persiste por sede (`tenants.config.ui_language`). Al cambiar el idioma, **toda la plataforma** actualiza al instante (Login, Dashboard, Agenda, Pacientes, Chats, Analíticas, Aprobaciones, Sedes, Tratamientos, Perfil, menús y componentes compartidos).
 - **Asistente por WhatsApp:** Responde en el **idioma del mensaje del paciente** (detección automática es/en/fr). No depende del idioma elegido en la UI; cada conversación puede ser en un idioma distinto según lo que escriba el lead.
+
+---
+
+## Número del bot y datos de la clínica
+
+- **Sí: el bot usa el número que carga la clínica.** Cada sede (tenant) tiene en la base de datos su **número de WhatsApp** (`tenants.bot_phone_number`) y su **nombre** (`tenants.clinic_name`). Cuando llega un mensaje por WhatsApp, el sistema identifica la sede por el número al que el usuario escribió (`to_number`) y usa ese tenant para toda la conversación (turnos, pacientes, idioma, calendario). Esos datos se configuran en **Sedes (Clinics)** en el panel.
+- **Variables de entorno** como `BOT_PHONE_NUMBER` y `CLINIC_NAME` actúan como **respaldo** cuando no viene número en la petición (por ejemplo en pruebas manuales) o cuando la sede no tiene nombre cargado. En producción multi-sede, la fuente de verdad es la base de datos por sede. Ver `docs/02_environment_variables.md` para el detalle.
 
 ---
 
