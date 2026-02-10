@@ -1185,7 +1185,7 @@ async def chat_endpoint(req: ChatRequest):
     if not tenant and bot_number_clean:
         # Intentar match solo por dígitos (ej. 5493435256815 vs +5493435256815)
         tenant = await db.pool.fetchrow(
-            "SELECT id FROM tenants WHERE REGEXP_REPLACE(bot_phone_number, '\\D', '', 'g') = $1",
+            "SELECT id FROM tenants WHERE REGEXP_REPLACE(bot_phone_number, '[^0-9]', '', 'g') = $1",
             bot_number_clean,
         )
     if not tenant:

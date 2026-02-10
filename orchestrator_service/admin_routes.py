@@ -1248,6 +1248,10 @@ async def create_patient(
             (p.insurance or "").strip() or None,
         )
         return {"id": row["id"]}
+    except asyncpg.UniqueViolationError as e:
+        if "patients_tenant_id_phone_number_key" in str(e) or "tenant_id" in str(e).lower() and "phone" in str(e).lower():
+            raise HTTPException(status_code=409, detail="Ya existe un paciente con ese número de teléfono en esta sede. Podés buscarlo en la lista o usar otro teléfono.")
+        raise HTTPException(status_code=409, detail="Paciente duplicado (mismo DNI o teléfono en esta sede).")
     except Exception as e:
         logger.error(f"Error creating patient: {e}")
         raise HTTPException(status_code=400, detail=str(e))

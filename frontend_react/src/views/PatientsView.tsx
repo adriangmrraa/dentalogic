@@ -176,8 +176,8 @@ export default function PatientsView() {
           await api.post('/admin/appointments', {
             patient_id: patientId,
             professional_id: parseInt(appointmentData.professional_id),
-            datetime: aptDate.toISOString(),
-            type: appointmentData.treatment_code,
+            appointment_datetime: aptDate.toISOString(),
+            appointment_type: appointmentData.treatment_code,
             notes: "Turno inicial (Alta manual)",
             check_collisions: true
           });
@@ -192,9 +192,11 @@ export default function PatientsView() {
 
       fetchPatients();
       closeModal();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving patient:', error);
-      alert(t('alerts.error_save_patient'));
+      const detail = error?.response?.data?.detail;
+      const msg = typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map((x: any) => x?.msg || x).join(', ') : t('alerts.error_save_patient');
+      alert(msg || t('alerts.error_save_patient'));
     }
   };
 
