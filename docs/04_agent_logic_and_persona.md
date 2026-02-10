@@ -51,8 +51,13 @@ El bot actúa como la primera línea de atención de la clínica de la Dra. Laur
 
 | Tool | Parámetros | Función |
 | :--- | :--- | :--- |
-| `check_availability` | `date_query, [professional_name], [treatment_name], [time_preference]` | Consulta huecos libres. Usa la duración del tratamiento si se pasa `treatment_name`. Valida contra `working_hours` del profesional y, si la clínica usa Google Calendar, contra eventos GCal por profesional. |
+| **`list_professionals`** | (ninguno) | Lista profesionales reales de la sede (nombre y especialidad desde BD). **Obligatoria** cuando el paciente pregunta qué profesionales trabajan o con quién puede sacar turno. El agente **nunca** debe inventar nombres (ej. Juan Pérez, María López). |
+| **`list_services`** | `[category]` | Lista tratamientos disponibles para reservar (desde `treatment_types`, solo `is_available_for_booking = true`). **Obligatoria** cuando preguntan qué tratamientos tienen; el agente **nunca** debe inventar listas de servicios. |
+| `check_availability` | `date_query, [professional_name], [treatment_name], [time_preference]` | Consulta huecos libres para un día. **Obligatoria** cuando pregunten por disponibilidad (ej. "¿tenés turnos mañana?"). `date_query` = mañana, martes, jueves, etc. Valida contra `working_hours` y, si la clínica usa Google Calendar, contra GCal. |
 | `book_appointment` | `date_time, treatment_reason, [first_name, last_name, dni, insurance_provider], [professional_name]` | Registra el turno. Requiere servicio (tratamiento), fecha/hora y, para pacientes nuevos, los 4 datos. Opcionalmente el profesional; si no se pasa, el sistema asigna uno disponible. |
+| **`list_my_appointments`** | `[upcoming_days]` | Lista los turnos del paciente (por teléfono de la conversación) en los próximos días. Usar cuando pregunten "¿tengo turno?", "¿cuándo es mi próximo turno?". |
+| `cancel_appointment` | `date_query` | Cancela el turno del paciente en la fecha indicada (ej. mañana, el martes). |
+| `reschedule_appointment` | `original_date, new_date_time` | Reprograma un turno a otra fecha/hora. |
 | `triage_urgency` | `symptoms` | Analiza el texto/audio para determinar la gravedad. |
 | `derivhumano` | `reason` | Pasa la conversación a un operador y activa el silencio de 24h. |
 
@@ -65,24 +70,28 @@ Orden recomendado que el system prompt impone y que garantiza que el agente teng
 1. **Saludo e identidad**  
    En el primer mensaje, presentarse como asistente de la **clínica** (nombre inyectado por sede). No listar todas las clínicas; el contexto ya define la sede por el número al que escribió el paciente.
 
-2. **Definir siempre un servicio**  
+2. **Profesionales y tratamientos solo desde BD**  
+   - Si preguntan **qué profesionales trabajan** o **con quién pueden sacar turno**: llamar a **`list_professionals`** y responder únicamente con esa lista. No inventar nombres.  
+   - Si preguntan **qué tratamientos tienen** o **qué se puede agendar**: llamar a **`list_services`** y responder únicamente con esa lista. No inventar tratamientos.  
+   Esto evita que el agente alucine (ej. Juan Pérez, María López, ortodoncia) y permite que la consulta de disponibilidad use datos reales.
+
+3. **Definir siempre un servicio**  
    Antes de consultar disponibilidad o agendar, debe quedar claro **qué tratamiento** busca el paciente (limpieza, consulta, urgencia, etc.).  
-   - Mencionar o sugerir en base a la consulta; **no** listar todos los servicios.  
-   - Si se listan opciones, **máximo 3** y solo las relevantes.  
+   - Los tratamientos ofrecidos deben ser solo los que devolvió **`list_services`**.  
    - Sin servicio definido no se debe llamar a `check_availability` ni a `book_appointment`.
 
-3. **Duración del turno**  
+4. **Duración del turno**  
    La duración la define el **servicio elegido**. Las tools `check_availability` y `book_appointment` reciben el nombre del tratamiento (ej. limpieza) y la BD devuelve o usa `default_duration_minutes` de ese tratamiento.
 
-4. **Disponibilidad (local o Google) y profesional**  
+5. **Disponibilidad (local o Google) y profesional**  
    **Antes de agendar**, el agente debe **consultar disponibilidad real**: según la configuración de la sede (`calendar_provider`: local o google), la tool consulta solo BD o también Google Calendar (por profesional con `google_calendar_id`).  
    - Para elegir profesional: preguntar si tiene preferencia por algún profesional o si busca **cualquiera con disponibilidad**.  
    - Llamar a `check_availability` con `date_query`, `treatment_name` y opcionalmente `professional_name`; ofrecer 2–3 horarios que devuelva la tool.
 
-5. **Datos del paciente**  
+6. **Datos del paciente**  
    Cuando el paciente elija día y hora, pedir: nombre completo, DNI, Obra Social o PARTICULAR. Para pacientes nuevos son obligatorios para `book_appointment`.
 
-6. **Agendar**  
+7. **Agendar**  
    Solo cuando existan: **servicio (treatment_reason), fecha y hora elegidos, y los 4 datos del paciente**, ejecutar `book_appointment`. El turno se registra en calendario **local** o **Google** según la configuración de la clínica (y en Google, en el calendario del profesional correspondiente).
 
 ---

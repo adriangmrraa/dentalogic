@@ -323,12 +323,12 @@ async def get_tenant_calendar_provider(tenant_id: int) -> str:
 async def check_availability(date_query: str, professional_name: Optional[str] = None, 
                              treatment_name: Optional[str] = None, time_preference: Optional[str] = None):
     """
-    Consulta la disponibilidad REAL de turnos en la BD para una fecha.
-    date_query: Descripción de la fecha (ej: 'mañana', 'lunes', '2025-05-10')
-    professional_name: (Opcional) Nombre del profesional específico.
-    treatment_name: (Opcional) Nombre del tratamiento (limpieza, consulta, perno y corona, etc) para calcular la duración.
+    Consulta la disponibilidad REAL de turnos para una fecha. OBLIGATORIO usarla cuando el paciente pregunte por turnos o disponibilidad en un día.
+    date_query: El día a consultar. Usar una sola palabra o expresión de fecha: 'mañana', 'lunes', 'martes', 'jueves', 'viernes', 'sábado', o '2025-05-10'. Si el usuario dice "mañana a las 15" usar date_query='mañana'.
+    professional_name: (Opcional) Nombre del profesional (debe ser uno de list_professionals).
+    treatment_name: (Opcional) Tratamiento para calcular duración (ej. limpieza, consulta). Si ya se definió en la conversación, pasarlo.
     time_preference: (Opcional) 'mañana', 'tarde' o 'todo'.
-    Devuelve: Horarios disponibles
+    Devuelve: Lista de horarios disponibles o mensaje claro si no hay.
     """
     try:
         tid = current_tenant_id.get()
@@ -367,7 +367,14 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         # Si se pidió un profesional específico, verificar si atiende ese día
         if clean_name and active_professionals:
             prof = active_professionals[0]
-            wh = prof.get('working_hours') or {}
+            wh = prof.get('working_hours')
+            if isinstance(wh, str):
+                try:
+                    wh = json.loads(wh) if wh else {}
+                except Exception:
+                    wh = {}
+            if not isinstance(wh, dict):
+                wh = {}
             day_config = wh.get(day_name_en, {"enabled": False, "slots": []})
             
             if not day_config.get("enabled"):
@@ -461,7 +468,14 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         # --- Pre-llenar busy_map con horarios NO LABORALES del profesional ---
         # Si working_hours está vacío o el día no tiene slots, el profesional se considera disponible en horario clínica (no se marca nada como ocupado).
         for prof in active_professionals:
-            wh = prof.get('working_hours') or {}
+            wh = prof.get('working_hours')
+            if isinstance(wh, str):
+                try:
+                    wh = json.loads(wh) if wh else {}
+                except Exception:
+                    wh = {}
+            if not isinstance(wh, dict):
+                wh = {}
             day_config = wh.get(day_name_en, {"enabled": False, "slots": []})
             prof_id = prof['id']
             # Solo marcar como ocupados los horarios fuera de working_hours cuando el día tiene slots configurados
@@ -755,10 +769,50 @@ async def triage_urgency(symptoms: str):
     return responses.get(urgency_level, responses['normal'])
 
 @tool
+async def list_my_appointments(upcoming_days: int = 14):
+    """
+    Lista los turnos del paciente que tiene la conversación (próximos o recientes).
+    Usar cuando pregunten si tienen turno, cuándo es su próximo turno, qué turnos tienen, etc.
+    upcoming_days: Cantidad de días hacia adelante a partir de hoy (default 14).
+    """
+    phone = current_customer_phone.get()
+    if not phone:
+        return "No pude identificar tu número. Escribime desde el mismo WhatsApp con el que te registraste."
+    tenant_id = current_tenant_id.get()
+    try:
+        start = get_now_arg().date()
+        end = start + timedelta(days=max(1, min(upcoming_days, 90)))
+        rows = await db.pool.fetch("""
+            SELECT a.appointment_datetime, a.status, a.appointment_type,
+                   p_prof.first_name || ' ' || COALESCE(p_prof.last_name, '') as professional_name
+            FROM appointments a
+            JOIN patients p ON a.patient_id = p.id
+            LEFT JOIN professionals p_prof ON a.professional_id = p_prof.id
+            WHERE p.tenant_id = $1 AND p.phone_number = $2
+            AND DATE(a.appointment_datetime) >= $3 AND DATE(a.appointment_datetime) <= $4
+            AND a.status IN ('scheduled', 'confirmed')
+            ORDER BY a.appointment_datetime ASC
+        """, tenant_id, phone, start, end)
+        if not rows:
+            return f"No tenés turnos registrados en los próximos {upcoming_days} días. ¿Querés que busquemos disponibilidad para agendar?"
+        lines = []
+        for r in rows:
+            dt = r['appointment_datetime']
+            if hasattr(dt, 'astimezone'):
+                dt = dt.astimezone(ARG_TZ)
+            fecha_hora = dt.strftime("%d/%m/%Y %H:%M") if hasattr(dt, 'strftime') else str(dt)
+            prof = (r['professional_name'] or '').strip() or "Profesional"
+            lines.append(f"• {fecha_hora} con {prof} ({r['appointment_type'] or 'consulta'})")
+        return "Tus próximos turnos:\n" + "\n".join(lines) + "\n\n¿Querés cancelar o reprogramar alguno?"
+    except Exception as e:
+        logger.error(f"Error en list_my_appointments: {e}")
+        return "Hubo un error al buscar tus turnos. ¿Probamos de nuevo?"
+
+@tool
 async def cancel_appointment(date_query: str):
     """
     Cancela un turno existente. 
-    date_query: Fecha del turno a cancelar (ej: 'mañana', '2025-05-10')
+    date_query: Fecha del turno a cancelar (ej: 'mañana', '2025-05-10', 'el martes')
     """
     phone = current_customer_phone.get()
     if not phone:
@@ -887,25 +941,57 @@ async def reschedule_appointment(original_date: str, new_date_time: str):
         return "⚠️ No pude reprogramar el turno. Por favor, intenta de nuevo."
 
 @tool
+async def list_professionals():
+    """
+    Lista los profesionales que trabajan en la clínica (odontólogos/as activos y aprobados).
+    Usar SIEMPRE que el paciente pregunte qué profesionales hay, quién atiende, con quién puede sacar turno, etc.
+    Devuelve nombres y especialidad reales de la base de datos. NUNCA inventes nombres.
+    """
+    tenant_id = current_tenant_id.get()
+    try:
+        rows = await db.pool.fetch("""
+            SELECT p.first_name, p.last_name, p.specialty
+            FROM professionals p
+            INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional' AND u.status = 'active'
+            WHERE p.tenant_id = $1 AND p.is_active = true
+            ORDER BY p.first_name, p.last_name
+        """, tenant_id)
+        if not rows:
+            return "No hay profesionales cargados en esta sede por el momento. El paciente puede contactar a la clínica por otro medio."
+        res = "👨‍⚕️ Profesionales de la clínica:\n"
+        for r in rows:
+            name = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip() or "Profesional"
+            specialty = (r['specialty'] or "Odontología general").strip()
+            res += f"• {name} - {specialty}\n"
+        return res
+    except Exception as e:
+        logger.error(f"Error en list_professionals: {e}")
+        return "⚠️ Error al consultar profesionales."
+
+@tool
 async def list_services(category: str = None):
     """
-    Lista los servicios/tratamientos dentales disponibles.
+    Lista los tratamientos/servicios dentales disponibles para reservar en la clínica.
+    Usar SIEMPRE que el paciente pregunte qué tratamientos tienen, qué servicios ofrecen, qué se puede agendar, etc.
+    Devuelve solo tratamientos reales de la base de datos (nombre, duración). NUNCA inventes tratamientos.
     category: Filtro opcional (prevention, restorative, surgical, orthodontics, emergency)
     """
     tenant_id = current_tenant_id.get()
     try:
-        query = "SELECT code, name, description, default_duration_minutes FROM treatment_types WHERE tenant_id = $1 AND is_active = true"
+        query = """SELECT code, name, description, default_duration_minutes
+                   FROM treatment_types
+                   WHERE tenant_id = $1 AND is_active = true AND is_available_for_booking = true"""
         params = [tenant_id]
         if category:
             query += " AND category = $2"
             params.append(category)
         rows = await db.pool.fetch(query, *params)
         if not rows:
-            return "No encontré servicios disponibles en esa categoría."
-        
-        res = "🦷 Nuestros servicios:\n"
+            return "No hay tratamientos disponibles para reservar en esta sede en este momento."
+        res = "🦷 Tratamientos disponibles para agendar:\n"
         for r in rows:
-            res += f"• {r['name']} ({r['default_duration_minutes']} min): {r['description']}\n"
+            desc = (r['description'] or '').strip()
+            res += f"• {r['name']} ({r['default_duration_minutes']} min)" + (f": {desc}\n" if desc else "\n")
         return res
     except Exception as e:
         logger.error(f"Error en list_services: {e}")
@@ -966,7 +1052,7 @@ async def derivhumano(reason: str):
         logger.error(f"Error en derivhumano: {e}")
         return "Hubo un problema al derivarte, pero ya he dejado el aviso en el sistema."
 
-DENTAL_TOOLS = [check_availability, book_appointment, triage_urgency, cancel_appointment, reschedule_appointment, list_services, derivhumano]
+DENTAL_TOOLS = [list_professionals, list_services, check_availability, book_appointment, list_my_appointments, cancel_appointment, reschedule_appointment, triage_urgency, derivhumano]
 
 # --- DETECCIÓN DE IDIOMA (para respuesta del agente) ---
 def detect_message_language(text: str) -> str:
@@ -1036,6 +1122,8 @@ IDENTIDAD Y TONO:
 
 POLÍTICAS DURAS:
 • NUNCA INVENTES: No inventes horarios ni disponibilidad. Siempre usá 'check_availability'. La disponibilidad se consulta en la agenda interna (local) o en Google Calendar por profesional según la configuración de la clínica; la tool ya aplica la lógica correcta.
+• DISPONIBILIDAD (OBLIGATORIO): Si el paciente pregunta por disponibilidad para un día (ej. "¿tenés turnos mañana?", "¿qué hay para el martes?", "¿libre el jueves a las 15?") DEBES llamar a 'check_availability' con date_query igual a ese día (mañana, martes, jueves, etc.) y opcionalmente treatment_name si ya dijo el tratamiento. Respondé ÚNICAMENTE con el resultado de la tool. No digas "no pude consultar" sin haber llamado a la tool.
+• PROFESIONALES Y TRATAMIENTOS (OBLIGATORIO): Si el paciente pregunta qué profesionales trabajan, quiénes atienden o con quién puede sacar turno, DEBES llamar a 'list_professionals' y responder ÚNICAMENTE con los nombres y especialidades que devuelva la tool. Si pregunta qué tratamientos tienen, qué servicios ofrecen o qué se puede agendar, DEBES llamar a 'list_services' y responder ÚNICAMENTE con la lista que devuelva la tool. NUNCA inventes nombres de profesionales (ej. Juan Pérez, María López) ni listas de tratamientos; solo los que devuelvan las tools.
 • HORARIOS SAGRADOS: Los horarios de los profesionales son sagrados. Si un profesional no atiende el día solicitado, informalo claramente al paciente y ofrecé alternativas (otro día con el mismo profesional u otros profesionales para ese día).
 • NO DIAGNOSTICAR: Ante dudas clínicas, decí que un profesional de la clínica tendrá que evaluar en consultorio para un diagnóstico certero.
 • ZONA HORARIA: America/Argentina/Buenos_Aires (GMT-3). 
@@ -1048,17 +1136,18 @@ POLÍTICAS DURAS:
 
 SERVICIOS (OBLIGATORIO DEFINIR UNO):
 • Siempre se debe definir UN servicio/tratamiento antes de consultar disponibilidad o agendar. No agendes nunca sin motivo (tratamiento).
-• Si el paciente pregunta por disponibilidad o turnos sin decir el servicio, preguntale qué tratamiento o tipo de consulta necesita (limpieza, revisión, dolor, etc.).
-• Al hablar de servicios: mencioná o sugerí en base a lo que pide; NO listes todos. Si en algún momento listás opciones, MÁXIMO 3 y solo las más relevantes a su consulta. Preferí mencionar uno y explicar brevemente antes que soltar una lista larga.
-• La duración del turno la define el servicio elegido: usá siempre 'check_availability' y 'book_appointment' con el nombre del tratamiento (ej. limpieza, consulta) para que el sistema use la duración correcta.
+• Si el paciente pregunta por disponibilidad o turnos sin decir el servicio, preguntale qué tratamiento o tipo de consulta necesita. Para saber qué tratamientos ofrecen, usá 'list_services' y ofrecé solo esos (nunca inventes).
+• Al hablar de servicios: solo mencioná tratamientos que devolvió 'list_services'. Si listás opciones, que sean únicamente las de la tool.
+• La duración del turno la define el servicio elegido: usá siempre 'check_availability' y 'book_appointment' con el nombre del tratamiento (ej. tal como figura en list_services) para que el sistema use la duración correcta.
 
 FLUJO DE AGENDAMIENTO (ORDEN ESTRICTO):
 1. SALUDO E IDENTIDAD: En el primer mensaje de la conversación, presentate como asistente de {clinic_name}.
 2. DEFINIR SERVICIO: Asegurate de tener claro qué tratamiento busca (limpieza, consulta, urgencia, etc.). Si no lo dijo, preguntalo. Sin servicio definido no se puede consultar disponibilidad ni agendar.
-3. PROFESIONAL (antes o al consultar disponibilidad): Podés preguntar "¿Tenés preferencia por algún profesional o buscamos el primer disponible?" Si tiene preferencia, usá 'check_availability' con professional_name; si no, llamá 'check_availability' sin professional_name (el sistema devuelve huecos de cualquier profesional disponible).
-4. CONSULTAR DISPONIBILIDAD: Llamá 'check_availability' con date_query (ej. miércoles, jueves), treatment_name (el servicio ya definido) y opcionalmente professional_name. Ofrecé 2 o 3 horarios claros. No inventes: solo los que devuelva la tool.
-5. DATOS DEL PACIENTE: Cuando el paciente elija día y hora, pedí: nombre completo, DNI, Obra Social o PARTICULAR. Para pacientes nuevos son obligatorios los 4 datos para poder agendar.
-6. AGENDAR: Solo cuando tengas: servicio (treatment_reason), fecha y hora elegidos, y los 4 datos (nombre, apellido, DNI, obra social), ejecutá 'book_appointment'. Podés pasar professional_name si ya quedó elegido; si no, el sistema asigna un profesional disponible. No llames 'book_appointment' sin haber consultado antes disponibilidad para esa fecha/hora.
+3. PROFESIONAL (antes o al consultar disponibilidad): Si preguntan qué profesionales hay, usá 'list_professionals' y respondé con esa lista. Para elegir profesional al agendar: podés preguntar "¿Tenés preferencia por algún profesional o buscamos el primer disponible?" Si tiene preferencia, usá 'check_availability' con professional_name (el nombre debe ser uno de los que devolvió list_professionals); si no, llamá 'check_availability' sin professional_name.
+4. CONSULTAR DISPONIBILIDAD: Llamá 'check_availability' con date_query (ej. miércoles, jueves, mañana), treatment_name (el servicio ya definido) y opcionalmente professional_name. Ofrecé 2 o 3 horarios claros. No inventes: solo los que devuelva la tool.
+5. GESTIÓN DE TURNOS DEL PACIENTE: Si preguntan "¿tengo turno?", "¿cuándo es mi próximo turno?", "¿qué turnos tengo?" usá 'list_my_appointments'. Para cancelar: 'cancel_appointment' con la fecha del turno. Para reprogramar: 'reschedule_appointment' con la fecha actual del turno y la nueva fecha/hora.
+6. DATOS DEL PACIENTE: Cuando el paciente elija día y hora, pedí: nombre completo, DNI, Obra Social o PARTICULAR. Para pacientes nuevos son obligatorios los 4 datos para poder agendar.
+7. AGENDAR: Solo cuando tengas: servicio (treatment_reason), fecha y hora elegidos, y los 4 datos (nombre, apellido, DNI, obra social), ejecutá 'book_appointment'. Podés pasar professional_name si ya quedó elegido; si no, el sistema asigna un profesional disponible. No llames 'book_appointment' sin haber consultado antes disponibilidad para esa fecha/hora.
 
 REQUISITOS DE 'book_appointment': date_time (ej. "jueves 10:00"), treatment_reason (ej. limpieza), first_name, last_name, dni, insurance_provider. professional_name es opcional. Si faltan datos, la tool te lo indica; pedilos y volvé a intentar.
 

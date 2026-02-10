@@ -49,11 +49,14 @@ Maneja la integración con YCloud y la IA de audio (Whisper).
 ---
 
 ## 🛠️ Herramientas (Tools) - Nombres Exactos
-- `check_availability`: Consulta disponibilidad de turnos (por `calendar_provider`: google → GCal, local → solo BD).
+- **`list_professionals`**: Lista profesionales reales de la sede (BD: `professionals` + `users.status = 'active'`). Obligatoria cuando el paciente pregunta qué profesionales hay o con quién puede sacar turno; el agente NUNCA debe inventar nombres.
+- **`list_services`**: Lista tratamientos disponibles para reservar (BD: `treatment_types` con `is_active` e `is_available_for_booking`). Obligatoria cuando preguntan qué tratamientos tienen; el agente NUNCA debe inventar tratamientos.
+- `check_availability`: Consulta disponibilidad real para un día (date_query: mañana, martes, etc.). Obligatoria cuando pregunten por turnos o disponibilidad; nunca inventar horarios.
 - `book_appointment`: Registra un turno (misma lógica híbrida; siempre por `tenant_id`).
+- **`list_my_appointments`**: Lista los turnos del paciente (por teléfono de la conversación) en los próximos N días. Usar cuando pregunten si tienen turno, cuándo es el próximo, etc.
+- `cancel_appointment` / `reschedule_appointment`: Cancelar o reprogramar un turno del paciente; aislados por tenant; GCal solo si `calendar_provider == 'google'`.
 - `triage_urgency`: Analiza síntomas.
 - `derivhumano`: Derivación a humano y bloqueo de 24h (por `tenant_id` + phone en `patients`).
-- `cancel_appointment` / `reschedule_appointment`: Aislados por tenant; GCal solo si `calendar_provider == 'google'`.
 
 ---
 
