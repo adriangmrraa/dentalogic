@@ -364,8 +364,8 @@ const UserApprovalView: React.FC = () => {
     if (loading) return <div className="p-6">{t('approvals.loading_staff')}</div>;
 
     return (
-        <div className="view active p-6">
-            <div className="flex justify-between items-center mb-8">
+        <div className="view active flex flex-col h-full min-h-0 overflow-hidden p-6">
+            <div className="flex justify-between items-center mb-6 shrink-0">
                 <div>
                     <h1 className="view-title flex items-center gap-3">
                         <ShieldCheck color="var(--accent)" />
@@ -376,7 +376,7 @@ const UserApprovalView: React.FC = () => {
             </div>
 
             {/* TABS */}
-            <div className="flex gap-4 mb-6 border-b border-gray-200 pb-px">
+            <div className="flex gap-4 mb-4 border-b border-gray-200 pb-px shrink-0">
                 <button
                     onClick={() => setActiveTab('requests')}
                     className={`pb-3 px-6 font-semibold transition-all relative rounded-t-xl ${activeTab === 'requests'
@@ -417,43 +417,45 @@ const UserApprovalView: React.FC = () => {
             </div>
 
             {error ? (
-                <div className="glass p-6 text-center border-red-500/20">
+                <div className="glass p-6 text-center border-red-500/20 shrink-0">
                     <AlertTriangle color="#ff4d4d" size={48} className="mx-auto mb-4" />
                     <p className="text-red-400">{error}</p>
                 </div>
             ) : (
-                <div className="grid gap-4">
-                    {activeTab === 'requests' ? (
-                        requests.length === 0 ? (
-                            <div className="glass p-12 text-center">
-                                <Clock size={48} className="mx-auto mb-4 opacity-50" />
-                                <h3 className="text-xl font-medium mb-2">{t('approvals.no_requests')}</h3>
-                                <p className="text-secondary">{t('approvals.no_requests_processed')}</p>
-                            </div>
+                <div className="flex-1 min-h-0 overflow-y-auto pb-4">
+                    <div className="grid gap-4">
+                        {activeTab === 'requests' ? (
+                            requests.length === 0 ? (
+                                <div className="glass p-12 text-center">
+                                    <Clock size={48} className="mx-auto mb-4 opacity-50" />
+                                    <h3 className="text-xl font-medium mb-2">{t('approvals.no_requests')}</h3>
+                                    <p className="text-secondary">{t('approvals.no_requests_processed')}</p>
+                                </div>
+                            ) : (
+                                requests.map(user => (
+                                    <UserCard key={user.id} user={user} onAction={handleAction} isRequest />
+                                ))
+                            )
                         ) : (
-                            requests.map(user => (
-                                <UserCard key={user.id} user={user} onAction={handleAction} isRequest />
-                            ))
-                        )
-                    ) : (
-                        staff.length === 0 ? (
-                            <div className="glass p-12 text-center">
-                                <Users size={48} className="mx-auto mb-4 opacity-50" />
-                                <h3 className="text-xl font-medium mb-2">{t('approvals.no_staff')}</h3>
-                                <p className="text-secondary">{t('approvals.no_staff_register')}</p>
-                            </div>
-                        ) : (
-                            staff.map(user => (
-                                <UserCard
-                                    key={user.id}
-                                    user={user}
-                                    onAction={handleAction}
-                                    onCardClick={() => setSelectedStaff(user)}
-                                    onConfigClick={() => handleConfigClick(user)}
-                                />
-                            ))
-                        )
-                    )}
+                            staff.length === 0 ? (
+                                <div className="glass p-12 text-center">
+                                    <Users size={48} className="mx-auto mb-4 opacity-50" />
+                                    <h3 className="text-xl font-medium mb-2">{t('approvals.no_staff')}</h3>
+                                    <p className="text-secondary">{t('approvals.no_staff_register')}</p>
+                                </div>
+                            ) : (
+                                staff.map(user => (
+                                    <UserCard
+                                        key={user.id}
+                                        user={user}
+                                        onAction={handleAction}
+                                        onCardClick={() => setSelectedStaff(user)}
+                                        onConfigClick={() => handleConfigClick(user)}
+                                    />
+                                ))
+                            )
+                        )}
+                    </div>
                 </div>
             )}
 
