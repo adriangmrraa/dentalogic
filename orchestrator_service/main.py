@@ -72,6 +72,10 @@ class ChatRequest(BaseModel):
     name: Optional[str] = "Paciente"
     customer_name: Optional[str] = None
     media: List[Dict[str, Any]] = Field(default_factory=list)
+    # Deduplicación: si el WhatsApp service envía provider_message_id (wamid/event_id), evitamos procesar el mismo mensaje dos veces
+    provider: Optional[str] = None
+    event_id: Optional[str] = None
+    provider_message_id: Optional[str] = None
 
     @property
     def final_message(self) -> str:
@@ -150,10 +154,17 @@ def parse_datetime(datetime_query: str) -> datetime:
     target_date = None
     target_time = (14, 0) # Default
 
-    # 1. Extraer hora (HH:MM)
+    # 1. Extraer hora (HH:MM, HH:00, o "17 hs" / "17h")
     time_match = re.search(r'(\d{1,2})[:h](\d{2})', query)
     if time_match:
         target_time = (int(time_match.group(1)), int(time_match.group(2)))
+    else:
+        # "17 hs", "a las 17", "17 horas" -> 17:00
+        hour_only = re.search(r'(?:las?\s+)?(\d{1,2})\s*(?:hs?|horas?)?\b', query)
+        if hour_only:
+            h = int(hour_only.group(1))
+            if 0 <= h <= 23:
+                target_time = (h, 0)
     
     # 2. Extraer fecha (usando la lógica de parse_date)
     # Buscamos palabras clave o fechas en la query
@@ -290,6 +301,41 @@ def generate_free_slots(target_date: date, busy_intervals_by_prof: Dict[int, set
     return slots
 
 
+def slots_to_ranges(slots: List[str], interval_minutes: int = 30) -> str:
+    """
+    Convierte una lista de horarios (ej. 09:00, 09:30, 10:00...) en rangos legibles.
+    Ej: ["09:00","09:30","10:00","14:00","14:30"] -> "de 09:00 a 10:30 y de 14:00 a 15:00"
+    Así la respuesta parece más humana (no listar cada media hora).
+    """
+    if not slots:
+        return ""
+    try:
+        def to_minutes(hhmm: str) -> int:
+            h, m = map(int, hhmm.split(":"))
+            return h * 60 + m
+        def to_hhmm(m: int) -> str:
+            h, m = divmod(m, 60)
+            return f"{h:02d}:{m:02d}"
+        minutes_list = sorted(set(to_minutes(s) for s in slots))
+        ranges = []
+        i = 0
+        while i < len(minutes_list):
+            start = minutes_list[i]
+            end = start + interval_minutes
+            while i + 1 < len(minutes_list) and minutes_list[i + 1] == end:
+                i += 1
+                end = minutes_list[i] + interval_minutes
+            ranges.append((to_hhmm(start), to_hhmm(end)))
+            i += 1
+        if not ranges:
+            return ""
+        if len(ranges) == 1:
+            return f"de {ranges[0][0]} a {ranges[0][1]}"
+        return " y ".join(f"de {a} a {b}" for a, b in ranges)
+    except Exception:
+        return ", ".join(slots)
+
+
 # --- CEREBRO HÍBRIDO: calendar_provider por clínica ---
 async def get_tenant_calendar_provider(tenant_id: int) -> str:
     """
@@ -323,12 +369,12 @@ async def get_tenant_calendar_provider(tenant_id: int) -> str:
 async def check_availability(date_query: str, professional_name: Optional[str] = None, 
                              treatment_name: Optional[str] = None, time_preference: Optional[str] = None):
     """
-    Consulta la disponibilidad REAL de turnos para una fecha. OBLIGATORIO usarla cuando el paciente pregunte por turnos o disponibilidad en un día.
-    date_query: El día a consultar. Usar una sola palabra o expresión de fecha: 'mañana', 'lunes', 'martes', 'jueves', 'viernes', 'sábado', o '2025-05-10'. Si el usuario dice "mañana a las 15" usar date_query='mañana'.
-    professional_name: (Opcional) Nombre del profesional (debe ser uno de list_professionals).
-    treatment_name: (Opcional) Tratamiento para calcular duración (ej. limpieza, consulta). Si ya se definió en la conversación, pasarlo.
-    time_preference: (Opcional) 'mañana', 'tarde' o 'todo'.
-    Devuelve: Lista de horarios disponibles o mensaje claro si no hay.
+    Consulta la disponibilidad REAL de turnos para una fecha. Llamar UNA sola vez por pregunta del paciente.
+    date_query: Día a consultar: 'mañana', 'lunes', 'martes', 'jueves', etc. Si dice "miércoles a la tarde" usar date_query='miércoles' y time_preference='tarde'.
+    professional_name: (Opcional) Nombre del profesional (uno de list_professionals).
+    treatment_name: (Opcional) Tratamiento ya definido (ej. limpieza profunda, consulta).
+    time_preference: OBLIGATORIO cuando el paciente pide horarios de un momento del día: si pide 'a la tarde', 'por la tarde', 'tarde' -> 'tarde'; si pide 'a la mañana', 'por la mañana', 'mañana' (en sentido horario) -> 'mañana'; si no especifica -> 'todo' o no pasar.
+    La tool devuelve rangos (ej. "de 09:00 a 12:00 y de 14:00 a 17:00"). Responde al paciente UNA sola vez con ese texto; no repitas ni des variaciones.
     """
     try:
         tid = current_tenant_id.get()
@@ -527,11 +573,11 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         )
         
         if available_slots:
-            slots_str = ", ".join(available_slots)
-            logger.info(f"📅 check_availability OK slots={len(available_slots)} for {date_query}")
-            resp = f"Para {date_query} ({duration} min), tenemos disponibilidad: {slots_str}. "
+            ranges_str = slots_to_ranges(available_slots, interval_minutes=30)
+            logger.info(f"📅 check_availability OK slots={len(available_slots)} for {date_query} -> ranges: {ranges_str}")
+            resp = f"Para {date_query} ({duration} min), tenemos disponibilidad {ranges_str}. "
             if professional_name:
-                resp += f"Consultando específicamente con Dr/a. {professional_name}."
+                resp += f"Consultando con Dr/a. {professional_name}."
             return resp
         else:
             logger.info(f"📅 check_availability no slots for {date_query} (duration={duration} min)")
@@ -553,9 +599,10 @@ async def book_appointment(date_time: str, treatment_reason: str,
     Para pacientes NUEVOS (status='guest'), OBLIGATORIAMENTE debes proveer first_name, last_name, dni e insurance_provider.
     Si faltan esos datos en un usuario nuevo, el turno será rechazado.
     
-    date_time: Fecha y hora (ej: 'mañana 14:00')
-    treatment_reason: Motivo/Tratamiento (checkup, cleaning, extraction, root_canal, restoration, orthodontics, consultation)
-    professional_name: (Opcional) Nombre del profesional específico.
+    date_time: Fecha y hora en un solo string (ej: 'miércoles 17:00', 'miércoles 17 hs', 'mañana 14:00').
+    treatment_reason: Nombre del tratamiento tal como en list_services (ej. limpieza profunda, consulta).
+    first_name, last_name: Nombre y apellido por separado (ej. Adrian / Rodolfo Argañaraz).
+    professional_name: (Opcional) Nombre del profesional (ej. Facundo).
     """
     phone = current_customer_phone.get()
     if not phone:
@@ -563,10 +610,10 @@ async def book_appointment(date_time: str, treatment_reason: str,
     tenant_id = current_tenant_id.get()
     try:
         apt_datetime = parse_datetime(date_time)
-        first_name = first_name.strip() if first_name and first_name.strip() else None
-        last_name = last_name.strip() if last_name and last_name.strip() else None
-        dni = dni.strip() if dni and dni.strip() else None
-        insurance_provider = insurance_provider.strip() if insurance_provider and insurance_provider.strip() else None
+        first_name = str(first_name).strip() if first_name and str(first_name).strip() else None
+        last_name = str(last_name).strip() if last_name and str(last_name).strip() else None
+        dni = str(dni).strip() if dni and str(dni).strip() else None
+        insurance_provider = str(insurance_provider).strip() if insurance_provider and str(insurance_provider).strip() else None
 
         t_data = await db.pool.fetchrow("""
             SELECT code, default_duration_minutes FROM treatment_types
@@ -625,12 +672,21 @@ async def book_appointment(date_time: str, treatment_reason: str,
         target_prof = None
 
         for cand in candidates:
-            wh = cand.get("working_hours") or {}
+            wh = cand.get("working_hours")
+            if isinstance(wh, str):
+                try:
+                    wh = json.loads(wh) if wh else {}
+                except Exception:
+                    wh = {}
+            if not isinstance(wh, dict):
+                wh = {}
             day_idx = apt_datetime.weekday()
             days_en = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
             day_config = wh.get(days_en[day_idx], {"enabled": False, "slots": []})
-            if not is_time_in_working_hours(apt_datetime.strftime("%H:%M"), day_config):
-                continue
+            # Solo exigir horario laboral si el profesional tiene ese día configurado; si no, considerarlo disponible (igual que check_availability)
+            if day_config.get("enabled") and day_config.get("slots"):
+                if not is_time_in_working_hours(apt_datetime.strftime("%H:%M"), day_config):
+                    continue
             if calendar_provider == "google" and cand.get("google_calendar_id"):
                 try:
                     g_events = gcal_service.get_events_for_day(calendar_id=cand["google_calendar_id"], date_obj=apt_datetime.date())
@@ -712,11 +768,15 @@ async def book_appointment(date_time: str, treatment_reason: str,
             await sio.emit("NEW_APPOINTMENT", safe_data)
         except: pass
 
-        return f"✅ ¡Turno confirmado con el/la Dr/a. {target_prof['first_name']}! Martes {apt_datetime.strftime('%d/%m')} a las {apt_datetime.strftime('%H:%M')} ({duration} min)."
+        dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+        dia_nombre = dias[apt_datetime.weekday()]
+        return f"✅ ¡Turno confirmado con el/la Dr/a. {target_prof['first_name']}! {dia_nombre} {apt_datetime.strftime('%d/%m')} a las {apt_datetime.strftime('%H:%M')} ({duration} min)."
 
     except Exception as e:
-        logger.error(f"Error en book_appointment: {e}")
-        return "⚠️ Tuve un problema al procesar la reserva. Por favor, intenta de nuevo indicando fecha y hora."
+        import traceback
+        logger.exception(f"Error en book_appointment: {e}")
+        logger.warning(f"book_appointment FAIL traceback={traceback.format_exc()}")
+        return "⚠️ Tuve un problema al procesar la reserva. Por favor, intenta de nuevo indicando fecha y hora (ej: miércoles 17:00)."
 
 @tool
 async def triage_urgency(symptoms: str):
@@ -1122,7 +1182,7 @@ IDENTIDAD Y TONO:
 
 POLÍTICAS DURAS:
 • NUNCA INVENTES: No inventes horarios ni disponibilidad. Siempre usá 'check_availability'. La disponibilidad se consulta en la agenda interna (local) o en Google Calendar por profesional según la configuración de la clínica; la tool ya aplica la lógica correcta.
-• DISPONIBILIDAD (OBLIGATORIO): Si el paciente pregunta por disponibilidad para un día (ej. "¿tenés turnos mañana?", "¿qué hay para el martes?", "¿libre el jueves a las 15?") DEBES llamar a 'check_availability' con date_query igual a ese día (mañana, martes, jueves, etc.) y opcionalmente treatment_name si ya dijo el tratamiento. Respondé ÚNICAMENTE con el resultado de la tool. No digas "no pude consultar" sin haber llamado a la tool.
+• DISPONIBILIDAD (OBLIGATORIO): Si el paciente pregunta por disponibilidad para un día, llamá a 'check_availability' UNA SOLA VEZ con: date_query = el día (mañana, martes, miércoles...), treatment_name si ya definieron tratamiento, y time_preference: si piden "a la tarde" o "por la tarde" -> time_preference='tarde'; si piden "a la mañana" o "por la mañana" -> time_preference='mañana'; si no especifican -> no pasar o 'todo'. Respondé UNA SOLA VEZ con exactamente lo que devuelva la tool (ya viene en rangos, ej. "de 9 a 12 y de 14 a 17"). No envíes varios mensajes ni variaciones; no digas "no hay" y después listes horarios.
 • PROFESIONALES Y TRATAMIENTOS (OBLIGATORIO): Si el paciente pregunta qué profesionales trabajan, quiénes atienden o con quién puede sacar turno, DEBES llamar a 'list_professionals' y responder ÚNICAMENTE con los nombres y especialidades que devuelva la tool. Si pregunta qué tratamientos tienen, qué servicios ofrecen o qué se puede agendar, DEBES llamar a 'list_services' y responder ÚNICAMENTE con la lista que devuelva la tool. NUNCA inventes nombres de profesionales (ej. Juan Pérez, María López) ni listas de tratamientos; solo los que devuelvan las tools.
 • HORARIOS SAGRADOS: Los horarios de los profesionales son sagrados. Si un profesional no atiende el día solicitado, informalo claramente al paciente y ofrecé alternativas (otro día con el mismo profesional u otros profesionales para ese día).
 • NO DIAGNOSTICAR: Ante dudas clínicas, decí que un profesional de la clínica tendrá que evaluar en consultorio para un diagnóstico certero.
@@ -1144,7 +1204,7 @@ FLUJO DE AGENDAMIENTO (ORDEN ESTRICTO):
 1. SALUDO E IDENTIDAD: En el primer mensaje de la conversación, presentate como asistente de {clinic_name}.
 2. DEFINIR SERVICIO: Asegurate de tener claro qué tratamiento busca (limpieza, consulta, urgencia, etc.). Si no lo dijo, preguntalo. Sin servicio definido no se puede consultar disponibilidad ni agendar.
 3. PROFESIONAL (antes o al consultar disponibilidad): Si preguntan qué profesionales hay, usá 'list_professionals' y respondé con esa lista. Para elegir profesional al agendar: podés preguntar "¿Tenés preferencia por algún profesional o buscamos el primer disponible?" Si tiene preferencia, usá 'check_availability' con professional_name (el nombre debe ser uno de los que devolvió list_professionals); si no, llamá 'check_availability' sin professional_name.
-4. CONSULTAR DISPONIBILIDAD: Llamá 'check_availability' con date_query (ej. miércoles, jueves, mañana), treatment_name (el servicio ya definido) y opcionalmente professional_name. Ofrecé 2 o 3 horarios claros. No inventes: solo los que devuelva la tool.
+4. CONSULTAR DISPONIBILIDAD: Llamá 'check_availability' UNA vez con date_query, treatment_name y (si pidieron tarde o mañana) time_preference='tarde' o 'mañana'. La tool devuelve rangos tipo "de 09:00 a 12:00 y de 14:00 a 17:00". Transmití eso al paciente en un solo mensaje; no repitas ni des otra versión (solo tarde o solo todo el día).
 5. GESTIÓN DE TURNOS DEL PACIENTE: Si preguntan "¿tengo turno?", "¿cuándo es mi próximo turno?", "¿qué turnos tengo?" usá 'list_my_appointments'. Para cancelar: 'cancel_appointment' con la fecha del turno. Para reprogramar: 'reschedule_appointment' con la fecha actual del turno y la nueva fecha/hora.
 6. DATOS DEL PACIENTE: Cuando el paciente elija día y hora, pedí: nombre completo, DNI, Obra Social o PARTICULAR. Para pacientes nuevos son obligatorios los 4 datos para poder agendar.
 7. AGENDAR: Solo cuando tengas: servicio (treatment_reason), fecha y hora elegidos, y los 4 datos (nombre, apellido, DNI, obra social), ejecutá 'book_appointment'. Podés pasar professional_name si ya quedó elegido; si no, el sistema asigna un profesional disponible. No llames 'book_appointment' sin haber consultado antes disponibilidad para esa fecha/hora.
@@ -1301,6 +1361,32 @@ async def chat_endpoint(req: ChatRequest):
     logger.info(f"📩 CHAT tenant_id={tenant_id} bot_number={bot_number!r} from={req.final_phone}")
 
     current_tenant_id.set(tenant_id)
+
+    # 0. DEDUP) Si el mensaje viene con provider_message_id (ej. WhatsApp/YCloud), procesar solo una vez
+    provider = (req.provider or "ycloud").strip() or "ycloud"
+    provider_message_id = (req.provider_message_id or req.event_id or "").strip()
+    if provider_message_id:
+        try:
+            payload_snapshot = {"from_number": req.final_phone, "to_number": getattr(req, "to_number", None), "text": req.final_message[:500] if req.final_message else None}
+            inserted = await db.try_insert_inbound(
+                provider=provider,
+                provider_message_id=provider_message_id,
+                event_id=(req.event_id or provider_message_id),
+                from_number=req.final_phone,
+                payload=payload_snapshot,
+                correlation_id=correlation_id,
+            )
+            if not inserted:
+                logger.warning(f"📩 CHAT duplicate ignored provider_message_id={provider_message_id!r} from={req.final_phone}")
+                return {
+                    "status": "duplicate",
+                    "send": False,
+                    "text": "",
+                    "output": "",
+                    "correlation_id": correlation_id,
+                }
+        except Exception as dedup_err:
+            logger.warning(f"📩 CHAT dedup check failed (processing anyway): {dedup_err}")
 
     # 0. A) Ensure patient reference exists
     try:

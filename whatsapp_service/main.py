@@ -360,26 +360,45 @@ async def ycloud_webhook(request: Request):
         from_n, to_n, name = msg.get("from"), msg.get("to"), msg.get("customerProfile", {}).get("name")
         msg_type = msg.get("type")
         
-        # A. Text Messages -> Buffer (Debounce)
+        # A. Text Messages -> Buffer (Debounce) y mismo flujo para transcripción de audio
         if msg_type == "text":
             text = msg.get("text", {}).get("body")
             if text:
                 buffer_key, timer_key, lock_key = f"buffer:{from_n}", f"timer:{from_n}", f"active_task:{from_n}"
-                # Store message as JSON to preserve IDs for the atomic loop
                 redis_client.rpush(buffer_key, json.dumps({
                     "text": text,
                     "wamid": msg.get("wamid") or event.get("id"),
                     "event_id": event.get("id")
                 }))
                 redis_client.setex(timer_key, DEBOUNCE_SECONDS, "1")
-                
                 if not redis_client.get(lock_key):
                     redis_client.setex(lock_key, 60, "1")
                     asyncio.create_task(process_user_buffer(from_n, to_n, name, event.get("id"), msg.get("wamid") or event.get("id")))
-                    return {"status": "buffering_started", "correlation_id": correlation_id}
-                return {"status": "buffering_updated", "correlation_id": correlation_id}
+                return {"status": "buffering_started", "correlation_id": correlation_id}
+            return {"status": "buffering_updated", "correlation_id": correlation_id}
+
+        # A.2 Audio -> Transcribir y usar el MISMO buffer que el texto (misma lógica, misma dedup)
+        if msg_type == "audio":
+            node = msg.get("audio", {})
+            if node.get("link"):
+                logger.info("audio_received_starting_transcription", correlation_id=correlation_id)
+                transcription = await transcribe_audio(node.get("link"), correlation_id)
+                if transcription and transcription.strip():
+                    buffer_key, timer_key, lock_key = f"buffer:{from_n}", f"timer:{from_n}", f"active_task:{from_n}"
+                    redis_client.rpush(buffer_key, json.dumps({
+                        "text": transcription.strip(),
+                        "wamid": msg.get("wamid") or event.get("id"),
+                        "event_id": event.get("id")
+                    }))
+                    redis_client.setex(timer_key, DEBOUNCE_SECONDS, "1")
+                    if not redis_client.get(lock_key):
+                        redis_client.setex(lock_key, 60, "1")
+                        asyncio.create_task(process_user_buffer(from_n, to_n, name, event.get("id"), msg.get("wamid") or event.get("id")))
+                    return {"status": "buffering_started", "correlation_id": correlation_id, "source": "audio"}
+                logger.warning("audio_transcription_empty_or_failed", correlation_id=correlation_id)
+            return {"status": "ignored_type_or_empty", "type": msg_type}
         
-        # B. Media Messages -> Immediate Forward (No Buffer)
+        # B. Media Messages (image, document) -> Immediate Forward (No Buffer)
         media_list = []
         text_content = None
         
@@ -404,21 +423,7 @@ async def ycloud_webhook(request: Request):
                 "provider_id": node.get("id")
             })
             
-        elif msg_type == "audio":
-            node = msg.get("audio", {})
-            media_list.append({
-                "type": "audio", 
-                "url": node.get("link"), 
-                "mime_type": node.get("mime_type"),
-                "provider_id": node.get("id")
-            })
-            # Transcription
-            if node.get("link"):
-                logger.info("audio_received_starting_transcription", correlation_id=correlation_id)
-                transcription = await transcribe_audio(node.get("link"), correlation_id)
-                if transcription:
-                     text_content = transcription
-                     
+        # audio ya se maneja arriba: transcribir -> buffer -> mismo flujo que texto
         if media_list:
              # Construct payload compatible with InboundChatEvent + Media extension
              payload = {
@@ -441,6 +446,9 @@ async def ycloud_webhook(request: Request):
                  raw_res = await forward_to_orchestrator(payload, headers)
                  
                  orch_res = OrchestratorResult(**raw_res)
+                 if orch_res.status == "duplicate":
+                     logger.info("media_duplicate_ignored", provider_message_id=payload.get("provider_message_id"))
+                     return {"status": "duplicate", "correlation_id": correlation_id}
                  if orch_res.send:
                      if not YCLOUD_API_KEY:
                          logger.error("missing_ycloud_api_key_media_reply")
