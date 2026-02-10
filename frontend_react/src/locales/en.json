@@ -136,7 +136,10 @@
     "completion": "Completion",
     "retention": "Retention",
     "revenue_est": "Est. revenue",
-    "tags": "Tags"
+    "tags": "Tags",
+    "from_date": "From",
+    "to_date": "To",
+    "professionals_filter": "Professionals"
   },
   "agenda": {
     "title": "Agenda",

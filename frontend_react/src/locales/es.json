@@ -136,7 +136,10 @@
     "completion": "Completitud",
     "retention": "Retención",
     "revenue_est": "Ingresos Est.",
-    "tags": "Etiquetas"
+    "tags": "Etiquetas",
+    "from_date": "Desde",
+    "to_date": "Hasta",
+    "professionals_filter": "Profesionales"
   },
   "agenda": {
     "title": "Agenda",

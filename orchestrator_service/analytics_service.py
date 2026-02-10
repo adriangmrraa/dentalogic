@@ -17,12 +17,13 @@ class AnalyticsService:
         Using REAL data from appointments, patients, and clinical records.
         """
         try:
-            # 1. Fetch basic professional info
+            # 1. Fetch basic professional info (solo profesionales dentales, no secretarias)
             professionals = await db.pool.fetch("""
-                SELECT id, first_name, last_name, specialty, google_calendar_id 
-                FROM professionals 
-                WHERE is_active = true
-            """)
+                SELECT p.id, p.first_name, p.last_name, p.specialty, p.google_calendar_id 
+                FROM professionals p
+                INNER JOIN users u ON p.user_id = u.id AND u.role = 'professional'
+                WHERE p.is_active = true AND p.tenant_id = $1
+            """, tenant_id)
 
             results = []
 

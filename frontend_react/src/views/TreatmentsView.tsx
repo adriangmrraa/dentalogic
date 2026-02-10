@@ -60,9 +60,11 @@ export default function TreatmentsView() {
     try {
       setLoading(true);
       const response = await api.get('/admin/treatment-types');
-      setTreatments(response.data);
+      const list = Array.isArray(response?.data) ? response.data : [];
+      setTreatments(list);
     } catch (error) {
       console.error('Error fetching treatments:', error);
+      setTreatments([]);
     } finally {
       setLoading(false);
     }
@@ -156,12 +158,12 @@ export default function TreatmentsView() {
     }));
   };
 
-  // Group treatments by category
-  const groupedTreatments = treatments.reduce((acc, treatment) => {
-    if (!acc[treatment.category]) {
-      acc[treatment.category] = [];
-    }
-    acc[treatment.category].push(treatment);
+  // Group treatments by category (guard against non-array or missing category)
+  const safeTreatments = Array.isArray(treatments) ? treatments : [];
+  const groupedTreatments = safeTreatments.reduce((acc, treatment) => {
+    const cat = treatment?.category ?? 'restorative';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(treatment);
     return acc;
   }, {} as Record<string, TreatmentType[]>);
 
