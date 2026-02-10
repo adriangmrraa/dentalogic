@@ -115,11 +115,14 @@ def parse_date(date_query: str) -> date:
     query = date_query.lower().strip()
     
     # Palabras clave españolas/inglesas
+    today = get_now_arg().date()
     day_map = {
         'mañana': lambda: (get_now_arg() + timedelta(days=1)).date(),
         'tomorrow': lambda: (get_now_arg() + timedelta(days=1)).date(),
-        'hoy': lambda: get_now_arg().date(),
-        'today': lambda: get_now_arg().date(),
+        'pasado mañana': lambda: (get_now_arg() + timedelta(days=2)).date(),
+        'day after tomorrow': lambda: (get_now_arg() + timedelta(days=2)).date(),
+        'hoy': lambda: today,
+        'today': lambda: today,
         'lunes': lambda: get_next_weekday(0),
         'monday': lambda: get_next_weekday(0),
         'martes': lambda: get_next_weekday(1),
@@ -138,6 +141,9 @@ def parse_date(date_query: str) -> date:
         'sunday': lambda: get_next_weekday(6),
     }
     
+    # Frases de dos palabras primero (ej. "pasado mañana")
+    if "pasado mañana" in query or "day after tomorrow" in query:
+        return (get_now_arg() + timedelta(days=2)).date()
     for key, func in day_map.items():
         if key in query:
             return func()
@@ -159,11 +165,22 @@ def parse_datetime(datetime_query: str) -> datetime:
     if time_match:
         target_time = (int(time_match.group(1)), int(time_match.group(2)))
     else:
-        # "17 hs", "a las 17", "17 horas" -> 17:00
+        # "17 hs", "a las 17", "17 horas", "5 pm", "10 am" -> 17:00, 17:00, 10:00
         hour_only = re.search(r'(?:las?\s+)?(\d{1,2})\s*(?:hs?|horas?)?\b', query)
         if hour_only:
             h = int(hour_only.group(1))
             if 0 <= h <= 23:
+                target_time = (h, 0)
+        # Formato 12h: "5 pm", "5pm", "10 am" (12 am = medianoche, 12 pm = mediodía)
+        pm_am = re.search(r'(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)', query, re.IGNORECASE)
+        if pm_am:
+            h = int(pm_am.group(1))
+            is_pm = 'p' in pm_am.group(2).lower()
+            if h == 12:
+                target_time = (0, 0) if not is_pm else (12, 0)
+            elif is_pm:
+                target_time = (h + 12, 0)
+            else:
                 target_time = (h, 0)
     
     # 2. Extraer fecha (usando la lógica de parse_date)
@@ -610,10 +627,19 @@ async def book_appointment(date_time: str, treatment_reason: str,
     tenant_id = current_tenant_id.get()
     try:
         apt_datetime = parse_datetime(date_time)
+        # No agendar en el pasado
+        if apt_datetime < get_now_arg():
+            return "❌ No se pueden agendar turnos para horarios que ya pasaron. Indicá un día y hora futuros. Formato esperado: date_time como 'día 17:00' (ej. miércoles 17:00)."
         first_name = str(first_name).strip() if first_name and str(first_name).strip() else None
         last_name = str(last_name).strip() if last_name and str(last_name).strip() else None
-        dni = str(dni).strip() if dni and str(dni).strip() else None
-        insurance_provider = str(insurance_provider).strip() if insurance_provider and str(insurance_provider).strip() else None
+        dni_raw = str(dni).strip() if dni and str(dni).strip() else None
+        dni = re.sub(r"\D", "", dni_raw) if dni_raw else None  # Solo dígitos (quitar puntos, espacios)
+        insurance_raw = str(insurance_provider).strip() if insurance_provider and str(insurance_provider).strip() else None
+        # Normalizar "particular" / "no tengo obra social" / "pago yo" etc.
+        if insurance_raw and re.search(r"particular|no tengo|pago yo|sin obra|privado", insurance_raw, re.IGNORECASE):
+            insurance_provider = "PARTICULAR"
+        else:
+            insurance_provider = insurance_raw
 
         t_data = await db.pool.fetchrow("""
             SELECT code, default_duration_minutes FROM treatment_types
@@ -640,7 +666,7 @@ async def book_appointment(date_time: str, treatment_reason: str,
             patient_id = existing_patient["id"]
         else:
             if not (first_name and last_name and dni and insurance_provider):
-                return "❌ Necesito Nombre, Apellido, DNI y Obra Social para agendar por primera vez."
+                return "❌ Necesito Nombre, Apellido, DNI (solo números) y Obra Social (o decir 'particular') para agendar por primera vez. Formato esperado: first_name y last_name por separado; dni solo dígitos; insurance_provider 'PARTICULAR' o nombre de obra social."
             row = await db.pool.fetchrow("""
                 INSERT INTO patients (tenant_id, phone_number, first_name, last_name, dni, insurance_provider, status, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW())
@@ -776,7 +802,7 @@ async def book_appointment(date_time: str, treatment_reason: str,
         import traceback
         logger.exception(f"Error en book_appointment: {e}")
         logger.warning(f"book_appointment FAIL traceback={traceback.format_exc()}")
-        return "⚠️ Tuve un problema al procesar la reserva. Por favor, intenta de nuevo indicando fecha y hora (ej: miércoles 17:00)."
+        return "⚠️ Tuve un problema al procesar la reserva. Por favor, intenta de nuevo indicando fecha y hora. Formato esperado: día de la semana + hora 24h (ej. miércoles 17:00, Wednesday 17:00)."
 
 @tool
 async def triage_urgency(symptoms: str):
@@ -1209,7 +1235,16 @@ FLUJO DE AGENDAMIENTO (ORDEN ESTRICTO):
 6. DATOS DEL PACIENTE: Cuando el paciente elija día y hora, pedí: nombre completo, DNI, Obra Social o PARTICULAR. Para pacientes nuevos son obligatorios los 4 datos para poder agendar.
 7. AGENDAR: Solo cuando tengas: servicio (treatment_reason), fecha y hora elegidos, y los 4 datos (nombre, apellido, DNI, obra social), ejecutá 'book_appointment'. Podés pasar professional_name si ya quedó elegido; si no, el sistema asigna un profesional disponible. No llames 'book_appointment' sin haber consultado antes disponibilidad para esa fecha/hora.
 
-REQUISITOS DE 'book_appointment': date_time (ej. "jueves 10:00"), treatment_reason (ej. limpieza), first_name, last_name, dni, insurance_provider. professional_name es opcional. Si faltan datos, la tool te lo indica; pedilos y volvé a intentar.
+FORMATO CANÓNICO AL LLAMAR TOOLS (español e inglés): Antes de llamar cualquier tool, traducí lo que dijo el usuario al formato que la tool espera. Para 'book_appointment' siempre enviá:
+• date_time: "día de la semana" + espacio + hora en 24h con :00 si no hay minutos. Ejemplos: miércoles 17:00, tomorrow 14:00, Wednesday 17:00. Si el usuario dice "5 pm" o "17 hs", convertí a 24h (17:00).
+• first_name y last_name: Por separado. Si solo da un nombre, usá first_name y pedí el apellido si la tool lo exige para pacientes nuevos.
+• dni: Solo dígitos, sin puntos ni espacios (ej. 40989310).
+• insurance_provider: Si no tiene obra social (particular, I pay myself, private, etc.) enviá exactamente PARTICULAR; si tiene, el nombre de la obra social tal cual (ej. OSDE, Swiss Medical).
+• treatment_reason: Nombre exacto como en la respuesta de list_services (ej. Limpieza Profunda, consulta).
+
+NUNCA DAR POR PERDIDA UNA RESERVA: Si una tool devuelve un mensaje que empiece con ❌ o ⚠️, interpretalo como error de formato o validación. Debés leer el mensaje, corregir el parámetro indicado según el formato canónico anterior y volver a llamar la misma tool. No digas al paciente "no pude procesar" sin haber reintentado al menos una vez. Solo si tras el reintento la tool sigue fallando, pedí al paciente que repita el dato concreto o ofrecé derivación.
+
+REQUISITOS DE 'book_appointment': date_time, treatment_reason, first_name, last_name, dni, insurance_provider (professional_name opcional). Si faltan datos, la tool te lo indica; pedilos y volvé a intentar.
 
 TRIAJE Y URGENCIAS: Ante dolor o accidentes, 'triage_urgency' primero. Si es emergency/high, contené al paciente y avisá que vas a dar prioridad.
 
