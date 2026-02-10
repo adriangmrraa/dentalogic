@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   MessageCircle, Send, Calendar, User, Activity,
   Pause, Play, AlertCircle, Clock, ChevronLeft,
@@ -74,6 +75,8 @@ interface Toast {
 
 export default function ChatsView() {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   // Clínicas (CEO puede tener varias; secretary/professional una)
   const [clinics, setClinics] = useState<ClinicOption[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<number | null>(null);
@@ -287,9 +290,9 @@ export default function ChatsView() {
   }, []);
 
   useEffect(() => {
-    if (selectedTenantId != null) fetchSessions(selectedTenantId);
+    if (selectedTenantId != null) fetchSessions(selectedTenantId, location.state?.selectPhone, navigate);
     else setSessions([]);
-  }, [selectedTenantId]);
+  }, [selectedTenantId, location.state?.selectPhone, navigate]);
 
   useEffect(() => {
     if (selectedSession) {
@@ -307,17 +310,17 @@ export default function ChatsView() {
   // FUNCIONES DE DATOS
   // ============================================
 
-  const fetchSessions = async (tenantId: number) => {
+  const fetchSessions = async (tenantId: number, selectPhone?: string, nav?: ReturnType<typeof useNavigate>) => {
     try {
       setLoading(true);
       const response = await api.get<ChatSession[]>('/admin/chat/sessions', { params: { tenant_id: tenantId } });
       setSessions(response.data);
-      const navState = (window as any).history.state as { selectPhone?: string } | null;
-      if (navState?.selectPhone) {
-        const targetSession = response.data.find((s: ChatSession) => s.phone_number === navState.selectPhone);
+      // Al abrir desde notificación de derivación, seleccionar ese chat (state viene de Layout al hacer clic en el toast)
+      if (selectPhone) {
+        const targetSession = response.data.find((s: ChatSession) => s.phone_number === selectPhone);
         if (targetSession) {
           setSelectedSession(targetSession);
-          window.history.replaceState({}, document.title);
+          nav?.('/chats', { replace: true, state: {} });
         }
       }
     } catch (error) {
