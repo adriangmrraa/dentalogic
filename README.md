@@ -29,6 +29,33 @@ Sistema de coordinación clínica inteligente, impulsado por IA (**LangChain + O
 
 ---
 
+## Flujo del agente de IA (datos que necesita)
+
+El asistente por WhatsApp sigue un **flujo de conversación definido** para consultas, disponibilidad y agendamiento. Estos son los datos que el agente necesita y el orden en que debe usarlos:
+
+1. **Saludo e identidad**  
+   En el primer mensaje de cada conversación, el agente se presenta y **menciona la clínica** para la cual trabaja (ej.: *"Hola, soy la asistente de [Nombre Clínica], es un gusto saludarte."*).
+
+2. **Definir siempre un servicio**  
+   Antes de consultar disponibilidad o agendar, debe quedar claro **qué tratamiento o tipo de consulta** necesita el paciente (limpieza, revisión, urgencia, etc.).  
+   - El agente puede **mencionar o sugerir** en base a la consulta; **no** debe listar todos los servicios.  
+   - Si en algún momento lista opciones, **máximo 3** y solo las más relevantes a lo que preguntó el usuario.
+
+3. **Duración del turno**  
+   Con el **servicio elegido**, se usa la **duración configurada** de ese servicio para consultar disponibilidad y para agendar (la herramienta `check_availability` y `book_appointment` usan el nombre del tratamiento y toman la duración desde la base de datos).
+
+4. **Disponibilidad (local o Google Calendar) y profesional**  
+   **Antes de agendar**, el agente debe **consultar disponibilidad real** (según cómo esté configurada la sede: agenda **local** o **Google Calendar**).  
+   - Para elegir profesional, el agente puede **preguntar** si el usuario tiene preferencia por algún profesional o si busca **cualquiera con disponibilidad**; según la respuesta, consulta con ese profesional o con el primer disponible.  
+   - La herramienta `check_availability` puede recibir opcionalmente el nombre del profesional; si no se pasa, devuelve huecos de cualquier profesional activo de la sede.
+
+5. **Agendar solo con todo definido**  
+   **Con el servicio, el profesional (si aplica), el día y el horario elegidos**, y los datos del paciente (nombre, apellido, DNI, obra social), el agente ejecuta `book_appointment`. El turno se registra en el **calendario local** o en **Google Calendar** según la configuración de la clínica (y, en Google, en el calendario del profesional correspondiente).
+
+Resumen: **consulta → saludo/clínica → definir servicio (máx. 3 si se listan) → (opcional) preferencia de profesional → check_availability con duración del servicio → ofrecer horarios → datos del paciente → book_appointment**.
+
+---
+
 ## Idiomas e internacionalización
 
 - **Interfaz (UI):** Tres idiomas soportados: **Español (es)**, **Inglés (en)** y **Francés (fr)**. La preferencia se configura en **Configuración** (solo CEO) y se persiste por sede (`tenants.config.ui_language`). Al cambiar el idioma, **toda la plataforma** actualiza al instante (Login, Dashboard, Agenda, Pacientes, Chats, Analíticas, Aprobaciones, Sedes, Tratamientos, Perfil, menús y componentes compartidos).
@@ -153,10 +180,29 @@ graph TD
 
 ## Estado actual del proyecto
 
-- **Backend:** Orchestrator (FastAPI) con agente LangChain, herramientas de agenda/triaje/derivación, mantenimiento self-healing de BD, API administrativa y configuración por tenant (incl. `ui_language`).
-- **Frontend:** React + Tailwind; todas las vistas principales y componentes compartidos utilizan el sistema de traducciones (`useTranslation()` + `t('clave')`); selector de idioma en Configuración con persistencia por sede.
-- **Integraciones:** WhatsApp (YCloud), OpenAI (GPT-4o-mini, Whisper), Google Calendar (opcional por sede), PostgreSQL, Redis.
-- **Documentación:** Arquitectura, variables de entorno, despliegue, lógica del agente, flujo lead-paciente, API Reference y especificaciones de features (incl. idioma plataforma y agente) en la carpeta `docs/`.
+- **Backend:** Orchestrator (FastAPI) con agente LangChain, herramientas de agenda/triaje/derivación, mantenimiento self-healing de BD, API administrativa y configuración por tenant (incl. `ui_language`). Calendario híbrido por sede (local o Google); resolución de tenant por número de bot (con fallback por dígitos); creación de pacientes con manejo de duplicados (409); creación de turnos manual con `appointment_datetime` y `appointment_type`.
+- **Frontend:** React + Tailwind; todas las vistas principales y componentes compartidos utilizan el sistema de traducciones (`useTranslation()` + `t('clave')`); selector de idioma en Configuración con persistencia por sede. Modal Nuevo Paciente con alta de turno en el mismo paso (payload correcto a `/admin/appointments`); modal Editar perfil del profesional con campo ID Calendario (Google); Tratamientos con icono Edit2 importado.
+- **Integraciones:** WhatsApp (YCloud), OpenAI (GPT-4o-mini, Whisper), Google Calendar (opcional por sede y por profesional con `google_calendar_id`), PostgreSQL, Redis.
+- **Documentación:** Arquitectura, variables de entorno, despliegue, lógica del agente, flujo lead-paciente, API Reference, especificaciones de features (incl. idioma plataforma, calendario híbrido) e informes de auditoría en la carpeta `docs/`.
+
+---
+
+## Documentación técnica (backend, frontend, base de datos, flujos)
+
+| Área | Documento | Contenido |
+| :--- | :--- | :--- |
+| **Arquitectura** | [01_architecture.md](docs/01_architecture.md) | Microservicios, Orchestrator, WhatsApp Service, layout y scroll, multi-tenant. |
+| **Variables de entorno** | [02_environment_variables.md](docs/02_environment_variables.md) | OPENAI, YCloud, PostgreSQL, Redis, GOOGLE_CREDENTIALS, CREDENTIALS_FERNET_KEY, etc. |
+| **Despliegue** | [03_deployment_guide.md](docs/03_deployment_guide.md) | EasyPanel, Service Accounts, configuración de producción. |
+| **Agente IA** | [04_agent_logic_and_persona.md](docs/04_agent_logic_and_persona.md) | Persona, reglas clínicas, tools, flujo de conversación y datos que necesita. |
+| **Desarrollo** | [05_developer_notes.md](docs/05_developer_notes.md) | Notas para desarrolladores. |
+| **Workflows** | [07_workflow_guide.md](docs/07_workflow_guide.md) | Ciclo de vida de tareas, Git, documentación, checklist pre-commit. |
+| **Lead → Paciente** | [13_lead_patient_workflow.md](docs/13_lead_patient_workflow.md) | Protocolo de conversión de contactos a pacientes. |
+| **Calendario híbrido** | [26_calendario_hibrido_clinica_profesional.spec.md](docs/26_calendario_hibrido_clinica_profesional.spec.md) | Spec: local vs Google por clínica, `google_calendar_id` por profesional, persistencia y tools. |
+| **Auditoría spec 26** | [audit_26_calendario_hibrido_2026-02-10.md](docs/audit_26_calendario_hibrido_2026-02-10.md) | Verificación código vs spec (calendario híbrido). |
+| **API** | [API_REFERENCE.md](docs/API_REFERENCE.md) | Endpoints administrativos: pacientes, profesionales, turnos, tratamientos, tenants. |
+| **Contexto para IA** | [CONTEXTO_AGENTE_IA.md](docs/CONTEXTO_AGENTE_IA.md) | Punto de entrada para que otra IA tenga contexto del stack, reglas y documentación. |
+| **Cambios recientes** | [cambios_recientes_2026-02-10.md](docs/cambios_recientes_2026-02-10.md) | Resumen de implementaciones y correcciones de la sesión 2026-02-10 (spec 26, disponibilidad, paciente+turno, docs). |
 
 ---
 

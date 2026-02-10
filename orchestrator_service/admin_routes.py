@@ -1817,11 +1817,14 @@ async def create_appointment_manual(
                         gcal_event['id'], new_id
                     )
         except Exception as ge:
-            print(f"Error syncing with GCal: {ge}")
+            logger.warning(f"GCal sync failed for appointment {new_id}: {ge}")
 
-        # 7. Emitir evento de Socket.IO para actualización en tiempo real
+        # 7. Emitir evento de Socket.IO para actualización en tiempo real (no fallar la respuesta si falla el emit)
         if appointment_data:
-            await emit_appointment_event("NEW_APPOINTMENT", dict(appointment_data), request)
+            try:
+                await emit_appointment_event("NEW_APPOINTMENT", dict(appointment_data), request)
+            except Exception as emit_err:
+                logger.warning(f"Socket emit failed for NEW_APPOINTMENT {new_id}: {emit_err}")
         
         return {"id": new_id, "status": "confirmed", "patient_id": pid, "source": "manual"}
         

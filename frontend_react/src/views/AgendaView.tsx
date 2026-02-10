@@ -237,9 +237,17 @@ export default function AgendaView() {
       const startDateStr = startDate.toISOString();
       const endDateStr = endDate.toISOString();
 
-      // If professional, force filter to their own ID
+      // Fetch professionals first to resolve filter (CEO: selectedProfessionalId; professional: only their id)
+      const [professionalsRes, patientsRes] = await Promise.all([
+        api.get('/admin/professionals'),
+        api.get('/admin/patients'),
+      ]);
+      const fetchedProfessionals = professionalsRes.data.filter((p: Professional) => p.is_active);
+      setProfessionals(fetchedProfessionals);
+      setPatients(patientsRes.data);
+
       const profFilter = user?.role === 'professional'
-        ? professionals.find((p: Professional) => p.email === user.email)?.id?.toString() || selectedProfessionalId
+        ? fetchedProfessionals.find((p: Professional) => p.email === user.email)?.id?.toString() || 'all'
         : selectedProfessionalId;
 
       const params: any = { start_date: startDateStr, end_date: endDateStr };
@@ -247,28 +255,15 @@ export default function AgendaView() {
         params.professional_id = profFilter;
       }
 
-      const [appointmentsRes, professionalsRes, patientsRes] = await Promise.all([
+      const [appointmentsRes, blocksRes] = await Promise.all([
         api.get('/admin/appointments', { params }),
-        api.get('/admin/professionals'),
-        api.get('/admin/patients'),
+        fetchGoogleBlocks(startDateStr, endDateStr, profFilter),
       ]);
-
-      const fetchedProfessionals = professionalsRes.data.filter((p: Professional) => p.is_active);
-      setProfessionals(fetchedProfessionals);
-
-      // Re-calculate professional filter with potentially updated professionals list
-      const finalProfFilter = user?.role === 'professional'
-        ? fetchedProfessionals.find((p: Professional) => p.email === user.email)?.id?.toString() || selectedProfessionalId
-        : selectedProfessionalId;
-
-      const blocksRes = await fetchGoogleBlocks(startDateStr, endDateStr, finalProfFilter);
 
       const newAppointments = appointmentsRes.data;
       setAppointments(newAppointments);
       eventsRef.current = newAppointments;
       setGoogleBlocks(blocksRes || []);
-      setProfessionals(professionalsRes.data.filter((p: Professional) => p.is_active));
-      setPatients(patientsRes.data);
 
       // Force calendar refetch if calendar instance exists
       if (calendarRef.current) {
@@ -306,7 +301,7 @@ export default function AgendaView() {
       if (!isBackground) setLoading(false);
       else setIsBackgroundSyncing(false);
     }
-  }, [fetchGoogleBlocks]);
+  }, [fetchGoogleBlocks, selectedProfessionalId, user?.role, user?.email]);
 
   // Setup WebSocket connection and listeners
   useEffect(() => {
@@ -399,7 +394,17 @@ export default function AgendaView() {
     return googleBlocks.filter((block: GoogleCalendarBlock) => block.professional_id?.toString() === selectedProfessionalId);
   }, [googleBlocks, selectedProfessionalId]);
 
-  // Refetch when professional filter changes
+  // Professional user: lock filter to their id once we have professionals
+  useEffect(() => {
+    if (user?.role === 'professional' && user?.email && professionals.length > 0) {
+      const myId = professionals.find((p: Professional) => p.email === user.email)?.id?.toString();
+      if (myId && selectedProfessionalId !== myId) {
+        setSelectedProfessionalId(myId);
+      }
+    }
+  }, [user?.role, user?.email, professionals]);
+
+  // Refetch when professional filter changes (CEO/secretary change dropdown)
   useEffect(() => {
     fetchData();
   }, [selectedProfessionalId]);
@@ -436,12 +441,17 @@ export default function AgendaView() {
     })),
   ];
 
-  // Map professionals to resources
-  const resources = professionals.map(p => ({
-    id: p.id.toString(),
-    title: `Dr. ${p.first_name} ${p.last_name || ''}`,
-    eventColor: '#3b82f6',
-  }));
+  // Map professionals to resources (professional user: only their column)
+  const resources = useMemo(() => {
+    const list = user?.role === 'professional' && user?.email
+      ? professionals.filter((p: Professional) => p.email === user.email)
+      : professionals;
+    return list.map((p: Professional) => ({
+      id: p.id.toString(),
+      title: `Dr. ${p.first_name} ${p.last_name || ''}`,
+      eventColor: '#3b82f6',
+    }));
+  }, [professionals, user?.role, user?.email]);
 
   const handleDateClick = (info: { date: Date }) => {
     // Prevenir agendamiento en fechas/horas pasadas

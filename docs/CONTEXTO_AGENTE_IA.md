@@ -2,7 +2,7 @@
 
 **Propósito:** Este documento permite que otra IA (en otra conversación) tome contexto completo del proyecto Dentalogic: qué es, cómo está construido, cómo trabajar en él y dónde está cada cosa. Úsalo como punto de entrada único antes de tocar código.
 
-**Última actualización:** 2026-02-08
+**Última actualización:** 2026-02-10
 
 ---
 
@@ -83,6 +83,8 @@ frontend_react/src/
 
 **Tools del agente (nombres exactos):** `check_availability`, `book_appointment`, `triage_urgency`, `derivhumano`, `cancel_appointment`, `reschedule_appointment`, `list_services`. Todos reciben/respetan `tenant_id`.
 
+**Flujo del agente (datos que necesita):** Saludo mencionando la clínica → definir **siempre un servicio** (máx. 3 si se listan) → usar duración del servicio para disponibilidad y agendar → **consultar disponibilidad** (local o Google según sede) y **elegir profesional** (preguntar preferencia o "cualquiera disponible") → con servicio, profesional (opcional), día/hora y datos del paciente, ejecutar `book_appointment`. Detalle en `README.md` (sección "Flujo del agente de IA") y `docs/04_agent_logic_and_persona.md` (sección 3.1).
+
 ---
 
 ## 7. Frontend – Rutas y vistas
@@ -134,7 +136,9 @@ Todas las vistas anteriores usan `useTranslation()` y `t()` para respetar el sel
 | **docs/01_architecture.md** | Diagrama, microservicios, base de datos, seguridad, flujo urgencia. |
 | **docs/02_environment_variables.md** | Variables de entorno por servicio. |
 | **docs/03_deployment_guide.md** | Despliegue (EasyPanel, etc.). |
-| **docs/04_agent_logic_and_persona.md** | Persona del agente, reglas de conversación. |
+| **docs/04_agent_logic_and_persona.md** | Persona del agente, reglas de conversación, flujo de datos (servicio, profesional, disponibilidad, agendar). |
+| **docs/26_calendario_hibrido_clinica_profesional.spec.md** | Calendario local vs Google por clínica, `google_calendar_id` por profesional. |
+| **docs/audit_26_calendario_hibrido_2026-02-10.md** | Auditoría spec 26 (match código vs spec). |
 | **docs/05_developer_notes.md** | Cómo añadir tools, paginación, debugging, Maintenance Robot, i18n, agenda móvil, analytics. |
 | **docs/07_workflow_guide.md** | Ciclo de tareas, Git, documentación, troubleshooting, comunicación entre servicios. |
 | **docs/25_idioma_plataforma_y_agente.spec.md** | Spec idioma UI + agente; sección 10 = i18n completado por vista. |

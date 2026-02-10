@@ -61,15 +61,16 @@ AgendaView / Odontograma
 **Función:** Procesamiento de lenguaje natural, clasificación de urgencias y gestión de agenda.
 
 **Tools Clínicas Integradas:**
-- `check_availability(date)`: Implementa lógica **Just-in-Time (JIT)** v2.
-  1. **Limpieza de Identidad:** Normaliza nombres de profesionales (elimina títulos como "Dr."/"Dra.").
-  2. **Mirroring en Vivo:** Consulta eventos a Google Calendar API en tiempo real.
-  3. **Deduping Inteligente:** Filtra eventos de GCal que ya son citas del sistema (`appointments`).
-  4. **Cálculo de Huecos:** Combina `appointments` locales + bloqueos externos de GCal.
+- `check_availability(date_query, [professional_name], [treatment_name], [time_preference])`: Implementa lógica **Just-in-Time (JIT)** y **cerebro híbrido** por sede.
+  1. **Cerebro híbrido:** Lee `tenants.config.calendar_provider` (`local` o `google`). Si es local, solo usa tabla `appointments` y horarios de profesionales; si es google, para cada profesional con `google_calendar_id` consulta eventos GCal y los persiste en `google_calendar_blocks`.
+  2. **Limpieza de Identidad:** Normaliza nombres de profesionales (elimina títulos como "Dr."/"Dra.").
+  3. **Duración por tratamiento:** Si se pasa `treatment_name`, usa `default_duration_minutes` del tratamiento para calcular huecos.
+  4. **Working hours:** Si el profesional no tiene horarios configurados para ese día, se considera disponible en horario clínica (evita "no hay huecos" cuando la semana está libre).
+  5. **Cálculo de Huecos:** Combina `appointments` + bloqueos GCal (si aplica) y genera slots donde al menos un profesional esté libre.
 - `book_appointment(...)`: 
-  - **Protocolo Service-First (2026-02-08)**: La IA indaga el servicio clínico antes de los datos del paciente para garantizar que la duración del turno sea correcta.
+  - **Protocolo Service-First**: La IA debe tener definido el servicio (tratamiento) antes de agendar; la duración se toma de `treatment_types.default_duration_minutes`.
   - Valida datos obligatorios para leads (DNI, Obra Social).
-  - Registra turno en PG + GCal.
+  - Registra turno en PG; si la sede usa Google y el profesional tiene `google_calendar_id`, crea evento en GCal.
   - Emite eventos WebSocket (`NEW_APPOINTMENT`) para actualizar UI.
 
 **Gestión de Datos:**

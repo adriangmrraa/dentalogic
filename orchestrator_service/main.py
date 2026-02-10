@@ -1159,9 +1159,10 @@ async def disconnect(sid):
 
 # Helper function to emit appointment events (can be imported by admin_routes)
 async def emit_appointment_event(event_type: str, data: Dict[str, Any]):
-    """Emit appointment-related events to all connected clients."""
-    await sio.emit(event_type, data)
-    logger.info(f"📡 Socket event emitted: {event_type} - {data}")
+    """Emit appointment-related events to all connected clients. Serializa a JSON-safe para evitar fallos por UUID/datetime."""
+    payload = to_json_safe(data) if data else data
+    await sio.emit(event_type, payload)
+    logger.info(f"📡 Socket event emitted: {event_type}")
 
 # Make the emit function available to other modules
 app.state.emit_appointment_event = emit_appointment_event
