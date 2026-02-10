@@ -340,6 +340,8 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         active_professionals = await db.pool.fetch(query, *params)
         if not active_professionals and professional_name:
             return f"❌ No encontré al profesional '{professional_name}'. ¿Querés consultar disponibilidad general?"
+        if not active_professionals:
+            return "❌ No hay profesionales activos en esta sede para consultar disponibilidad. Por favor contactá a la clínica."
 
         target_date = parse_date(date_query)
         
@@ -444,20 +446,22 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         busy_map = {pid: set() for pid in prof_ids}
         
         # --- Pre-llenar busy_map con horarios NO LABORALES del profesional ---
-        # Usamos el mismo day_name_en calculado arriba (basado en weekday())
+        # Si working_hours está vacío o el día no tiene slots, el profesional se considera disponible en horario clínica (no se marca nada como ocupado).
         for prof in active_professionals:
             wh = prof.get('working_hours') or {}
             day_config = wh.get(day_name_en, {"enabled": False, "slots": []})
-            
             prof_id = prof['id']
-            # Iterar cada bloque de 30 min del día y marcar como ocupado si NO está en working_hours
-            check_time = datetime.combine(target_date, datetime.min.time()).replace(hour=8, minute=0) # Desde las 8am
-            for _ in range(24): # Hasta las 20hs aprox (12 horas * 2 slots/hora)
-                h_m = check_time.strftime("%H:%M")
-                if not is_time_in_working_hours(h_m, day_config):
-                    busy_map[prof_id].add(h_m)
-                check_time += timedelta(minutes=30)
-                if check_time.hour >= 20: break
+            # Solo marcar como ocupados los horarios fuera de working_hours cuando el día tiene slots configurados
+            if day_config.get("enabled") and day_config.get("slots"):
+                check_time = datetime.combine(target_date, datetime.min.time()).replace(hour=8, minute=0)
+                for _ in range(24):
+                    h_m = check_time.strftime("%H:%M")
+                    if not is_time_in_working_hours(h_m, day_config):
+                        busy_map[prof_id].add(h_m)
+                    check_time += timedelta(minutes=30)
+                    if check_time.hour >= 20:
+                        break
+            # Si enabled=False o slots=[], no añadimos ocupación → profesional disponible en horario clínica
 
         # Agregar bloqueos de GCal
         global_busy = set()
