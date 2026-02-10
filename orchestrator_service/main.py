@@ -324,6 +324,8 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
     Devuelve: Horarios disponibles
     """
     try:
+        tid = current_tenant_id.get()
+        logger.info(f"📅 check_availability date_query={date_query!r} tenant_id={tid} treatment={treatment_name!r} prof={professional_name!r}")
         # 0. A) Limpiar nombre y obtener profesionales activos
         clean_name = professional_name
         if professional_name:
@@ -501,17 +503,19 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         
         if available_slots:
             slots_str = ", ".join(available_slots)
+            logger.info(f"📅 check_availability OK slots={len(available_slots)} for {date_query}")
             resp = f"Para {date_query} ({duration} min), tenemos disponibilidad: {slots_str}. "
             if professional_name:
                 resp += f"Consultando específicamente con Dr/a. {professional_name}."
             return resp
         else:
+            logger.info(f"📅 check_availability no slots for {date_query} (duration={duration} min)")
             return f"No encontré huecos libres de {duration} min para {date_query}. ¿Probamos otro día o momento?"
             
     except Exception as e:
         import traceback
-        logger.error(f"Error en check_availability (tenant_id={current_tenant_id.get()}): {e}")
-        logger.error(traceback.format_exc())
+        logger.exception(f"Error en check_availability (tenant_id={current_tenant_id.get()}): {e}")
+        logger.warning(f"check_availability FAIL date_query={date_query!r} error={e!r}")
         return f"No pude consultar la disponibilidad para {date_query}. ¿Probamos una fecha diferente?"
 
 @tool
@@ -1028,13 +1032,21 @@ POLÍTICAS DURAS:
   - Usá 'derivhumano' INMEDIATAMENTE si: (a) URGENCIA crítica detectada por 'triage_urgency', (b) El paciente está frustrado o enojado, (c) Pide hablar con una persona.
   - CRÍTICO: Si decidís derivar, **DEBES USAR LA TOOL**.
 
-PRESENTACIÓN DE SERVICIOS: No solo listes nombres. Explicá beneficios. Sé simple y claro.
+SERVICIOS (OBLIGATORIO DEFINIR UNO):
+• Siempre se debe definir UN servicio/tratamiento antes de consultar disponibilidad o agendar. No agendes nunca sin motivo (tratamiento).
+• Si el paciente pregunta por disponibilidad o turnos sin decir el servicio, preguntale qué tratamiento o tipo de consulta necesita (limpieza, revisión, dolor, etc.).
+• Al hablar de servicios: mencioná o sugerí en base a lo que pide; NO listes todos. Si en algún momento listás opciones, MÁXIMO 3 y solo las más relevantes a su consulta. Preferí mencionar uno y explicar brevemente antes que soltar una lista larga.
+• La duración del turno la define el servicio elegido: usá siempre 'check_availability' y 'book_appointment' con el nombre del tratamiento (ej. limpieza, consulta) para que el sistema use la duración correcta.
 
-FLUJO DE AGENDAMIENTO:
-1. Preguntar qué tratamiento busca antes de pedir datos personales. Usá 'check_availability' con la duración correcta del tratamiento.
-2. Ofrecé 3 opciones de horarios claros.
-3. Solo cuando tenga horario elegido, pedí: nombre completo, DNI, Obra Social o PARTICULAR.
-4. Solo con fecha, hora, motivo Y los 4 datos completos, ejecutá 'book_appointment'. Si la tool indica datos faltantes, pedilos exactamente como indica el mensaje.
+FLUJO DE AGENDAMIENTO (ORDEN ESTRICTO):
+1. SALUDO E IDENTIDAD: En el primer mensaje de la conversación, presentate como asistente de {clinic_name}.
+2. DEFINIR SERVICIO: Asegurate de tener claro qué tratamiento busca (limpieza, consulta, urgencia, etc.). Si no lo dijo, preguntalo. Sin servicio definido no se puede consultar disponibilidad ni agendar.
+3. PROFESIONAL (antes o al consultar disponibilidad): Podés preguntar "¿Tenés preferencia por algún profesional o buscamos el primer disponible?" Si tiene preferencia, usá 'check_availability' con professional_name; si no, llamá 'check_availability' sin professional_name (el sistema devuelve huecos de cualquier profesional disponible).
+4. CONSULTAR DISPONIBILIDAD: Llamá 'check_availability' con date_query (ej. miércoles, jueves), treatment_name (el servicio ya definido) y opcionalmente professional_name. Ofrecé 2 o 3 horarios claros. No inventes: solo los que devuelva la tool.
+5. DATOS DEL PACIENTE: Cuando el paciente elija día y hora, pedí: nombre completo, DNI, Obra Social o PARTICULAR. Para pacientes nuevos son obligatorios los 4 datos para poder agendar.
+6. AGENDAR: Solo cuando tengas: servicio (treatment_reason), fecha y hora elegidos, y los 4 datos (nombre, apellido, DNI, obra social), ejecutá 'book_appointment'. Podés pasar professional_name si ya quedó elegido; si no, el sistema asigna un profesional disponible. No llames 'book_appointment' sin haber consultado antes disponibilidad para esa fecha/hora.
+
+REQUISITOS DE 'book_appointment': date_time (ej. "jueves 10:00"), treatment_reason (ej. limpieza), first_name, last_name, dni, insurance_provider. professional_name es opcional. Si faltan datos, la tool te lo indica; pedilos y volvé a intentar.
 
 TRIAJE Y URGENCIAS: Ante dolor o accidentes, 'triage_urgency' primero. Si es emergency/high, contené al paciente y avisá que vas a dar prioridad.
 
@@ -1157,23 +1169,33 @@ app.state.emit_appointment_event = emit_appointment_event
 @app.post("/chat")
 async def chat_endpoint(req: ChatRequest):
     """Endpoint de chat que persiste historial en BD."""
-    current_customer_phone.set(req.final_phone)
     correlation_id = str(uuid.uuid4())
-    
+    # Log visible en cualquier nivel (WARNING) para diagnosticar si las peticiones llegan al orchestrator
+    logger.warning(f"📩 CHAT received from={getattr(req, 'from_number', None) or getattr(req, 'phone', None)} to={getattr(req, 'to_number', None)} msg_preview={(req.final_message or '')[:60]!r}")
+
+    current_customer_phone.set(req.final_phone)
     # 0. RESOLUCIÓN DINÁMICA DE TENANT (Soberanía Nexus v7.6)
     # Buscamos el tenant_id basándonos en el número al que escribieron (to_number)
     # Si no viene to_number (ej: pruebas manuales), usamos el BOT_PHONE_NUMBER de ENV como fallback
     bot_number = req.to_number or os.getenv("BOT_PHONE_NUMBER") or "5491100000000"
-    
+    # Normalizar: quitar todo lo que no sea dígito para comparar con BD (ej. 5493435256815 vs +5493435256815)
+    bot_number_clean = re.sub(r"\D", "", bot_number) if bot_number else ""
+
     tenant = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number = $1", bot_number)
+    if not tenant and bot_number_clean:
+        # Intentar match solo por dígitos (ej. 5493435256815 vs +5493435256815)
+        tenant = await db.pool.fetchrow(
+            "SELECT id FROM tenants WHERE REGEXP_REPLACE(bot_phone_number, '\\D', '', 'g') = $1",
+            bot_number_clean,
+        )
     if not tenant:
         # Si no existe la clínica por número, usamos la Clínica por defecto (ID 1) para evitar crash
-        # pero logueamos la anomalía
-        logger.warning(f"⚠️ Sede no encontrada para el número {bot_number}. Usando tenant_id=1 por defecto.")
+        logger.warning(f"⚠️ Sede no encontrada para el número {bot_number!r}. Usando tenant_id=1 por defecto.")
         tenant_id = 1
     else:
         tenant_id = tenant['id']
-    
+    logger.info(f"📩 CHAT tenant_id={tenant_id} bot_number={bot_number!r} from={req.final_phone}")
+
     current_tenant_id.set(tenant_id)
 
     # 0. A) Ensure patient reference exists
@@ -1311,7 +1333,7 @@ async def chat_endpoint(req: ChatRequest):
         }
         
     except Exception as e:
-        logger.error(f"❌ Error en chat para {req.final_phone}: {str(e)}")
+        logger.exception(f"❌ Error en chat para {req.final_phone}: {e}")
         await db.append_chat_message(
             from_number=req.final_phone,
             role='system',
