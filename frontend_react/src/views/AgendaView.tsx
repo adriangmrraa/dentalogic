@@ -517,9 +517,9 @@ export default function AgendaView() {
         {/* Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full lg:w-auto gap-4">
-            <div>
+            <div className="border-l-4 border-medical-500 pl-3 sm:pl-4 min-w-0">
               <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">{t('agenda.title')}</h1>
-              <p className="text-xs sm:text-sm text-slate-600">{t('agenda.subtitle')}</p>
+              <p className="text-xs sm:text-sm text-slate-600 mt-0.5">{t('agenda.subtitle')}</p>
             </div>
 
             {/* Professional Filter (CEO/Secretary only) - Mobile Stacking */}

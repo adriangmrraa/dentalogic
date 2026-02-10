@@ -3,6 +3,7 @@ import api from '../api/axios';
 import { User, Mail, Calendar, Save, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from '../context/LanguageContext';
+import PageHeader from '../components/PageHeader';
 
 interface UserProfile {
     id: string;
@@ -76,11 +77,12 @@ const ProfileView: React.FC = () => {
     }
 
     return (
-        <div className="max-w-4xl mx-auto animate-fadeIn">
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold text-gray-800">{t('profile.title')}</h1>
-                <p className="text-gray-500">{t('profile.subtitle')}</p>
-            </div>
+        <div className="max-w-4xl mx-auto animate-fadeIn p-4 lg:p-6">
+            <PageHeader
+                title={t('profile.title')}
+                subtitle={t('profile.subtitle')}
+                icon={<User size={22} />}
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {/* Left: Summary Card */}

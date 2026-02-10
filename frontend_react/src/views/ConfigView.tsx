@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Settings, Globe, Loader2, CheckCircle2 } from 'lucide-react';
 import api from '../api/axios';
 import { useTranslation } from '../context/LanguageContext';
+import PageHeader from '../components/PageHeader';
 
 type UiLanguage = 'es' | 'en' | 'fr';
 
@@ -72,15 +73,11 @@ export default function ConfigView() {
 
     return (
         <div className="p-6 max-w-2xl">
-            <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center text-gray-600">
-                    <Settings size={24} />
-                </div>
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">{t('config.title')}</h1>
-                    <p className="text-sm text-gray-500">{t('config.subtitle')}</p>
-                </div>
-            </div>
+            <PageHeader
+                title={t('config.title')}
+                subtitle={t('config.subtitle')}
+                icon={<Settings size={22} />}
+            />
 
             {settings && (
                 <div className="space-y-6">

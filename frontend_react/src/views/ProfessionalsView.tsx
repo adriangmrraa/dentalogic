@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import {
-  Plus, Edit, Clock, Calendar, Mail, Phone,
+  Plus, Edit, Clock, Calendar, Mail, Phone, User,
   ChevronDown, ChevronUp, CheckCircle, XCircle, Save, X, ClipboardList
 } from 'lucide-react';
 import api from '../api/axios';
 import { useTranslation } from '../context/LanguageContext';
+import PageHeader from '../components/PageHeader';
 
 interface Professional {
   id: number;
@@ -283,19 +284,20 @@ export default function ProfessionalsView() {
       <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6">
 
         {/* Header - Fixed internally with padding */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">{t('professionals.title')}</h1>
-            <p className="text-sm text-gray-500">{t('professionals.subtitle')}</p>
-          </div>
-          <button
-            onClick={openCreateModal}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-medical-600 hover:bg-medical-700 text-white px-6 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 text-sm font-semibold"
-          >
-            <Plus size={20} />
-            {t('professionals.new_professional')}
-          </button>
-        </div>
+        <PageHeader
+          title={t('professionals.title')}
+          subtitle={t('professionals.subtitle')}
+          icon={<User size={22} />}
+          action={
+            <button
+              onClick={openCreateModal}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-medical-600 hover:bg-medical-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-md active:scale-[0.98] text-sm font-semibold"
+            >
+              <Plus size={20} />
+              {t('professionals.new_professional')}
+            </button>
+          }
+        />
 
         {/* Stats Grid - Responsive behavior */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Building2, Plus, Edit, Trash2, Phone, Loader2, AlertCircle, CheckCircle2, Calendar } from 'lucide-react';
 import api from '../api/axios';
 import { useTranslation } from '../context/LanguageContext';
+import PageHeader from '../components/PageHeader';
 
 /** Clínica = Tenant en backend. Incluye config.calendar_provider: 'local' | 'google'. */
 export interface Clinica {
@@ -118,23 +119,20 @@ export default function ClinicsView() {
     }
 
     return (
-        <div className="p-6 max-w-7xl mx-auto space-y-6 min-h-0 overflow-y-auto">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-2xl font-bold text-medical-900 border-l-4 border-medical-500 pl-3">
-                        {t('clinics.title')}
-                    </h1>
-                    <p className="text-medical-600 text-sm mt-1">
-                        {t('clinics.subtitle')}
-                    </p>
-                </div>
-                <button
-                    onClick={() => handleOpenModal()}
-                    className="flex items-center gap-2 bg-medical-600 text-white px-4 py-2 rounded-lg hover:bg-medical-700 transition-all shadow-sm font-medium"
-                >
-                    <Plus size={20} /> {t('clinics.new_clinic')}
-                </button>
-            </div>
+        <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6 min-h-0 overflow-y-auto">
+            <PageHeader
+                title={t('clinics.title')}
+                subtitle={t('clinics.subtitle')}
+                icon={<Building2 size={22} />}
+                action={
+                    <button
+                        onClick={() => handleOpenModal()}
+                        className="flex items-center justify-center gap-2 bg-medical-600 text-white px-4 py-2.5 rounded-xl hover:bg-medical-700 transition-all shadow-md font-medium text-sm sm:text-base active:scale-[0.98]"
+                    >
+                        <Plus size={20} /> {t('clinics.new_clinic')}
+                    </button>
+                }
+            />
 
             {success && (
                 <div className="bg-green-50 text-green-700 p-3 rounded-lg flex items-center gap-2 border border-green-200 animate-fade-in">

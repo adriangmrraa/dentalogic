@@ -5,6 +5,7 @@ import { useTranslation } from '../context/LanguageContext';
 import { Zap, Crown, Award, TrendingUp, AlertTriangle } from 'lucide-react';
 import KPICard from '../components/analytics/KPICard';
 import AnalyticsFilters from '../components/analytics/AnalyticsFilters';
+import PageHeader from '../components/PageHeader';
 
 interface MetricData {
     id: number;
@@ -74,15 +75,13 @@ export default function ProfessionalAnalyticsView() {
 
     return (
         <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800">{t('analytics.strategic_title')}</h1>
-                    <p className="text-gray-500">{t('analytics.strategic_subtitle')}</p>
-                </div>
-                <div className="text-sm text-gray-400 italic">
-                    {t('analytics.realtime_data')}
-                </div>
-            </div>
+            <PageHeader
+                title={t('analytics.strategic_title')}
+                subtitle={t('analytics.strategic_subtitle')}
+                action={
+                    <span className="text-sm text-slate-500 italic">{t('analytics.realtime_data')}</span>
+                }
+            />
 
             <AnalyticsFilters onFilterChange={setFilters} />
 

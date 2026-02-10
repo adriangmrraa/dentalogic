@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Clock, AlertCircle, CheckCircle, Edit2, Save, X, Zap, Shield, Heart, Activity, Stethoscope } from 'lucide-react';
+import { Clock, AlertCircle, CheckCircle, Save, X, Zap, Shield, Heart, Activity, Stethoscope } from 'lucide-react';
 import api from '../api/axios';
 import { useTranslation } from '../context/LanguageContext';
+import PageHeader from '../components/PageHeader';
 
 interface TreatmentType {
   id: number;
@@ -168,20 +169,20 @@ export default function TreatmentsView() {
     <div className="flex flex-col h-full overflow-hidden bg-transparent">
       {/* Scrollable Container Wrapper */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4 lg:p-6 custom-scrollbar">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">{t('treatments.title')}</h1>
-            <p className="text-slate-500 font-medium">{t('treatments.subtitle')}</p>
-          </div>
-          <button
-            onClick={() => setIsCreating(true)}
-            className="px-5 py-2.5 bg-medical-600 text-white rounded-xl hover:bg-medical-700 transition-all flex items-center gap-2 shadow-lg shadow-medical-900/20 active:scale-95"
-          >
-            <Zap size={18} fill="currentColor" />
-            <span className="font-semibold text-sm">{t('treatments.new_service')}</span>
-          </button>
-        </div>
+        <PageHeader
+          title={t('treatments.title')}
+          subtitle={t('treatments.subtitle')}
+          icon={<Stethoscope size={22} />}
+          action={
+            <button
+              onClick={() => setIsCreating(true)}
+              className="px-4 sm:px-5 py-2.5 bg-medical-600 text-white rounded-xl hover:bg-medical-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-medical-900/20 active:scale-[0.98] font-semibold text-sm"
+            >
+              <Zap size={18} fill="currentColor" />
+              {t('treatments.new_service')}
+            </button>
+          }
+        />
 
         {/* Quick Reference */}
         <div className="mb-10 p-6 bg-white/40 backdrop-blur-xl border border-white/40 rounded-3xl shadow-soft">
@@ -220,135 +221,138 @@ export default function TreatmentsView() {
           </div>
         </div>
 
-        {/* Create Form Section */}
+        {/* Modal: Nuevo Servicio / Crear tratamiento (centrado en mobile y desktop) */}
         {isCreating && (
-          <div className="mb-10 bg-white/70 backdrop-blur-2xl p-8 rounded-[2rem] shadow-elevated border border-white/60 animate-in fade-in slide-in-from-top-6 duration-500">
-            <div className="flex justify-between items-center mb-8">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-medical-50 text-medical-600 rounded-2xl">
-                  <Stethoscope size={24} />
-                </div>
-                <h3 className="text-xl font-bold text-slate-800 tracking-tight">{t('treatments.create_new_treatment')}</h3>
-              </div>
-              <button
-                onClick={() => setIsCreating(false)}
-                className="p-2 bg-slate-100 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-xl transition-all"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 ml-1">{t('treatments.name')}</label>
-                <input
-                  type="text"
-                  value={newForm.name || ''}
-                  onChange={(e) => setNewForm({ ...newForm, name: e.target.value })}
-                  placeholder={t('treatments.placeholder_name')}
-                  className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-medical-500/10 focus:border-medical-500 outline-none transition-all placeholder:text-slate-300 font-medium"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 ml-1">{t('treatments.code_unique')}</label>
-                <input
-                  type="text"
-                  value={newForm.code || ''}
-                  onChange={(e) => setNewForm({ ...newForm, code: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-                  placeholder={t('treatments.placeholder_code')}
-                  className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-medical-500/10 focus:border-medical-500 outline-none transition-all placeholder:text-slate-300 font-mono text-sm"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 ml-1">{t('treatments.category')}</label>
-                <div className="relative">
-                  <select
-                    value={newForm.category || 'restorative'}
-                    onChange={(e) => setNewForm({ ...newForm, category: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-medical-500/10 focus:border-medical-500 outline-none transition-all appearance-none cursor-pointer font-medium text-slate-700"
-                  >
-                    <option value="prevention">{t('treatments.category_prevention')}</option>
-                    <option value="restorative">{t('treatments.category_restorative')}</option>
-                    <option value="surgical">{t('treatments.category_surgical')}</option>
-                    <option value="orthodontics">{t('treatments.category_orthodontics')}</option>
-                    <option value="emergency">{t('treatments.emergency')}</option>
-                  </select>
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                    <Activity size={18} />
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+            onClick={(e) => e.target === e.currentTarget && setIsCreating(false)}
+          >
+            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center gap-3 p-4 sm:p-6 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-2.5 sm:p-3 bg-medical-50 text-medical-600 rounded-xl shrink-0">
+                    <Stethoscope size={22} className="sm:w-6 sm:h-6" />
                   </div>
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-800 truncate">{t('treatments.create_new_treatment')}</h3>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCreating(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all shrink-0"
+                  aria-label={t('common.close')}
+                >
+                  <X size={22} />
+                </button>
               </div>
-            </div>
-
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 ml-1">{t('treatments.description')}</label>
-                <textarea
-                  value={newForm.description || ''}
-                  onChange={(e) => setNewForm({ ...newForm, description: e.target.value })}
-                  placeholder={t('treatments.placeholder_description')}
-                  className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-medical-500/10 focus:border-medical-500 outline-none transition-all placeholder:text-slate-300 resize-none font-medium h-[116px]"
-                ></textarea>
-              </div>
-              <div className="grid grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-bold text-slate-400 ml-1 uppercase tracking-widest">{t('treatments.duration_min')}</label>
-                  <div className="relative">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-slate-700">{t('treatments.name')}</label>
                     <input
-                      type="number"
-                      value={newForm.default_duration_minutes || ''}
-                      onChange={(e) => setNewForm({ ...newForm, default_duration_minutes: parseInt(e.target.value) })}
-                      className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-medical-500/10 focus:border-medical-500 outline-none transition-all font-bold text-slate-700"
+                      type="text"
+                      value={newForm.name || ''}
+                      onChange={(e) => setNewForm({ ...newForm, name: e.target.value })}
+                      placeholder={t('treatments.placeholder_name')}
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-medical-500/20 focus:border-medical-500 outline-none font-medium"
                     />
-                    <Clock size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-slate-700">{t('treatments.code_unique')}</label>
+                    <input
+                      type="text"
+                      value={newForm.code || ''}
+                      onChange={(e) => setNewForm({ ...newForm, code: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                      placeholder={t('treatments.placeholder_code')}
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-medical-500/20 focus:border-medical-500 outline-none font-mono text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-slate-700">{t('treatments.category')}</label>
+                    <div className="relative">
+                      <select
+                        value={newForm.category || 'restorative'}
+                        onChange={(e) => setNewForm({ ...newForm, category: e.target.value })}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-medical-500/20 focus:border-medical-500 outline-none appearance-none cursor-pointer font-medium text-slate-700"
+                      >
+                        <option value="prevention">{t('treatments.category_prevention')}</option>
+                        <option value="restorative">{t('treatments.category_restorative')}</option>
+                        <option value="surgical">{t('treatments.category_surgical')}</option>
+                        <option value="orthodontics">{t('treatments.category_orthodontics')}</option>
+                        <option value="emergency">{t('treatments.emergency')}</option>
+                      </select>
+                      <Activity size={18} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400" />
+                    </div>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-bold text-slate-400 ml-1 uppercase tracking-widest">{t('treatments.complexity')}</label>
-                  <select
-                    value={newForm.complexity_level || 'medium'}
-                    onChange={(e) => setNewForm({ ...newForm, complexity_level: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-medical-500/10 focus:border-medical-500 outline-none transition-all appearance-none cursor-pointer font-bold text-slate-700"
-                  >
-                    <option value="low">{t('treatments.low')}</option>
-                    <option value="medium">{t('treatments.medium')}</option>
-                    <option value="high">{t('treatments.high')}</option>
-                  </select>
-                </div>
-                <div className="flex items-center pt-8">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <div className="relative flex items-center">
+
+                <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                  <div className="space-y-2 sm:col-span-2">
+                    <label className="block text-sm font-semibold text-slate-700">{t('treatments.description')}</label>
+                    <textarea
+                      value={newForm.description || ''}
+                      onChange={(e) => setNewForm({ ...newForm, description: e.target.value })}
+                      placeholder={t('treatments.placeholder_description')}
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-medical-500/20 focus:border-medical-500 outline-none resize-none font-medium h-[100px]"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">{t('treatments.duration_min')}</label>
+                    <div className="relative">
                       <input
-                        type="checkbox"
-                        checked={newForm.requires_multiple_sessions || false}
-                        onChange={(e) => setNewForm({ ...newForm, requires_multiple_sessions: e.target.checked })}
-                        className="peer h-6 w-6 cursor-pointer appearance-none rounded-lg border border-slate-300 bg-white/50 transition-all checked:bg-medical-600 checked:border-medical-600 shadow-sm"
+                        type="number"
+                        value={newForm.default_duration_minutes || ''}
+                        onChange={(e) => setNewForm({ ...newForm, default_duration_minutes: parseInt(e.target.value) })}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-medical-500/20 focus:border-medical-500 outline-none font-bold text-slate-700"
                       />
-                      <CheckCircle className="absolute hidden h-4 w-4 text-white peer-checked:block left-1" />
+                      <Clock size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
                     </div>
-                    <span className="text-xs font-bold text-slate-500 group-hover:text-medical-600 transition-colors">{t('treatments.multiple_sessions')}</span>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">{t('treatments.complexity')}</label>
+                    <select
+                      value={newForm.complexity_level || 'medium'}
+                      onChange={(e) => setNewForm({ ...newForm, complexity_level: e.target.value })}
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-medical-500/20 focus:border-medical-500 outline-none appearance-none cursor-pointer font-bold text-slate-700"
+                    >
+                      <option value="low">{t('treatments.low')}</option>
+                      <option value="medium">{t('treatments.medium')}</option>
+                      <option value="high">{t('treatments.high')}</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex items-center gap-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newForm.requires_multiple_sessions || false}
+                      onChange={(e) => setNewForm({ ...newForm, requires_multiple_sessions: e.target.checked })}
+                      className="h-5 w-5 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
+                    />
+                    <span className="text-sm font-medium text-slate-600">{t('treatments.multiple_sessions')}</span>
                   </label>
                 </div>
               </div>
-            </div>
-
-            <div className="mt-10 flex justify-end gap-4">
-              <button
-                onClick={() => setIsCreating(false)}
-                className="px-6 py-3 text-slate-500 font-bold hover:bg-slate-100 rounded-2xl transition-all"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={saving}
-                className="px-10 py-3 bg-medical-600 text-white rounded-2xl font-bold shadow-lg shadow-medical-900/20 hover:bg-medical-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 flex items-center gap-2"
-              >
-                {saving ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : <Save size={20} />}
-                {saving ? t('common.saving') : t('treatments.create_treatment')}
-              </button>
+              <div className="flex justify-end gap-3 p-4 sm:p-6 border-t border-slate-100 shrink-0 bg-slate-50/80">
+                <button
+                  type="button"
+                  onClick={() => setIsCreating(false)}
+                  className="px-5 py-2.5 text-slate-600 font-semibold hover:bg-slate-200 rounded-xl transition-all"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  disabled={saving}
+                  className="px-6 sm:px-8 py-2.5 bg-medical-600 text-white rounded-xl font-bold shadow-lg shadow-medical-900/20 hover:bg-medical-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] flex items-center gap-2"
+                >
+                  {saving ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : <Save size={20} />}
+                  {saving ? t('common.saving') : t('treatments.create_treatment')}
+                </button>
+              </div>
             </div>
           </div>
         )}

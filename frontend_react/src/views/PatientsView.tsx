@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Edit, Trash2, X, FileText, Brain, Calendar, User, Clock, Stethoscope } from 'lucide-react';
 import api from '../api/axios';
 import { useTranslation } from '../context/LanguageContext';
+import PageHeader from '../components/PageHeader';
 
 interface Patient {
   id: number;
@@ -245,20 +246,20 @@ export default function PatientsView() {
 
   return (
     <div className="p-4 lg:p-6 h-full overflow-y-auto bg-gray-100">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">{t('patients.title')}</h1>
-          <p className="text-sm text-gray-500">{t('patients.subtitle')}</p>
-        </div>
-        <button
-          onClick={openCreateModal}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition-colors text-sm"
-        >
-          <Plus size={20} />
-          {t('patients.new_patient')}
-        </button>
-      </div>
+      <PageHeader
+        title={t('patients.title')}
+        subtitle={t('patients.subtitle')}
+        icon={<User size={22} />}
+        action={
+          <button
+            onClick={openCreateModal}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2.5 rounded-xl transition-colors text-sm font-medium shadow-md active:scale-[0.98]"
+          >
+            <Plus size={20} />
+            {t('patients.new_patient')}
+          </button>
+        }
+      />
 
       {/* Search */}
       <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-4">

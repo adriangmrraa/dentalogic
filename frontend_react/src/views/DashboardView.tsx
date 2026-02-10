@@ -21,6 +21,7 @@ import {
 } from 'recharts';
 import api, { BACKEND_URL } from '../api/axios';
 import { useTranslation } from '../context/LanguageContext';
+import PageHeader from '../components/PageHeader';
 
 // ============================================
 // INTERFACES & TYPES
@@ -140,31 +141,33 @@ export default function DashboardView() {
   return (
     <div className="h-screen flex flex-col bg-slate-50 overflow-hidden">
       {/* HEADER SECTION */}
-      <header className="p-6 shrink-0 bg-white/50 backdrop-blur-sm border-b border-slate-100 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">{t('dashboard.analytics_title')}</h1>
-          <p className="text-slate-500 text-sm">{t('dashboard.analytics_subtitle')}</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setTimeRange('weekly')}
-            className={`px-4 py-2 rounded-xl shadow-sm border text-sm font-medium transition-colors ${timeRange === 'weekly'
-                ? 'bg-slate-800 text-white border-slate-800'
-                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-              }`}
-          >
-            {t('dashboard.weekly')}
-          </button>
-          <button
-            onClick={() => setTimeRange('monthly')}
-            className={`px-4 py-2 rounded-xl shadow-sm border text-sm font-medium transition-colors ${timeRange === 'monthly'
-                ? 'bg-slate-800 text-white border-slate-800'
-                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-              }`}
-          >
-            {t('dashboard.monthly')}
-          </button>
-        </div>
+      <header className="p-4 sm:p-6 shrink-0 bg-white/50 backdrop-blur-sm border-b border-slate-100">
+        <PageHeader
+          title={t('dashboard.analytics_title')}
+          subtitle={t('dashboard.analytics_subtitle')}
+          action={
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTimeRange('weekly')}
+                className={`px-4 py-2 rounded-xl shadow-sm border text-sm font-medium transition-colors ${timeRange === 'weekly'
+                    ? 'bg-slate-800 text-white border-slate-800'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+              >
+                {t('dashboard.weekly')}
+              </button>
+              <button
+                onClick={() => setTimeRange('monthly')}
+                className={`px-4 py-2 rounded-xl shadow-sm border text-sm font-medium transition-colors ${timeRange === 'monthly'
+                    ? 'bg-slate-800 text-white border-slate-800'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+              >
+                {t('dashboard.monthly')}
+              </button>
+            </div>
+          }
+        />
       </header>
 
       {/* MAIN SCROLLABLE CONTENT WITH ISORATION */}
