@@ -157,4 +157,24 @@ Para que otra IA tome contexto completo del proyecto en una nueva conversación,
 
 ---
 
+## 23. Landing pública y flujo demo (2026-02)
+
+### 23.1 Rutas públicas
+- **`/demo`**: Landing (LandingView). No está envuelta en `ProtectedRoute` ni en `Layout`. Accesible sin login.
+- **`/login`**: LoginView. Público. Con query `?demo=1` se activa el modo demo (prellenado de credenciales y botón "Entrar a la demo").
+
+### 23.2 Flujo "Probar app"
+1. Usuario entra a `/demo` y hace clic en "Probar app".
+2. Navega a `/login?demo=1`.
+3. LoginView detecta `demo=1`, prellena email/contraseña con la cuenta demo y muestra solo el botón "Entrar a la demo".
+4. Al hacer clic, se envía `POST /auth/login` con esas credenciales; si el login es correcto, se redirige al dashboard (`/`).
+
+### 23.3 Credenciales y WhatsApp
+- Las credenciales demo y el número de WhatsApp para "Probar Agente IA" están definidos en el frontend: `LoginView.tsx` (DEMO_EMAIL, DEMO_PASSWORD) y `LandingView.tsx` (WHATSAPP_NUMBER, mensaje predefinido). Para cambiar el número o el mensaje de WhatsApp, editar `LandingView.tsx`.
+
+### 23.4 Especificación
+Ver **`docs/28_landing_demo_publica.spec.md`** para criterios de aceptación, archivos implicados y detalle de la landing (móvil, conversión, estética).
+
+---
+
 *Guía de Desarrolladores Dentalogic © 2026*

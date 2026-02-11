@@ -26,6 +26,7 @@ Sistema de coordinación clínica inteligente, impulsado por IA (**LangChain + O
 | **Tratamientos** | CRUD de servicios/tratamientos con precios, duraciones y categorías; configuración de complejidad y gaps entre sesiones. |
 | **Perfil** | Datos del usuario; configuración de Google Calendar para sincronizar agenda. |
 | **Configuración (CEO)** | **Selector de idioma de la plataforma** (Español / English / Français). El valor se guarda por sede y aplica a **toda** la interfaz: login, menús, formularios, agenda, analíticas, chats, etc. |
+| **Landing / Demo pública** | Página **pública** en `/demo` (sin login): información estratégica, credenciales de prueba y tres acciones: **Probar app** (login automático a cuenta demo), **Probar Agente IA** (WhatsApp con mensaje predefinido) e **Iniciar sesión**. Optimizada para móvil y conversión; única ruta accesible sin autenticación junto con `/login`. |
 
 ---
 
@@ -181,16 +182,25 @@ graph TD
 ✅ **Transcripción Whisper:** Soporte completo para síntomas enviados por audio.  
 ✅ **Lockout de 24h:** Silencio automático ante intervención humana.  
 ✅ **Multi-sede (multi-tenant):** Datos y configuración aislados por sede; ideal para grupos con varias clínicas.  
-✅ **Interfaz multiidioma (i18n):** Toda la plataforma en Español, Inglés o Francés; selector en Configuración; efecto inmediato en login, menús, agenda, analíticas, chats y resto de vistas.
+✅ **Interfaz multiidioma (i18n):** Toda la plataforma en Español, Inglés o Francés; selector en Configuración; efecto inmediato en login, menús, agenda, analíticas, chats y resto de vistas.  
+✅ **Landing y demo pública:** Página de entrada en `/demo` para leads y campañas: probar la app con login automático, probar el agente por WhatsApp o iniciar sesión; móvil-first y orientada a conversión.
+
+---
+
+## Cómo ayuda a clínicas y empresarios
+
+- **Una sola clínica:** Centralizá agenda, pacientes, WhatsApp con IA y reportes en una herramienta; menos planillas y llamados perdidos.
+- **Varias sedes (grupos o franquicias):** Cada sede tiene sus datos y calendario aislados; el CEO ve todas las sedes, aprobaciones de personal y analíticas desde un único panel. Ideal para dueños de 2 o más clínicas que quieren control sin mezclar información entre sedes.
+- **Captación de leads:** El agente por WhatsApp atiende consultas, ofrece turnos y deriva a humano cuando hace falta; la landing (`/demo`) permite que un lead pruebe la plataforma en un clic antes de comprometerse.
 
 ---
 
 ## Estado actual del proyecto
 
-- **Backend:** Orchestrator (FastAPI) con agente LangChain, herramientas de agenda/triaje/derivación, mantenimiento self-healing de BD, API administrativa y configuración por tenant (incl. `ui_language`). Calendario híbrido por sede (local o Google); resolución de tenant por número de bot (con fallback por dígitos); creación de pacientes con manejo de duplicados (409); creación de turnos manual con `appointment_datetime` y `appointment_type`.
-- **Frontend:** React + Tailwind; todas las vistas principales y componentes compartidos utilizan el sistema de traducciones (`useTranslation()` + `t('clave')`); selector de idioma en Configuración con persistencia por sede. Modal Nuevo Paciente con alta de turno en el mismo paso (payload correcto a `/admin/appointments`); modal Editar perfil del profesional con campo ID Calendario (Google); Tratamientos con icono Edit2 importado.
+- **Backend:** Orchestrator (FastAPI) con agente LangChain, herramientas de agenda/triaje/derivación, mantenimiento self-healing de BD, API administrativa y configuración por tenant (incl. `ui_language`). Calendario híbrido por sede (local o Google); resolución de tenant por número de bot (con fallback por dígitos); creación de pacientes con manejo de duplicados (409); creación de turnos manual con `appointment_datetime` y `appointment_type`. Formato canónico y reintento ante error en el agente (prompt: FORMATO CANÓNICO AL LLAMAR TOOLS, NUNCA DAR POR PERDIDA UNA RESERVA); mensajes de error de `book_appointment` con "Formato esperado" para guiar reintentos.
+- **Frontend:** React + Tailwind; todas las vistas principales y componentes compartidos utilizan el sistema de traducciones (`useTranslation()` + `t('clave')`); selector de idioma en Configuración con persistencia por sede. Modal Nuevo Paciente con alta de turno en el mismo paso; modal Editar perfil del profesional con campo ID Calendario (Google); Tratamientos con icono Edit2 importado. **Landing pública** en `/demo` (LandingView) con CTAs Probar app / Probar Agente IA / Iniciar sesión; **login con demo** en `/login?demo=1` (prellenado y botón "Entrar a la demo"). Clic en notificación de derivación humana abre la conversación derivada (ChatsView usa `location.state.selectPhone`). Página Staff (Aprobaciones) con aislamiento de scroll; contraste de etiquetas en formulario de registro mejorado.
 - **Integraciones:** WhatsApp (YCloud), OpenAI (GPT-4o-mini, Whisper), Google Calendar (opcional por sede y por profesional con `google_calendar_id`), PostgreSQL, Redis.
-- **Documentación:** Arquitectura, variables de entorno, despliegue, lógica del agente, flujo lead-paciente, API Reference, especificaciones de features (incl. idioma plataforma, calendario híbrido) e informes de auditoría en la carpeta `docs/`.
+- **Documentación:** Arquitectura, variables de entorno, despliegue, lógica del agente, flujo lead-paciente, API Reference, especificaciones de features (incl. idioma plataforma, calendario híbrido, scroll Staff, landing demo pública) e informes de auditoría en la carpeta `docs/`.
 
 ---
 
@@ -210,6 +220,8 @@ graph TD
 | **API** | [API_REFERENCE.md](docs/API_REFERENCE.md) | Endpoints administrativos: pacientes, profesionales, turnos, tratamientos, tenants. |
 | **Contexto para IA** | [CONTEXTO_AGENTE_IA.md](docs/CONTEXTO_AGENTE_IA.md) | Punto de entrada para que otra IA tenga contexto del stack, reglas y documentación. |
 | **Cambios recientes** | [cambios_recientes_2026-02-10.md](docs/cambios_recientes_2026-02-10.md) | Resumen de implementaciones y correcciones de la sesión 2026-02-10 (spec 26, disponibilidad, paciente+turno, docs). |
+| **Landing / Demo pública** | [28_landing_demo_publica.spec.md](docs/28_landing_demo_publica.spec.md) | Spec: página pública `/demo`, login demo `/login?demo=1`, Probar app / Probar Agente IA / Iniciar sesión; móvil y conversión. |
+| **Scroll Staff** | [27_staff_scroll_aislamiento.spec.md](docs/27_staff_scroll_aislamiento.spec.md) | Aislamiento de scroll en página Staff (Aprobaciones) para listas largas en desktop y móvil. |
 
 ---
 
