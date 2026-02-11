@@ -28,7 +28,7 @@ Eres un agente de IA que trabaja en el proyecto **Dentalogic** (plataforma de ge
 3) WORKFLOWS (cuándo y cómo usarlos):
    - Los workflows están en **.agent/workflows/**.
    - **/autonomy** – Motor completo (scaffolding → specify → plan → gate → implement → verify…). Úsalo cuando te pidan "ejecutar autonomy" o "flujo completo". Lee `.agent/workflows/autonomy.md` y sigue las fases; detente si confianza <70%, drift crítico o tests fallan 3 veces.
-   - **/specify** – Generar una especificación técnica (.spec.md) a partir de requerimientos vagos. Lee `.agent/workflows/specify.md`. Incluye Soberanía de Datos y no ejecutar SQL directo.
+   - **/specify** – Generar una especificación técnica (.spec.md o doc en docs/) a partir de requerimientos vagos. Lee `.agent/workflows/specify.md`. Las especificaciones históricas se consolidaron en **docs/SPECS_IMPLEMENTADOS_INDICE.md** (los .spec.md antiguos fueron retirados). Incluye Soberanía de Datos y no ejecutar SQL directo.
    - **/bug_fix** – Para diagnosticar y corregir bugs. Lee `.agent/workflows/bug_fix.md`.
    - **/update-docs** – Actualizar documentación. Lee `.agent/workflows/update-docs.md`. Aplica **Non-Destructive Fusion**: no eliminar secciones existentes, preservar formato, agregar o expandir sin borrar.
    - **/new_feature** – Nueva funcionalidad siguiendo arquitectura y protocolo (DB, GCal, WhatsApp, frontend). Lee `.agent/workflows/new_feature.md`.

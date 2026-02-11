@@ -173,7 +173,7 @@ Para que otra IA tome contexto completo del proyecto en una nueva conversación,
 - Las credenciales demo y el número de WhatsApp para "Probar Agente IA" están definidos en el frontend: `LoginView.tsx` (DEMO_EMAIL, DEMO_PASSWORD) y `LandingView.tsx` (WHATSAPP_NUMBER, mensaje predefinido). Para cambiar el número o el mensaje de WhatsApp, editar `LandingView.tsx`.
 
 ### 23.4 Especificación
-Ver **`docs/28_landing_demo_publica.spec.md`** para criterios de aceptación, archivos implicados y detalle de la landing (móvil, conversión, estética).
+Ver **README** (sección Landing / Demo pública) y **`docs/SPECS_IMPLEMENTADOS_INDICE.md`** para trazabilidad; detalle de la landing (móvil, conversión, estética) en código (LandingView, LoginView demo).
 
 ---
 

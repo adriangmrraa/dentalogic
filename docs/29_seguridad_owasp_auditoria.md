@@ -14,7 +14,7 @@ Esta sección explica con palabras sencillas cómo el backend protege las distin
 
 - **Público (cualquiera, sin estar logueado):**  
   - **Registro** (`POST /auth/register`): crear cuenta; el usuario queda en estado "pendiente" hasta que un CEO lo apruebe.  
-  - **Login** (`POST /auth/login`): enviar email y contraseña; si son correctos, el backend devuelve un **token JWT** y los datos del usuario. Ese token es la “llave” para todo lo demás.  
+  - **Login** (`POST /auth/login`): enviar email y contraseña; si son correctos, el backend devuelve un **token JWT** y los datos del usuario. Ese token es la "llave" para todo lo demás.  
   - **Lista de clínicas** (`GET /auth/clinics`): solo devuelve id y nombre de sedes, para el selector del formulario de registro. No expone datos sensibles.  
 
 - **Todo lo que hace la plataforma (agenda, pacientes, chats, sedes, configuración, etc.)** está bajo rutas que empiezan por `/admin/...`. Esas rutas **no son públicas**: el backend exige que cada petición traiga dos cosas: **identidad** (quién eres) y **autorización de infraestructura** (que la petición viene de la app legítima).
@@ -32,25 +32,25 @@ Para **cualquier** ruta bajo `/admin/...`, el backend no se fía solo del JWT. U
 1. **Header `X-Admin-Token`:** debe coincidir con un valor secreto que está solo en el servidor (y en la app que hace las peticiones). Así se evita que alguien con un JWT robado pueda llamar a la API desde otro sitio (por ejemplo un script suelto) si no conoce ese segundo secreto.  
 2. **JWT:** se valida que el token sea correcto, no esté caducado y que el **rol** del usuario sea uno de los permitidos (CEO, secretaria o profesional). Si el rol no está en esa lista, se responde 403 (sin permisos).
 
-Solo si **ambas** comprobaciones pasan, la petición sigue. Por eso se habla de “triple capa” o doble factor en administración: identidad (JWT) + autorización de infraestructura (X-Admin-Token) + rol válido.
+Solo si **ambas** comprobaciones pasan, la petición sigue. Por eso se habla de "triple capa" o doble factor en administración: identidad (JWT) + autorización de infraestructura (X-Admin-Token) + rol válido.
 
-### Cómo sabe el backend “en qué clínica” estás
+### Cómo sabe el backend "en qué clínica" estás
 
-Muchas acciones dependen de la **sede** (clínica): ver pacientes, ver chats, ver agenda, etc. El backend no usa un “tenant_id” que venga del frontend sin más, porque podría ser manipulado. En su lugar:
+Muchas acciones dependen de la **sede** (clínica): ver pacientes, ver chats, ver agenda, etc. El backend no usa un "tenant_id" que venga del frontend sin más, porque podría ser manipulado. En su lugar:
 
-- Para un **profesional**, consulta en base de datos a qué `tenant_id` está vinculado (tabla `professionals`). Ese es su “tenant resuelto”: solo puede ver datos de esa sede.  
+- Para un **profesional**, consulta en base de datos a qué `tenant_id` está vinculado (tabla `professionals`). Ese es su "tenant resuelto": solo puede ver datos de esa sede.  
 - Para una **secretaria**, igual: se resuelve su sede desde `professionals`.  
-- Para el **CEO**, puede ver todas las sedes; la lista de “tenant_ids permitidos” son todos los que existen. En endpoints que piden “una” sede (por ejemplo dashboard o configuración), se usa un tenant por defecto (por ejemplo la primera clínica) si no se elige otra.
+- Para el **CEO**, puede ver todas las sedes; la lista de "tenant_ids permitidos" son todos los que existen. En endpoints que piden "una" sede (por ejemplo dashboard o configuración), se usa un tenant por defecto (por ejemplo la primera clínica) si no se elige otra.
 
 Esa resolución se hace con funciones como `get_resolved_tenant_id` y `get_allowed_tenant_ids`: siempre basadas en el usuario que sacamos del JWT y en la base de datos, nunca en un número que envíe el cliente sin validar.
 
 ### Cómo se protegen los datos de cada clínica (multi-tenant)
 
-En todas las consultas que tocan pacientes, turnos, chats, profesionales, etc., el backend **filtra por `tenant_id`**. Es la “regla de soberanía”: una clínica no puede ver ni modificar datos de otra. Por tanto, en cada acción:
+En todas las consultas que tocan pacientes, turnos, chats, profesionales, etc., el backend **filtra por `tenant_id`**. Es la "regla de soberanía": una clínica no puede ver ni modificar datos de otra. Por tanto, en cada acción:
 
 - Se sabe **quién** eres (JWT).  
 - Se sabe **qué sedes** te están permitidas (resolución por rol y por tabla `professionals`).  
-- Todas las lecturas y escrituras usan ese `tenant_id` (o lista de tenant_ids para CEO) en la cláusula WHERE, de forma que solo ves y modificas datos de “tu” clínica o de las que te corresponden.
+- Todas las lecturas y escrituras usan ese `tenant_id` (o lista de tenant_ids para CEO) en la cláusula WHERE, de forma que solo ves y modificas datos de "tu" clínica o de las que te corresponden.
 
 Algunas rutas además comprueban explícitamente el **rol**: por ejemplo, crear o borrar sedes, ver analíticas globales o cambiar configuración de idioma solo lo puede hacer un CEO. Si un profesional o secretaria intenta acceder, el backend responde 403.
 
@@ -64,13 +64,13 @@ En conjunto: la seguridad se gestiona **por capas** (identidad, infraestructura,
 
 ---
 
-## JWT “expuesto” y por qué no basta para hacerse pasar por el usuario
+## JWT "expuesto" y por qué no basta para hacerse pasar por el usuario
 
 ### Qué observó Facu
 
 El **JWT** (el token que devuelve el login) es visible en el cliente: se envía en cada petición en el header `Authorization: Bearer <token>`. Cualquiera con acceso al navegador (pestaña de red, almacenamiento donde se guarde el token, etc.) puede **copiar ese token**. Si solo eso bastara para llamar a la API, quien lo copie podría hacerse pasar por ese usuario (en el ejemplo, el CEO).
 
-Eso es cierto: **el JWT está “expuesto” en el sentido de que el cliente lo tiene y se puede extraer**. Es inherente a cómo funcionan los JWTs en aplicaciones web.
+Eso es cierto: **el JWT está "expuesto" en el sentido de que el cliente lo tiene y se puede extraer**. Es inherente a cómo funcionan los JWTs en aplicaciones web.
 
 ### Qué hace el backend para que el JWT solo no alcance
 
@@ -90,7 +90,7 @@ En resumen: **tener el JWT no basta para suplantar al usuario en la API admin**;
 ### Recomendaciones adicionales (endurecimiento)
 
 - **Vida corta del JWT:** Mantener una expiración razonable (por ejemplo 24 h o menos); si se implementa refresh token, acortar aún más la vida del access token.
-- **No registrar JWTs:** En logs del orchestrator no imprimir el valor del token; solo, si acaso, “token presente” / “token inválido”.
+- **No registrar JWTs:** En logs del orchestrator no imprimir el valor del token; solo, si acaso, "token presente" / "token inválido".
 - **Almacenamiento del JWT en el frontend:** Si el token se guarda en `localStorage`, un script malicioso (XSS) podría leerlo. Valorar en el futuro guardar el token en una **cookie httpOnly** (enviada solo al mismo origen y no accesible desde JavaScript) y que el backend la lea; eso exige cambios en el flujo de login y en CORS.
 - **CSP y buenas prácticas frontend:** Reducir superficie de XSS para que sea más difícil robar el JWT o el contexto de la sesión.
 
@@ -180,21 +180,21 @@ Con esto queda documentado: el JWT está expuesto en el cliente por diseño, per
 
 **Objetivo:** Reducir la superficie de extracción de datos sensibles desde el DOM en páginas accesibles sin login (p. ej. scripts o extensiones que lean el DOM).
 
-**Regla:** En contexto “demo” o en páginas públicas, no mostrar en texto plano en la interfaz:
+**Regla:** En contexto "demo" o en páginas públicas, no mostrar en texto plano en la interfaz:
 - Emails de cuentas demo.
 - Contraseñas (ni demo ni reales).
 - Opcionalmente, números de teléfono de demo (según política; el enlace de WhatsApp puede seguir funcionando con el número real en la URL, pero el texto visible puede ser genérico).
 
 **Implementación actual:**
 
-1. **Landing (`/demo`):** En el bloque colapsable “Credenciales de prueba” se muestra:
+1. **Landing (`/demo`):** En el bloque colapsable "Credenciales de prueba" se muestra:
    - `Email: [REDACTED]`
    - `Contraseña: [REDACTED]`
-   Las credenciales reales siguen en constantes en el frontend (LoginView) para el flujo “Probar app” → `/login?demo=1` → “Entrar a la demo”; no se renderizan en el DOM de la landing, por lo que no son extraíbles desde esa página mediante lectura del DOM.
-2. **Login con `?demo=1`:** No se muestran los campos de email/contraseña; solo el botón “Entrar a la demo”. Los valores se envían por API desde estado de React; no aparecen como texto en la interfaz.
+   Las credenciales reales siguen en constantes en el frontend (LoginView) para el flujo "Probar app" → `/login?demo=1` → "Entrar a la demo"; no se renderizan en el DOM de la landing, por lo que no son extraíbles desde esa página mediante lectura del DOM.
+2. **Login con `?demo=1`:** No se muestran los campos de email/contraseña; solo el botón "Entrar a la demo". Los valores se envían por API desde estado de React; no aparecen como texto en la interfaz.
 3. **Notificaciones (Layout):** El toast de derivación muestra el número de teléfono del lead. En un entorno exclusivamente demo se podría extender la redacción a este componente (p. ej. mostrar `[REDACTED]` cuando el número coincida con un demo conocido); no implementado en esta fase.
 
-**Límite:** Los datos siguen accesibles vía API con sesión válida; la medida solo evita que estén “regalados” en el HTML/DOM de la landing y del flujo demo, aumentando el esfuerzo para un atacante que solo pueda leer la interfaz.
+**Límite:** Los datos siguen accesibles vía API con sesión válida; la medida solo evita que estén "regalados" en el HTML/DOM de la landing y del flujo demo, aumentando el esfuerzo para un atacante que solo pueda leer la interfaz.
 
 ---
 

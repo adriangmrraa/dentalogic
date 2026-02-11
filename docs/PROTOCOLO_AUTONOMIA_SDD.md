@@ -10,7 +10,7 @@ Para garantizar que cada línea de código responda a una necesidad de negocio v
 
 - **Trigger**: Toda nueva propuesta o feature debe iniciar con el comando `/advisor`.
 - **El Salto**: La salida del `/advisor` (que analiza Ciencia, Mercado y Comunidad) debe alimentar **directamente** el proceso de `/specify`.
-- **Regla**: No se permite iniciar un `/plan` sin una especificación (.spec.md) que herede las protecciones y validaciones del Advisor. Si el Advisor detecta un riesgo alto, el agente tiene prohibido generar la especificación hasta que el usuario resuelva el bloqueo.
+- **Regla**: No se permite iniciar un `/plan` sin una especificación (documento en docs/ o .spec.md) que herede las protecciones y validaciones del Advisor. Para features ya implementados, la trazabilidad está en **docs/SPECS_IMPLEMENTADOS_INDICE.md**. Si el Advisor detecta un riesgo alto, el agente tiene prohibido generar la especificación hasta que el usuario resuelva el bloqueo.
 
 ---
 
@@ -19,7 +19,7 @@ El agente tiene autonomía delegada, pero debe ejecutar paradas técnicas obliga
 
 #### 2.1 Detención para `/audit` (Drift Detection)
 El agente debe detenerse y ejecutar un `/audit` cuando:
-- Se detecten más de 3 inconsistencias entre la lógica de un archivo `.spec.md` y la implementación actual en el backend.
+- Se detecten más de 3 inconsistencias entre la documentación de referencia (docs/, AGENTS.md, SPECS_IMPLEMENTADOS_INDICE) y la implementación actual en el backend.
 - Se detecten cambios en los nombres de las Tools (`check_availability`, etc.) que no fueron reflejados en la documentación maestra.
 
 #### 2.2 Detención para `/review` (Security Gate)

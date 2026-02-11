@@ -1,8 +1,10 @@
 # Auditoría de estado del proyecto – Dentalogic / Nexus
 
-**Fecha:** 2026-02-08  
+**Fecha:** 2026-02-08 (actualizado 2026-02-09)  
 **Workflow:** Audit (detección de drift y estado global)  
 **Alcance:** Backend, Frontend, Base de datos, Lógica, Especificaciones vs código.
+
+> **Nota (2026-02-09):** Los archivos `.spec.md` listados en la tabla "Specs vs código" fueron consolidados; la trazabilidad y el estado de cada feature están en **[docs/SPECS_IMPLEMENTADOS_INDICE.md](SPECS_IMPLEMENTADOS_INDICE.md)**. La seguridad OWASP quedó en **docs/29_seguridad_owasp_auditoria.md**.
 
 ---
 
@@ -271,20 +273,22 @@
 
 ## 6. Specs vs código (drift)
 
-| Spec | Ubicación | Estado | Drift / Notas |
-|------|-----------|--------|----------------|
-| Sovereign Glass (Agenda 2.0) | docs/16_sovereign_glass_architecture.spec.md | Parcial | Scroll isolation y glassmorphism aplicados en parte; revisar que todo contenedor flex-1 tenga min-h-0 y que no haya scroll global. |
-| CEO Professionals Analytics | docs/15_ceo_professionals_analytics.spec.md | Implementado | ProfessionalAnalyticsView + `/admin/analytics/professionals/summary`. Spec marcada como superseded por arquitectura actual. |
-| Agenda Inteligente 2.0 | docs/15_agenda_inteligente_2_0.spec.md | Implementado | Agenda con recursos, bloques GCal, Socket.IO. |
-| Google Calendar sync fix | docs/14_google_calendar_sync_fix.spec.md | En uso | gcal_service y sync en admin. |
-| Mobile scroll fix | docs/18_mobile_scroll_fix.spec.md | Parcial | MobileAgenda y patrones de scroll; auditar todas las vistas móviles. |
-| Mobile agenda range fix | docs/17_mobile_agenda_range_fix.spec.md | Parcial | Rango de fechas en agenda móvil. |
-| Treatments optimization | docs/19_treatments_optimization.spec.md | Implementado | treatment_types CRUD y duración por urgencia. |
-| Professionals CEO control / Personal Activo | docs/22_professionals_ceo_control_vision.spec.md | Implementado | Personal Activo como fuente de verdad; modal detalle, Vincular a sede, tuerca → Editar Perfil; GET by-user; CEO ve profesionales de todas sus sedes. |
-| Registro con sede y datos profesional | docs/23_registro_con_sede_y_datos_profesional.spec.md | Implementado | GET /auth/clinics, POST /auth/register con tenant_id y datos pro; formulario registro con selector sede y especialidad. |
-| Modal datos profesional (acordeón) | docs/24_modal_datos_profesional_acordeon.spec.md | Implementado | Modal detalle grande con acordeón (Sus pacientes, Uso plataforma, Mensajes); GET /admin/professionals/:id/analytics; optimizado móvil (bottom sheet). |
-| Idioma plataforma y agente | docs/25_idioma_plataforma_y_agente.spec.md | Implementado | Selector idioma en Configuración (es/en/fr); i18n (LanguageContext, locales, t()); agente agnóstico (nombre clínica inyectado) y detección idioma del mensaje; idioma por defecto inglés. |
-| Dashboard Analytics Sovereign | Dashboard_Analytics_Sovereign/docs/specs/ | Módulo aparte | Dashboard_Analytics_Sovereign con vistas CEO/Secretary; no integrado en frontend_react principal. |
+**Trazabilidad actual:** Ver **[SPECS_IMPLEMENTADOS_INDICE.md](SPECS_IMPLEMENTADOS_INDICE.md)** (consolidación 2026-02-09; los .spec.md fueron retirados).
+
+| Spec | Documentación actual | Estado | Drift / Notas |
+|------|----------------------|--------|----------------|
+| Sovereign Glass (Agenda 2.0) | SPECS_IMPLEMENTADOS_INDICE, AGENTS.md | Parcial | Scroll isolation y glassmorphism aplicados en parte; revisar que todo contenedor flex-1 tenga min-h-0 y que no haya scroll global. |
+| CEO Professionals Analytics | README, API_REFERENCE (analytics) | Implementado | ProfessionalAnalyticsView + `/admin/analytics/professionals/summary`. |
+| Agenda Inteligente 2.0 | README, 01_architecture | Implementado | Agenda con recursos, bloques GCal, Socket.IO. |
+| Google Calendar sync fix | 01_architecture, 08_troubleshooting | En uso | gcal_service y sync en admin. |
+| Mobile scroll fix | AGENTS.md (Scroll Isolation) | Parcial | MobileAgenda y patrones de scroll; auditar todas las vistas móviles. |
+| Mobile agenda range fix | 01_architecture | Parcial | Rango de fechas en agenda móvil. |
+| Treatments optimization | README, API_REFERENCE | Implementado | treatment_types CRUD y duración por urgencia. |
+| Professionals CEO control / Personal Activo | README, AGENTS.md | Implementado | Personal Activo como fuente de verdad; modal detalle, Vincular a sede, tuerca → Editar Perfil; GET by-user; CEO ve profesionales de todas sus sedes. |
+| Registro con sede y datos profesional | README, API_REFERENCE (auth) | Implementado | GET /auth/clinics, POST /auth/register con tenant_id y datos pro; formulario registro con selector sede y especialidad. |
+| Modal datos profesional (acordeón) | UserApprovalView, README | Implementado | Modal detalle grande con acordeón; GET /admin/professionals/:id/analytics; optimizado móvil (bottom sheet). |
+| Idioma plataforma y agente | README (Idiomas), AGENTS.md | Implementado | Selector idioma en Configuración (es/en/fr); i18n; agente agnóstico y detección idioma del mensaje; idioma por defecto inglés. |
+| Dashboard Analytics Sovereign | Dashboard_Analytics_Sovereign/docs/plans/ | Módulo aparte | Vistas CEO/Secretary; no integrado en frontend_react principal. |
 
 ---
 
@@ -324,12 +328,14 @@ El proyecto está **operativo** en backend (excepto tenants), frontend (excepto 
 - **Navegación:** Eliminado ítem “Profesionales” del menú; ruta `/profesionales` redirige a `/aprobaciones`. La gestión de profesionales se realiza desde Personal Activo (modal detalle + Vincular a sede / Editar Perfil).
 - **ProfessionalsView:** Si se accede por ruta directa, al editar se muestra **Sede/Clínica** en solo lectura; al crear, selector de clínica.
 
-### 9.3 Especificaciones añadidas
+### 9.3 Especificaciones (trazabilidad)
 
-- **docs/22_professionals_ceo_control_vision.spec.md:** Visión CEO, Personal Activo como fuente de verdad, modal detalle, Vincular a sede, tuerca → Editar Perfil.
-- **docs/23_registro_con_sede_y_datos_profesional.spec.md:** Registro con sede obligatoria y datos de profesional (especialidad, teléfono, matrícula).
-- **docs/24_modal_datos_profesional_acordeon.spec.md:** Modal detalle con acordeón (Sus pacientes, Uso plataforma, Mensajes) y datos reales vía `/admin/professionals/:id/analytics` y sesiones de chat; layout grande y scroll aislado; optimizado móvil.
-- **docs/25_idioma_plataforma_y_agente.spec.md:** Idioma de la UI (selector en Configuración, es/en/fr, persistido en `tenants.config.ui_language`); i18n con LanguageContext, `frontend_react/src/locales/*.json` y `t()` en componentes; agente con prompt agnóstico (nombre clínica dinámico) y respuesta en el idioma del mensaje del lead.
+Las especificaciones listadas se consolidaron en **docs/SPECS_IMPLEMENTADOS_INDICE.md** (2026-02-09). Contenido equivalente:
+
+- **Professionals CEO control / Personal Activo:** Visión CEO, Personal Activo como fuente de verdad, modal detalle, Vincular a sede, tuerca → Editar Perfil. Ver README, AGENTS.md.
+- **Registro con sede y datos profesional:** Registro con sede obligatoria y datos de profesional (especialidad, teléfono, matrícula). Ver README, API_REFERENCE (POST /auth/register).
+- **Modal datos profesional (acordeón):** Modal detalle con acordeón (Sus pacientes, Uso plataforma, Mensajes) y datos reales vía `/admin/professionals/:id/analytics`; layout grande y scroll aislado; optimizado móvil. Ver UserApprovalView.
+- **Idioma plataforma y agente:** Selector en Configuración (es/en/fr), `tenants.config.ui_language`, LanguageContext, locales, agente agnóstico y detección idioma del mensaje. Ver README (Idiomas), AGENTS.md.
 
 ### 9.4 Modales y móvil
 

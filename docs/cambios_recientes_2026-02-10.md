@@ -83,7 +83,7 @@ Este documento resume las actualizaciones de código y documentación realizadas
 
 ### 9.3 Scroll en página Staff (Aprobaciones)
 - **Problema:** No había scroll vertical en la lista de Requests / Active staff; los últimos ítems quedaban ocultos.
-- **Solución:** UserApprovalView con aislamiento de scroll: contenedor raíz `flex flex-col h-full min-h-0 overflow-hidden`; zona de lista `flex-1 min-h-0 overflow-y-auto`. Spec en `docs/27_staff_scroll_aislamiento.spec.md`.
+- **Solución:** UserApprovalView con aislamiento de scroll: contenedor raíz `flex flex-col h-full min-h-0 overflow-hidden`; zona de lista `flex-1 min-h-0 overflow-y-auto`. Trazabilidad: [SPECS_IMPLEMENTADOS_INDICE.md](SPECS_IMPLEMENTADOS_INDICE.md), AGENTS.md (Aislamiento de Scroll).
 
 ### 9.4 Contraste en formulario de registro (LoginView)
 - **Problema:** Las etiquetas del formulario de registro no se leían (mismo tono que el fondo oscuro).
@@ -92,7 +92,7 @@ Este documento resume las actualizaciones de código y documentación realizadas
 ### 9.5 Landing pública y flujo demo
 - **Nueva ruta pública:** `/demo` (LandingView). Página de entrada para leads: hero, beneficios, credenciales de prueba (colapsables), CTAs "Probar app" (→ `/login?demo=1`), "Probar Agente IA por WhatsApp" (wa.me + mensaje predefinido), "Iniciar sesión con mi cuenta" (→ `/login`). Móvil-first y orientada a conversión; estética alineada con la plataforma.
 - **Login demo:** `/login?demo=1` prellena credenciales y muestra botón "Entrar a la demo"; al enviar se hace login y redirección al dashboard. Credenciales demo definidas en LoginView.tsx.
-- **Spec:** `docs/28_landing_demo_publica.spec.md`. Documentación: README (funcionalidad, estado actual, tabla docs), 01_architecture (rutas públicas, LandingView), 05_developer_notes (sección 23), 07_workflow_guide (ubicación doc), CONTEXTO_AGENTE_IA (rutas y índice).
+- **Documentación:** README (Landing / Demo pública), [SPECS_IMPLEMENTADOS_INDICE.md](SPECS_IMPLEMENTADOS_INDICE.md), 01_architecture (rutas públicas, LandingView), 05_developer_notes, 07_workflow_guide, CONTEXTO_AGENTE_IA (rutas y índice). Los .spec.md fueron consolidados (2026-02-09).
 
 ---
 

@@ -140,13 +140,13 @@ Todas las vistas anteriores usan `useTranslation()` y `t()` para respetar el sel
 | **docs/02_environment_variables.md** | Variables de entorno por servicio. |
 | **docs/03_deployment_guide.md** | Despliegue (EasyPanel, etc.). |
 | **docs/04_agent_logic_and_persona.md** | Persona del agente, reglas de conversación, flujo de datos (servicio, profesional, disponibilidad, agendar). |
-| **docs/26_calendario_hibrido_clinica_profesional.spec.md** | Calendario local vs Google por clínica, `google_calendar_id` por profesional. |
+| **docs/01_architecture.md**, **docs/08_troubleshooting_history.md** | Calendario local vs Google por clínica, `google_calendar_id` por profesional; troubleshooting "IA no ve disponibilidad". |
 | **docs/audit_26_calendario_hibrido_2026-02-10.md** | Auditoría spec 26 (match código vs spec). |
 | **docs/05_developer_notes.md** | Cómo añadir tools, paginación, debugging, Maintenance Robot, i18n, agenda móvil, analytics. |
 | **docs/07_workflow_guide.md** | Ciclo de tareas, Git, documentación, troubleshooting, comunicación entre servicios. |
-| **docs/25_idioma_plataforma_y_agente.spec.md** | Spec idioma UI + agente; sección 10 = i18n completado por vista. |
-| **docs/27_staff_scroll_aislamiento.spec.md** | Aislamiento de scroll en página Staff (Aprobaciones). |
-| **docs/28_landing_demo_publica.spec.md** | Spec landing pública `/demo`, login demo, CTAs Probar app / Probar Agente IA / Iniciar sesión. |
+| **README (Idiomas)**, **docs/SPECS_IMPLEMENTADOS_INDICE.md** | Idioma UI (es/en/fr) + agente; i18n por vista. |
+| **AGENTS.md** (Aislamiento de Scroll) | Aislamiento de scroll en página Staff (Aprobaciones). |
+| **README (Landing)**, **docs/SPECS_IMPLEMENTADOS_INDICE.md** | Landing pública `/demo`, login demo, CTAs Probar app / Probar Agente IA / Iniciar sesión. |
 | **docs/AUDIT_ESTADO_PROYECTO.md** | Estado detallado: endpoints por módulo, rutas frontend, estado por página, specs vs código, correcciones recientes. |
 | **docs/API_REFERENCE.md** | Contratos de API administrativa. |
 | **docs/PROMPT_CONTEXTO_IA_COMPLETO.md** | Prompt listo para copiar/pegar en otra conversación: reglas, workflows, skills, checklist. |

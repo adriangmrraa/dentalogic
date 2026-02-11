@@ -261,6 +261,11 @@ Devuelve las filas de `professionals` asociadas a ese `user_id`. Usado por el mo
 
 Crea o actualiza profesional (tenant_id, nombre, contacto, especialidad, matrícula, working_hours). El backend aplica fallbacks si faltan columnas `phone_number`, `specialty`, `updated_at` en la tabla `professionals`.
 
+### Analíticas por profesional
+`GET /admin/professionals/{id}/analytics`
+
+Devuelve métricas del profesional (turnos, ingresos, etc.) para el dashboard. Requiere autenticación admin; filtrado por tenant.
+
 ### Bóveda de Credenciales (Internal)
 `GET /admin/internal/credentials/{name}`
 

@@ -1,7 +1,7 @@
 # Informe de Audit – Spec 26 (Calendario híbrido clínica/profesional)
 
 **Fecha:** 2026-02-10  
-**Spec de referencia:** `docs/26_calendario_hibrido_clinica_profesional.spec.md`  
+**Spec de referencia:** contenido migrado a `docs/01_architecture.md`, `docs/08_troubleshooting_history.md` (sección Calendario e IA) y `docs/SPECS_IMPLEMENTADOS_INDICE.md`.  
 **Workflow:** `.agent/workflows/audit.md`
 
 ---

@@ -67,8 +67,8 @@ git push origin feature/nueva-funcionalidad
 - **Desarrollo:** actualiza `docs/05_developer_notes.md`
 - **Prompt:** actualiza `docs/06_ai_prompt_template.md`
 - **Estado detallado (endpoints, frontend, BD):** actualiza `docs/AUDIT_ESTADO_PROYECTO.md`
-- **Idioma UI y agente:** actualiza `docs/25_idioma_plataforma_y_agente.spec.md`
-- **Landing / demo pública:** actualiza `docs/28_landing_demo_publica.spec.md`
+- **Idioma UI y agente:** ver README (Idiomas) y `docs/SPECS_IMPLEMENTADOS_INDICE.md`
+- **Landing / demo pública:** ver README (Landing / Demo) y `docs/SPECS_IMPLEMENTADOS_INDICE.md`
 - **Contexto para otra IA:** actualiza `docs/CONTEXTO_AGENTE_IA.md` (punto de entrada para agentes en otra conversación)
 
 ---

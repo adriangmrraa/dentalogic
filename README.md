@@ -136,8 +136,14 @@ docker-compose up --build
 ### 📊 [11. Análisis de Gaps](docs/11_gap_analysis_nexus_to_dental.md)
 - Estado actual de la implementación vs requerimientos finales.
 
-### 🌐 [25. Idioma plataforma y agente](docs/25_idioma_plataforma_y_agente.spec.md)
-- Selector de idioma (ES/EN/FR) en Configuración; alcance en toda la UI; detección de idioma del mensaje para el asistente WhatsApp; i18n completado por vista/componente.
+### 🌐 Idioma plataforma y agente
+- Selector de idioma (ES/EN/FR) en Configuración; alcance en toda la UI; detección de idioma del mensaje para el asistente WhatsApp; i18n completado por vista/componente. Detalle en README (Idiomas) y [SPECS_IMPLEMENTADOS_INDICE](docs/SPECS_IMPLEMENTADOS_INDICE.md).
+
+### 📑 [Índice de specs implementados](docs/SPECS_IMPLEMENTADOS_INDICE.md)
+- Registro de las especificaciones (`.spec.md`) consolidadas y dónde está documentada cada funcionalidad. Los archivos `.spec.md` fueron retirados; el contenido útil está en README, arquitectura, troubleshooting y en **docs/29_seguridad_owasp_auditoria.md**.
+
+### 🕵️ [Auditoría documentación (2026-02-09)](docs/31_audit_documentacion_2026-02-09.md)
+- Verificación de que la documentación está alineada con la última versión de la plataforma SaaS; corrección de referencias a specs consolidados (Non-Destructive Fusion).
 
 ### 🤖 [Contexto para agentes IA](docs/CONTEXTO_AGENTE_IA.md)
 - Punto de entrada para que otra IA (en otra conversación) tome contexto completo: stack, estructura, reglas, API, rutas, BD, i18n e índice de documentación.
@@ -217,14 +223,14 @@ graph TD
 | **Desarrollo** | [05_developer_notes.md](docs/05_developer_notes.md) | Notas para desarrolladores. |
 | **Workflows** | [07_workflow_guide.md](docs/07_workflow_guide.md) | Ciclo de vida de tareas, Git, documentación, checklist pre-commit. |
 | **Lead → Paciente** | [13_lead_patient_workflow.md](docs/13_lead_patient_workflow.md) | Protocolo de conversión de contactos a pacientes. |
-| **Calendario híbrido** | [26_calendario_hibrido_clinica_profesional.spec.md](docs/26_calendario_hibrido_clinica_profesional.spec.md) | Spec: local vs Google por clínica, `google_calendar_id` por profesional, persistencia y tools. |
+| **Calendario híbrido** | [01_architecture.md](docs/01_architecture.md), [08_troubleshooting_history.md](docs/08_troubleshooting_history.md) | Local vs Google por clínica, `google_calendar_id` por profesional; troubleshooting "IA no puede ver disponibilidad". |
 | **Auditoría spec 26** | [audit_26_calendario_hibrido_2026-02-10.md](docs/audit_26_calendario_hibrido_2026-02-10.md) | Verificación código vs spec (calendario híbrido). |
 | **API** | [API_REFERENCE.md](docs/API_REFERENCE.md) | Endpoints administrativos: pacientes, profesionales, turnos, tratamientos, tenants. |
 | **Contexto para IA** | [CONTEXTO_AGENTE_IA.md](docs/CONTEXTO_AGENTE_IA.md) | Punto de entrada para que otra IA tenga contexto del stack, reglas y documentación. |
 | **Cambios recientes** | [cambios_recientes_2026-02-10.md](docs/cambios_recientes_2026-02-10.md) | Resumen de implementaciones y correcciones de la sesión 2026-02-10 (spec 26, disponibilidad, paciente+turno, docs). |
-| **Landing / Demo pública** | [28_landing_demo_publica.spec.md](docs/28_landing_demo_publica.spec.md) | Spec: página pública `/demo`, login demo `/login?demo=1`, Probar app / Probar Agente IA / Iniciar sesión; móvil y conversión. |
-| **Scroll Staff** | [27_staff_scroll_aislamiento.spec.md](docs/27_staff_scroll_aislamiento.spec.md) | Aislamiento de scroll en página Staff (Aprobaciones) para listas largas en desktop y móvil. |
-| **Seguridad (OWASP)** | [29_seguridad_owasp_auditoria.spec.md](docs/29_seguridad_owasp_auditoria.spec.md) | Auditoría según OWASP Top 10:2025; redacción de credenciales en UI demo ([REDACTED]); buenas prácticas SQL y auth. |
+| **Landing / Demo pública** | README (Landing / Demo pública), [SPECS_IMPLEMENTADOS_INDICE](docs/SPECS_IMPLEMENTADOS_INDICE.md) | Página pública `/demo`, login demo `/login?demo=1`, Probar app / Probar Agente IA / Iniciar sesión; móvil y conversión. |
+| **Scroll Staff** | [AGENTS.md](AGENTS.md) (Aislamiento de Scroll) | Aislamiento de scroll en página Staff (Aprobaciones) para listas largas en desktop y móvil. |
+| **Seguridad (OWASP)** | [29_seguridad_owasp_auditoria.md](docs/29_seguridad_owasp_auditoria.md) | Auditoría según OWASP Top 10:2025; redacción de credenciales en UI demo ([REDACTED]); buenas prácticas SQL y auth. |
 
 ---
 
