@@ -1,237 +1,299 @@
-# 🦷 Dentalogic - Plataforma de Gestión Clínica con IA
+# 🦷 Dentalogic – Sovereign Clinical SaaS
 
-Sistema de coordinación clínica inteligente, impulsado por IA (**LangChain + OpenAI GPT-4o-mini**). El sistema actúa como un coordinador clínico que gestiona turnos, realiza triajes de urgencias y mantiene historias clínicas digitales **multi-tenant** (multi-sede). Pensado tanto para **una clínica** como para **empresarios o grupos con varias sedes**, con un único panel de control, datos aislados por sede y soporte multiidioma en toda la interfaz.
+**The Ultimate AI-Driven Operating System for Dental Practice Excellence.** Multi-tenant orchestration, sovereign data isolation, and real-time clinical coordination via WhatsApp.
 
----
-
-## ¿Para quién es esta plataforma?
-
-- **Clínicas dentales (una o varias sedes):** Centralizan agenda, pacientes, conversaciones por WhatsApp y analíticas en una sola herramienta.
-- **Empresarios con múltiples clínicas:** Cada sede (tenant) tiene sus propios datos, calendarios y configuraciones; el CEO puede cambiar de sede, ver analíticas por profesional y gestionar personal y sedes desde un único acceso.
-- **Equipos multilingües:** La interfaz de la plataforma está disponible en **Español**, **Inglés** y **Francés**. El idioma se elige en Configuración y se aplica a toda la UI (menús, formularios, mensajes, agenda, analíticas, etc.). El asistente por WhatsApp detecta el idioma del paciente y responde en el mismo idioma.
+`Python` `React` `TypeScript` `FastAPI` `LangChain`
 
 ---
 
-## Funcionalidades principales (qué hace la plataforma)
+## 📋 Table of Contents
 
-| Módulo | Descripción |
-| :--- | :--- |
-| **Dashboard** | Vista general: urgencias recientes, conversaciones IA, turnos del día, ingresos; métricas en tiempo real y panel soberano para CEO. |
-| **Agenda** | Vista semanal, mensual y día; **filtro por profesional** en semanal/mensual (CEO y secretaria); **profesionales solo ven su propio calendario** (una columna en vista día). Turnos por profesional; colores por origen (IA, manual, Google Calendar); creación/edición de turnos; sincronización híbrida (local o Google Calendar por sede); actualización en tiempo real vía Socket.IO. |
-| **Pacientes** | Listado, búsqueda, ficha clínica digital; historial de evoluciones, anamnesis, antecedentes; alta y edición de pacientes; primer turno opcional al crear. |
-| **Conversaciones (Chats)** | Chats por sede; historial de mensajes con la IA; handoff a humano y silencio 24h; contexto clínico y próximo turno; activar/desactivar IA por conversación. |
-| **Analíticas (CEO)** | Métricas por profesional: turnos, tasa de realización, retención, ingresos estimados; comparativa entre profesionales; filtros por rango de fechas y profesionales. |
-| **Personal y aprobaciones (CEO)** | Solicitudes de registro (por sede, rol, especialidad); aprobar/rechazar; personal activo; vincular a sedes; editar perfil y horarios desde el mismo flujo. |
-| **Sedes (Clinics)** | Gestión de ubicaciones/sedes (multi-tenant); cada sede tiene su configuración, calendario y datos aislados. |
-| **Tratamientos** | CRUD de servicios/tratamientos con precios, duraciones y categorías; configuración de complejidad y gaps entre sesiones. |
-| **Perfil** | Datos del usuario; configuración de Google Calendar para sincronizar agenda. |
-| **Configuración (CEO)** | **Selector de idioma de la plataforma** (Español / English / Français). El valor se guarda por sede y aplica a **toda** la interfaz: login, menús, formularios, agenda, analíticas, chats, etc. |
-| **Landing / Demo pública** | Página **pública** en `/demo` (sin login): información estratégica, credenciales de prueba y tres acciones: **Probar app** (login automático a cuenta demo), **Probar Agente IA** (WhatsApp con mensaje predefinido) e **Iniciar sesión**. Optimizada para móvil y conversión; única ruta accesible sin autenticación junto con `/login`. |
+- [Vision & Value Proposition](#-vision--value-proposition)
+- [Technology Stack & Architecture](#-technology-stack--architecture)
+- [AI Models & Capabilities](#-ai-models--capabilities)
+- [Key Features](#-key-features)
+- [Project Structure](#-project-structure)
+- [Deployment Guide (Quick Start)](#-deployment-guide-quick-start)
+- [Documentation Hub](#-documentation-hub)
+- [Contributing](#-contributing)
+- [License](#-license)
 
 ---
 
-## Flujo del agente de IA (datos que necesita)
+## 🌟 Vision & Value Proposition
 
-El asistente por WhatsApp sigue un **flujo de conversación definido** para consultas, disponibilidad y agendamiento. Estos son los datos que el agente necesita y el orden en que debe usarlos:
+Dentalogic is more than a chatbot: it is a **Digital Clinical Coordinator** designed for dental practices and clinic groups. Built on **Sovereignty**, **Multi-Tenancy**, and **Value**, it delivers the first AI-driven OS that manages appointments, triage, and patient conversations while keeping each clinic’s data strictly isolated.
 
-1. **Saludo e identidad**  
-   En el primer mensaje de cada conversación, el agente se presenta y **menciona la clínica** para la cual trabaja (ej.: *"Hola, soy la asistente de [Nombre Clínica], es un gusto saludarte."*).
+### 🎯 For Whom
 
-2. **Definir siempre un servicio**  
-   Antes de consultar disponibilidad o agendar, debe quedar claro **qué tratamiento o tipo de consulta** necesita el paciente (limpieza, revisión, urgencia, etc.).  
-   - El agente puede **mencionar o sugerir** en base a la consulta; **no** debe listar todos los servicios.  
-   - Si en algún momento lista opciones, **máximo 3** y solo las más relevantes a lo que preguntó el usuario.
+| Audience | Value |
+|----------|--------|
+| **Single clinics** | Centralize agenda, patients, WhatsApp conversations, and reports in one tool; fewer spreadsheets and missed calls. |
+| **Clinic groups / franchises** | Each location (tenant) has its own data and calendar; the CEO sees all locations, staff approvals, and analytics from one panel. Ideal for owners of 2+ clinics who want control without mixing data between sites. |
+| **Multilingual teams** | UI in **Spanish**, **English**, and **French**. Language is set in Configuration and applies to the entire platform. The WhatsApp assistant detects the patient’s language and replies in the same language. |
 
-3. **Duración del turno**  
-   Con el **servicio elegido**, se usa la **duración configurada** de ese servicio para consultar disponibilidad y para agendar (la herramienta `check_availability` y `book_appointment` usan el nombre del tratamiento y toman la duración desde la base de datos).
+### 🛡️ Sovereign Data (Tenant-First)
 
-4. **Disponibilidad (local o Google Calendar) y profesional**  
-   **Antes de agendar**, el agente debe **consultar disponibilidad real** (según cómo esté configurada la sede: agenda **local** o **Google Calendar**).  
-   - Para elegir profesional, el agente puede **preguntar** si el usuario tiene preferencia por algún profesional o si busca **cualquiera con disponibilidad**; según la respuesta, consulta con ese profesional o con el primer disponible.  
-   - La herramienta `check_availability` puede recibir opcionalmente el nombre del profesional; si no se pasa, devuelve huecos de cualquier profesional activo de la sede.
+Your data, your clinic, your keys. Every query is filtered by `tenant_id`. Identity is resolved from JWT and database (never from client-supplied tenant). Admin routes require **JWT + X-Admin-Token** so that a stolen token alone cannot access the API.
 
-5. **Agendar solo con todo definido**  
-   **Con el servicio, el profesional (si aplica), el día y el horario elegidos**, y los datos del paciente (nombre, apellido, DNI, obra social), el agente ejecuta `book_appointment`. El turno se registra en el **calendario local** o en **Google Calendar** según la configuración de la clínica (y, en Google, en el calendario del profesional correspondiente).
+### 📱 True Omnichannel (WhatsApp-First)
 
-Resumen: **consulta → saludo/clínica → definir servicio (máx. 3 si se listan) → (opcional) preferencia de profesional → check_availability con duración del servicio → ofrecer horarios → datos del paciente → book_appointment**.
+The AI lives where your patients are:
+
+- **WhatsApp** (YCloud integration): Booking, triage, and human handoff.
+- **Operations Center** (React SPA): Dashboard, agenda, patients, chats, analytics, staff approval, and configuration—all in one place, with real-time updates via Socket.IO.
 
 ---
 
-## Idiomas e internacionalización
+## 🛠️ Technology Stack & Architecture
 
-- **Interfaz (UI):** Tres idiomas soportados: **Español (es)**, **Inglés (en)** y **Francés (fr)**. La preferencia se configura en **Configuración** (solo CEO) y se persiste por sede (`tenants.config.ui_language`). Al cambiar el idioma, **toda la plataforma** actualiza al instante (Login, Dashboard, Agenda, Pacientes, Chats, Analíticas, Aprobaciones, Sedes, Tratamientos, Perfil, menús y componentes compartidos).
-- **Asistente por WhatsApp:** Responde en el **idioma del mensaje del paciente** (detección automática es/en/fr). No depende del idioma elegido en la UI; cada conversación puede ser en un idioma distinto según lo que escriba el lead.
+Dentalogic uses a **Sovereign Microservices Architecture**, designed to scale while keeping strict isolation per tenant.
+
+### 🎨 Frontend (Operations Center)
+
+| Layer | Technology |
+|-------|------------|
+| **Framework** | React 18 + TypeScript |
+| **Build** | Vite (fast HMR & build) |
+| **Styling** | Tailwind CSS |
+| **Icons** | Lucide React |
+| **Routing** | React Router DOM v6 (`path="/*"` for nested routes) |
+| **State** | Context API (Auth, Language) + Axios (API with JWT + X-Admin-Token) |
+| **i18n** | LanguageProvider + `useTranslation()` + `es.json` / `en.json` / `fr.json` |
+| **Deployment** | Docker + Nginx (SPA mode) |
+
+### ⚙️ Backend (The Core)
+
+| Component | Technology |
+|------------|------------|
+| **Orchestrator** | FastAPI (Python 3.11+) – central brain, LangChain agent, Socket.IO server |
+| **Add-ons** | Pydantic, Uvicorn (ASGI) |
+| **Microservices** | `orchestrator_service`: main API, agent, calendar, tenants, auth; `whatsapp_service`: YCloud relay, Whisper transcription |
+
+### 🗄️ Infrastructure & Persistence
+
+| Layer | Technology |
+|-------|------------|
+| **Database** | PostgreSQL (clinical records, patients, appointments, tenants, professionals) |
+| **Cache / Locks** | Redis (deduplication, context) |
+| **Containers** | Docker & Docker Compose |
+| **Deployment** | EasyPanel, Render, AWS ECS compatible |
+
+### 🤖 Artificial Intelligence Layer
+
+| Layer | Technology |
+|-------|------------|
+| **Orchestration** | LangChain + custom tools |
+| **Primary model** | OpenAI **gpt-4o-mini** (default for agent and triage) |
+| **Audio** | Whisper (symptom transcription) |
+| **Tools** | `check_availability`, `book_appointment`, `list_services`, `list_professionals`, `list_my_appointments`, `cancel_appointment`, `reschedule_appointment`, `triage_urgency`, `derivhumano` |
+| **Hybrid calendar** | Per-tenant: local (BD) or Google Calendar; JIT sync and collision checks |
+
+### 🔐 Security & Authentication
+
+| Mechanism | Description |
+|-----------|-------------|
+| **Auth** | JWT (login) + **X-Admin-Token** header for all `/admin/*` routes |
+| **Multi-tenancy** | Strict `tenant_id` filter on every query; tenant resolved from JWT/DB, not from request params |
+| **Credentials** | Google Calendar tokens stored encrypted (Fernet) when using connect-sovereign |
+| **Passwords** | Bcrypt hashing; no plaintext in repo or UI (demo credentials shown as [REDACTED] on public pages) |
 
 ---
 
-## Número del bot y datos de la clínica
+## 🧠 AI Models & Capabilities
 
-- **Sí: el bot usa el número que carga la clínica.** Cada sede (tenant) tiene en la base de datos su **número de WhatsApp** (`tenants.bot_phone_number`) y su **nombre** (`tenants.clinic_name`). Cuando llega un mensaje por WhatsApp, el sistema identifica la sede por el número al que el usuario escribió (`to_number`) y usa ese tenant para toda la conversación (turnos, pacientes, idioma, calendario). Esos datos se configuran en **Sedes (Clinics)** en el panel.
-- **Variables de entorno** como `BOT_PHONE_NUMBER` y `CLINIC_NAME` actúan como **respaldo** cuando no viene número en la petición (por ejemplo en pruebas manuales) o cuando la sede no tiene nombre cargado. En producción multi-sede, la fuente de verdad es la base de datos por sede. Ver `docs/02_environment_variables.md` para el detalle.
+| Model | Provider | Use case |
+|-------|----------|----------|
+| **gpt-4o-mini** | OpenAI | Default: agent conversation, triage, availability, booking |
+| **Whisper** | OpenAI | Voice message transcription (symptoms) |
+
+### Agent capabilities
+
+- **Conversation:** Greeting, clinic identity, service selection (max 3 options when listing), availability check, slot offering, booking with patient data (name, DNI, insurance).
+- **Triaje:** Urgency classification from symptoms (text or audio).
+- **Human handoff:** `derivhumano` + 24h silence window per clinic/phone.
+- **Multilingual:** Detects message language (es/en/fr) and responds in the same language; clinic name injected from `tenants.clinic_name`.
 
 ---
 
-## Multi-sede (multi-tenant)
+## 🚀 Key Features
 
-- **Aislamiento de datos:** Pacientes, turnos, chats, profesionales y configuraciones están separados por `tenant_id` (sede). Una sede no ve datos de otra.
-- **CEO:** Puede cambiar de sede en Chats y en otras vistas; gestiona aprobaciones, sedes y configuración por sede.
-- **Secretarias y profesionales:** Acceden solo a la(s) sede(s) asignadas.
-- **Calendario:** Cada sede puede usar agenda local o Google Calendar; la configuración y los turnos son por sede.
+### 🎯 Agent & Clinical Orchestration
+
+- **Single AI brain** per clinic (or per tenant): books appointments, lists services and professionals, checks real availability (local or Google Calendar).
+- **Canonical tool format** and retry on booking errors (“never give up a reservation”).
+- **Tools:** `check_availability`, `book_appointment`, `list_services`, `list_professionals`, `list_my_appointments`, `cancel_appointment`, `reschedule_appointment`, `triage_urgency`, `derivhumano`.
+
+### 📅 Smart Calendar (Hybrid by Clinic)
+
+- **Per-tenant:** Local (DB only) or **Google Calendar**; `tenants.config.calendar_provider` + `google_calendar_id` per professional.
+- **JIT sync:** External blocks mirrored to `google_calendar_blocks`; collision checks before create/update.
+- **Real-time UI:** Socket.IO events (`NEW_APPOINTMENT`, `APPOINTMENT_UPDATED`, `APPOINTMENT_DELETED`).
+
+### 👥 Patients & Clinical Records
+
+- List, search, create, edit patients; optional “first appointment” on create.
+- Clinical notes and evolution history; insurance status and context for chat view.
+
+### 💬 Conversations (Chats)
+
+- **Per clinic:** Sessions and messages filtered by `tenant_id`; CEO can switch clinic.
+- **Context:** Last/upcoming appointment, treatment plan, human override and 24h window.
+- **Actions:** Human intervention, remove silence, send message; click on derivation notification opens the right conversation.
+
+### 📊 Analytics (CEO)
+
+- Metrics per professional: appointments, completion rate, retention, estimated revenue.
+- Filters by date range and professionals; dashboard and dedicated analytics view.
+
+### 👔 Staff & Approvals (CEO)
+
+- Registration with **clinic/sede** (GET `/auth/clinics`), specialty, phone, license; POST `/auth/register` creates pending user and `professionals` row.
+- **Active Staff** as single source of truth: detail modal, “Link to clinic”, gear → Edit profile (sede, contact, availability).
+- Scroll-isolated Staff view (Aprobaciones) for long lists on desktop and mobile.
+
+### 🏢 Multi-Sede (Multi-Tenant)
+
+- **Isolation:** Patients, appointments, chats, professionals, and configuration are separated by `tenant_id`. One clinic never sees another’s data.
+- **CEO:** Can switch clinic in Chats and other views; manages approvals, clinics, and configuration per sede.
+- **Staff:** Access only to their assigned clinic(s).
+
+### 🌐 Internationalization (i18n)
+
+- **UI:** Spanish, English, French. Set in **Configuration** (CEO); stored in `tenants.config.ui_language`; applies to login, menus, agenda, analytics, chats, and all main views.
+- **WhatsApp agent:** Responds in the **language of the patient’s message** (auto-detect es/en/fr); independent of UI language.
+
+### 🎪 Landing & Public Demo
+
+- **Public page** at `/demo` (no login): value proposition, trial credentials (masked), and three CTAs: **Try app** (auto login to demo account), **Try AI agent** (WhatsApp with preset message), **Sign in**.
+- **Demo login:** `/login?demo=1` with prefilled credentials and “Enter demo” button; mobile-first and conversion-oriented.
 
 ---
 
-## 🚀 Guía Rápida de Inicio
+## 📁 Project Structure
 
-### 1. Configuración Inicial
+```
+Clinica Dental/
+├── 📂 .agent/                    # Agent configuration & skills
+│   ├── workflows/                # Autonomy, specify, plan, audit, update-docs, etc.
+│   └── skills/                   # Backend, Frontend, DB, Prompt, Doc_Keeper, etc.
+├── 📂 frontend_react/            # React 18 + Vite SPA (Operations Center)
+│   ├── src/
+│   │   ├── components/           # Layout, Sidebar, AppointmentForm, Modal, etc.
+│   │   ├── views/                # Dashboard, Agenda, Patients, Chats, Landing, etc.
+│   │   ├── context/              # AuthContext, LanguageContext
+│   │   ├── locales/              # es.json, en.json, fr.json
+│   │   └── api/                  # axios (JWT + X-Admin-Token)
+│   ├── package.json
+│   └── vite.config.ts
+├── 📂 orchestrator_service/      # FastAPI Core (Orchestrator)
+│   ├── main.py                   # App, /chat, /health, Socket.IO, LangChain agent & tools
+│   ├── admin_routes.py           # /admin/* (patients, appointments, professionals, chat, tenants, etc.)
+│   ├── auth_routes.py            # /auth/* (clinics, register, login, me, profile)
+│   ├── db.py                     # Pool + Maintenance Robot (idempotent patches)
+│   ├── gcal_service.py           # Google Calendar (hybrid calendar)
+│   ├── analytics_service.py      # Professional metrics
+│   └── requirements.txt
+├── 📂 whatsapp_service/          # YCloud relay & Whisper
+│   ├── main.py
+│   └── ycloud_client.py
+├── 📂 docs/                      # Documentation
+│   ├── 01_architecture.md
+│   ├── 02_environment_variables.md
+│   ├── 03_deployment_guide.md
+│   ├── 04_agent_logic_and_persona.md
+│   ├── API_REFERENCE.md
+│   ├── SPECS_IMPLEMENTADOS_INDICE.md
+│   ├── 29_seguridad_owasp_auditoria.md
+│   └── ...
+├── 📂 db/init/                   # dentalogic_schema.sql
+├── docker-compose.yml            # Local stack
+└── README.md                     # This file
+```
+
+---
+
+## 🚀 Deployment Guide (Quick Start)
+
+Dentalogic follows a **clone and run** approach. With Docker you don’t need to install Python or Node locally.
+
+### Prerequisites
+
+- **Docker Desktop** (Windows/Mac) or **Docker Engine** (Linux)
+- **Git**
+- **OpenAI API Key** (required for the agent)
+- **PostgreSQL** and **Redis** (or use `docker-compose`)
+
+### Standard deployment (recommended)
+
+**1. Clone the repository**
+
 ```bash
-# Sincronizar entorno dental
-cp dental.env.example .env
+git clone <repository-url>
+cd "Clinica Dental"
+```
 
-# Completar las variables (Ver docs/02_environment_variables.md):
+**2. Environment configuration**
+
+```bash
+cp dental.env.example .env
+# Edit .env (see docs/02_environment_variables.md):
 # - OPENAI_API_KEY
-# - YCLOUD_API_KEY / YCLOUD_WEBHOOK_SECRET  
+# - YCLOUD_API_KEY / YCLOUD_WEBHOOK_SECRET (WhatsApp)
 # - POSTGRES_DSN / REDIS_URL
 # - CLINIC_NAME, BOT_PHONE_NUMBER
-# - GOOGLE_CALENDAR_ID (Opcional)
+# - GOOGLE_CREDENTIALS or connect-sovereign (optional)
+# - ADMIN_TOKEN (for X-Admin-Token), JWT_SECRET_KEY
 ```
 
-### 2. Levantar la Infraestructura
+**3. Start services**
+
 ```bash
-docker-compose up --build
+docker-compose up -d --build
 ```
 
-### 3. Acceder a los Servicios
-| Servicio | URL | Función |
-| :--- | :--- | :--- |
-| **Orchestrator** | `http://localhost:8000` | Coordinador Clínico (FastAPI + LangChain) |
-| **Swagger UI (API)** | `http://localhost:8000/docs` | Contrato OpenAPI: todos los endpoints, agrupados por tag; probar con JWT y X-Admin-Token desde el navegador. |
-| **ReDoc / OpenAPI JSON** | `http://localhost:8000/redoc` y `/openapi.json` | Documentación en lectura y esquema JSON para Postman/Insomnia. |
-| **WhatsApp Service** | `http://localhost:8002` | Relay de Mensajería y Whisper |
-| **Operations Center** | `http://localhost:5173` | Centro de Operaciones Dental (React); UI en ES/EN/FR según Configuración. |
+**4. Access**
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| **Orchestrator** | `http://localhost:8000` | Core API & agent |
+| **Swagger UI** | `http://localhost:8000/docs` | OpenAPI contract; test with JWT + X-Admin-Token |
+| **ReDoc / OpenAPI** | `http://localhost:8000/redoc`, `/openapi.json` | Read-only docs and JSON schema |
+| **WhatsApp Service** | `http://localhost:8002` | YCloud relay & Whisper |
+| **Operations Center** | `http://localhost:5173` | React UI (ES/EN/FR) |
 
 ---
 
-### 📚 Documentación Completa
+## 📚 Documentation Hub
 
-### ⚙️ [01. Arquitectura de Microservicios](docs/01_architecture.md)
-- Estructura de servicios (Backend, Frontend, Database)
-- **Smart Availability:** Lógica JIT y limpieza de nombres.
-
-### 🔑 [02. Variables de Entorno](docs/02_environment_variables.md)
-- Credenciales de Google Calendar, OpenAI y YCloud.
-
-### ☁️ [03. Guía de Despliegue](docs/03_deployment_guide.md)
-- Instrucciones EasyPanel y configuración de Service Accounts.
-
-### 🧠 [04. Lógica del Agente Dental](docs/04_agent_logic_and_persona.md)
-- Persona: Asistente Clínico Profesional.
-- Tools: `check_availability`, `book_appointment`, `triage_urgency`.
-
-### 🔀 [13. Flujo Lead -> Paciente](docs/13_lead_patient_workflow.md)
-- Protocolo de conversión de contactos nuevos a pacientes activos.
-
-### 🔌 [API Reference](docs/API_REFERENCE.md)
-- Endpoints administrativos: Tratamientos, Pacientes, Profesionales, Turnos, Chat, Calendario, etc. **Documentación interactiva:** Swagger en `/docs`, ReDoc en `/redoc`, OpenAPI JSON en `/openapi.json` (base URL del Orchestrator).
-
-### 📊 [11. Análisis de Gaps](docs/11_gap_analysis_nexus_to_dental.md)
-- Estado actual de la implementación vs requerimientos finales.
-
-### 🌐 Idioma plataforma y agente
-- Selector de idioma (ES/EN/FR) en Configuración; alcance en toda la UI; detección de idioma del mensaje para el asistente WhatsApp; i18n completado por vista/componente. Detalle en README (Idiomas) y [SPECS_IMPLEMENTADOS_INDICE](docs/SPECS_IMPLEMENTADOS_INDICE.md).
-
-### 📑 [Índice de specs implementados](docs/SPECS_IMPLEMENTADOS_INDICE.md)
-- Registro de las especificaciones (`.spec.md`) consolidadas y dónde está documentada cada funcionalidad. Los archivos `.spec.md` fueron retirados; el contenido útil está en README, arquitectura, troubleshooting y en **docs/29_seguridad_owasp_auditoria.md**.
-
-### 🕵️ [Auditoría documentación (2026-02-09)](docs/31_audit_documentacion_2026-02-09.md)
-- Verificación de que la documentación está alineada con la última versión de la plataforma SaaS; corrección de referencias a specs consolidados (Non-Destructive Fusion).
-
-### 🤖 [Contexto para agentes IA](docs/CONTEXTO_AGENTE_IA.md)
-- Punto de entrada para que otra IA (en otra conversación) tome contexto completo: stack, estructura, reglas, API, rutas, BD, i18n e índice de documentación.
-
-### 📋 [Prompt completo para IA](docs/PROMPT_CONTEXTO_IA_COMPLETO.md)
-- Bloque de texto listo para copiar y pegar al inicio de una conversación con una IA: contexto global, reglas, workflows, skills y cómo trabajar en fixes o cambios correctamente.
+| Document | Description |
+|----------|-------------|
+| [**01. Architecture**](docs/01_architecture.md) | Microservices, Orchestrator, WhatsApp Service, hybrid calendar, Socket.IO. |
+| [**02. Environment variables**](docs/02_environment_variables.md) | OPENAI, YCloud, PostgreSQL, Redis, Google, CREDENTIALS_FERNET_KEY, etc. |
+| [**03. Deployment guide**](docs/03_deployment_guide.md) | EasyPanel, production configuration. |
+| [**04. Agent logic & persona**](docs/04_agent_logic_and_persona.md) | Assistant persona, tools, conversation flow. |
+| [**API Reference**](docs/API_REFERENCE.md) | All admin and auth endpoints; Swagger at `/docs`, ReDoc at `/redoc`. |
+| [**13. Lead → Patient workflow**](docs/13_lead_patient_workflow.md) | From contact to patient and first appointment. |
+| [**08. Troubleshooting**](docs/08_troubleshooting_history.md) | Common issues; “IA can’t see availability” (calendar). |
+| [**29. Security (OWASP)**](docs/29_seguridad_owasp_auditoria.md) | OWASP Top 10 alignment, JWT + X-Admin-Token, multi-tenant security. |
+| [**SPECS index**](docs/SPECS_IMPLEMENTADOS_INDICE.md) | Consolidated specs and where each feature is documented. |
+| [**Context for AI agents**](docs/CONTEXTO_AGENTE_IA.md) | Entry point for another IA: stack, rules, API, DB, i18n. |
+| [**Prompt for IA**](docs/PROMPT_CONTEXTO_IA_COMPLETO.md) | Copy-paste block for full project context in a new chat. |
 
 ---
 
-## 🏗️ Tecnologías Core
+## 🤝 Contributing
 
-| Componente | Tecnología |
-| :--- | :--- |
-| **Backend** | FastAPI + Python 3.11+ |
-| **IA / LLM** | LangChain + GPT-4o-mini + Whisper |
-| **Persistencia** | PostgreSQL (Historias Clínicas) |
-| **Caché / Locks** | Redis (Deduplicación / Contexto) |
-| **Frontend** | React + Tailwind CSS |
-| **Infraestructura** | Docker + EasyPanel |
+Development follows the project’s SDD workflows (specify → plan → implement) and **AGENTS.md** (sovereignty rules, scroll isolation, auth). For documentation changes, use the **Non-Destructive Fusion** protocol (see [update-docs](.agent/workflows/update-docs.md)). Do not run SQL directly; propose commands for the maintainer to run.
 
 ---
 
-## 🎯 Arquitectura Clínica
+## 📜 Flujo del agente (resumen)
 
-```mermaid
-graph TD
-    User((Paciente WhatsApp)) --> WS[WhatsApp Service]
-    WS -->|Audio/Texto| ORC[Orchestrator Service]
-    ORC -->|Triage| AI[OpenAI GPT-4o-mini]
-    ORC -->|Sync| GC[Google Calendar]
-    ORC -->|Record| DB[(PostgreSQL)]
-    UI[Platform UI] -->|Admin| ORC
-```
+El asistente por WhatsApp sigue este orden: **saludo y nombre de la clínica** → **definir servicio** (máx. 3 si lista) → **(opcional) preferencia de profesional** → **check_availability** con duración del servicio → **ofrecer horarios** → **datos del paciente** → **book_appointment**. La duración se toma de la base de datos según el tratamiento; la disponibilidad depende de si la sede usa calendario local o Google. Detalle completo en [04. Agent logic](docs/04_agent_logic_and_persona.md) y en la sección “Flujo del agente” de la documentación.
 
 ---
 
-## ⚡ Características Principales
+## 📜 License
 
-✅ **Coordinador Clínico:** Gestión automatizada de turnos vía WhatsApp.  
-✅ **Smart Availability:** Sincronización JIT con Google Calendar y limpieza de nombres.  
-✅ **Gestión de Tratamientos:** CRUD administrativo completo con precios y duraciones dinámicas.  
-✅ **Triaje Inteligente:** Clasificación de urgencias por IA.  
-✅ **Historias Clínicas:** Registro automático de evoluciones y anamnesis.  
-✅ **Transcripción Whisper:** Soporte completo para síntomas enviados por audio.  
-✅ **Lockout de 24h:** Silencio automático ante intervención humana.  
-✅ **Multi-sede (multi-tenant):** Datos y configuración aislados por sede; ideal para grupos con varias clínicas.  
-✅ **Interfaz multiidioma (i18n):** Toda la plataforma en Español, Inglés o Francés; selector en Configuración; efecto inmediato en login, menús, agenda, analíticas, chats y resto de vistas.  
-✅ **Landing y demo pública:** Página de entrada en `/demo` para leads y campañas: probar la app con login automático, probar el agente por WhatsApp o iniciar sesión; móvil-first y orientada a conversión.
-
----
-
-## Cómo ayuda a clínicas y empresarios
-
-- **Una sola clínica:** Centralizá agenda, pacientes, WhatsApp con IA y reportes en una herramienta; menos planillas y llamados perdidos.
-- **Varias sedes (grupos o franquicias):** Cada sede tiene sus datos y calendario aislados; el CEO ve todas las sedes, aprobaciones de personal y analíticas desde un único panel. Ideal para dueños de 2 o más clínicas que quieren control sin mezclar información entre sedes.
-- **Captación de leads:** El agente por WhatsApp atiende consultas, ofrece turnos y deriva a humano cuando hace falta; la landing (`/demo`) permite que un lead pruebe la plataforma en un clic antes de comprometerse.
-
----
-
-## Estado actual del proyecto
-
-- **Backend:** Orchestrator (FastAPI) con agente LangChain, herramientas de agenda/triaje/derivación, mantenimiento self-healing de BD, API administrativa y configuración por tenant (incl. `ui_language`). Calendario híbrido por sede (local o Google); resolución de tenant por número de bot (con fallback por dígitos); creación de pacientes con manejo de duplicados (409); creación de turnos manual con `appointment_datetime` y `appointment_type`. Formato canónico y reintento ante error en el agente (prompt: FORMATO CANÓNICO AL LLAMAR TOOLS, NUNCA DAR POR PERDIDA UNA RESERVA); mensajes de error de `book_appointment` con "Formato esperado" para guiar reintentos.
-- **Frontend:** React + Tailwind; todas las vistas principales y componentes compartidos utilizan el sistema de traducciones (`useTranslation()` + `t('clave')`); selector de idioma en Configuración con persistencia por sede. Modal Nuevo Paciente con alta de turno en el mismo paso; modal Editar perfil del profesional con campo ID Calendario (Google); Tratamientos con icono Edit2 importado. **Landing pública** en `/demo` (LandingView) con CTAs Probar app / Probar Agente IA / Iniciar sesión; **login con demo** en `/login?demo=1` (prellenado y botón "Entrar a la demo"). Clic en notificación de derivación humana abre la conversación derivada (ChatsView usa `location.state.selectPhone`). Página Staff (Aprobaciones) con aislamiento de scroll; contraste de etiquetas en formulario de registro mejorado.
-- **Integraciones:** WhatsApp (YCloud), OpenAI (GPT-4o-mini, Whisper), Google Calendar (opcional por sede y por profesional con `google_calendar_id`), PostgreSQL, Redis.
-- **Documentación:** Arquitectura, variables de entorno, despliegue, lógica del agente, flujo lead-paciente, API Reference, especificaciones de features (incl. idioma plataforma, calendario híbrido, scroll Staff, landing demo pública) e informes de auditoría en la carpeta `docs/`.
-
----
-
-## Documentación técnica (backend, frontend, base de datos, flujos)
-
-| Área | Documento | Contenido |
-| :--- | :--- | :--- |
-| **Arquitectura** | [01_architecture.md](docs/01_architecture.md) | Microservicios, Orchestrator, WhatsApp Service, layout y scroll, multi-tenant. |
-| **Variables de entorno** | [02_environment_variables.md](docs/02_environment_variables.md) | OPENAI, YCloud, PostgreSQL, Redis, GOOGLE_CREDENTIALS, CREDENTIALS_FERNET_KEY, etc. |
-| **Despliegue** | [03_deployment_guide.md](docs/03_deployment_guide.md) | EasyPanel, Service Accounts, configuración de producción. |
-| **Agente IA** | [04_agent_logic_and_persona.md](docs/04_agent_logic_and_persona.md) | Persona, reglas clínicas, tools, flujo de conversación y datos que necesita. |
-| **Desarrollo** | [05_developer_notes.md](docs/05_developer_notes.md) | Notas para desarrolladores. |
-| **Workflows** | [07_workflow_guide.md](docs/07_workflow_guide.md) | Ciclo de vida de tareas, Git, documentación, checklist pre-commit. |
-| **Lead → Paciente** | [13_lead_patient_workflow.md](docs/13_lead_patient_workflow.md) | Protocolo de conversión de contactos a pacientes. |
-| **Calendario híbrido** | [01_architecture.md](docs/01_architecture.md), [08_troubleshooting_history.md](docs/08_troubleshooting_history.md) | Local vs Google por clínica, `google_calendar_id` por profesional; troubleshooting "IA no puede ver disponibilidad". |
-| **Auditoría spec 26** | [audit_26_calendario_hibrido_2026-02-10.md](docs/audit_26_calendario_hibrido_2026-02-10.md) | Verificación código vs spec (calendario híbrido). |
-| **API** | [API_REFERENCE.md](docs/API_REFERENCE.md) | Endpoints administrativos: pacientes, profesionales, turnos, tratamientos, tenants. |
-| **Contexto para IA** | [CONTEXTO_AGENTE_IA.md](docs/CONTEXTO_AGENTE_IA.md) | Punto de entrada para que otra IA tenga contexto del stack, reglas y documentación. |
-| **Cambios recientes** | [cambios_recientes_2026-02-10.md](docs/cambios_recientes_2026-02-10.md) | Resumen de implementaciones y correcciones de la sesión 2026-02-10 (spec 26, disponibilidad, paciente+turno, docs). |
-| **Landing / Demo pública** | README (Landing / Demo pública), [SPECS_IMPLEMENTADOS_INDICE](docs/SPECS_IMPLEMENTADOS_INDICE.md) | Página pública `/demo`, login demo `/login?demo=1`, Probar app / Probar Agente IA / Iniciar sesión; móvil y conversión. |
-| **Scroll Staff** | [AGENTS.md](AGENTS.md) (Aislamiento de Scroll) | Aislamiento de scroll en página Staff (Aprobaciones) para listas largas en desktop y móvil. |
-| **Seguridad (OWASP)** | [29_seguridad_owasp_auditoria.md](docs/29_seguridad_owasp_auditoria.md) | Auditoría según OWASP Top 10:2025; redacción de credenciales en UI demo ([REDACTED]); buenas prácticas SQL y auth. |
-
----
-
-*Sistema Dentalogic © 2026.*
+Sistema Dentalogic © 2026.
