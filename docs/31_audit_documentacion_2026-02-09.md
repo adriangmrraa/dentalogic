@@ -11,7 +11,7 @@
 - **Código de referencia:** Rutas frontend (App.tsx), vistas (LandingView, ConfigView, UserApprovalView), rutas API (admin_routes, auth_routes, main.py), AGENTS.md.
 
 ---
-
+   
 ## 2. Verificación doc vs código (plataforma actual)
 
 | Área | Estado | Comentario |
