@@ -1283,7 +1283,41 @@ async def lifespan(app: FastAPI):
     await db.disconnect()
     logger.info("✅ Desconexión completada")
 
-app = FastAPI(title=f"{CLINIC_NAME} Orchestrator", lifespan=lifespan)
+# OpenAPI / Swagger: documentación de contratos API
+OPENAPI_TAGS = [
+    {"name": "Nexus Auth", "description": "Login, registro, perfil y clínicas. Rutas públicas y protegidas."},
+    {"name": "Dental Admin", "description": "Panel administrativo. Todas las rutas requieren JWT + header X-Admin-Token."},
+    {"name": "Usuarios", "description": "Aprobaciones y listado de usuarios (CEO)."},
+    {"name": "Sedes", "description": "CRUD de tenants/clínicas. Solo CEO."},
+    {"name": "Pacientes", "description": "Fichas, historial clínico, búsqueda y contexto por tenant."},
+    {"name": "Turnos", "description": "Appointments: listar, crear, actualizar, colisiones, próximos slots. Calendario híbrido (local/Google)."},
+    {"name": "Profesionales", "description": "Personal médico por sede, working hours, analytics."},
+    {"name": "Chat", "description": "Sesiones WhatsApp, mensajes, human-intervention, urgencias. Multi-tenant."},
+    {"name": "Calendario", "description": "Bloques, sync con Google Calendar, connect-sovereign (Auth0)."},
+    {"name": "Tratamientos", "description": "Tipos de tratamiento (servicios), duración, categorías."},
+    {"name": "Estadísticas", "description": "Resumen de stats, métricas del dashboard."},
+    {"name": "Configuración", "description": "Settings de clínica (idioma UI), config de despliegue."},
+    {"name": "Analítica", "description": "Métricas por profesional, resúmenes para CEO."},
+    {"name": "Internal", "description": "Credenciales internas (X-Internal-Token). Uso entre servicios."},
+    {"name": "Health", "description": "Estado del servicio. Público."},
+    {"name": "Chat IA", "description": "Endpoint de chat del agente (WhatsApp/service). Persiste historial en BD."},
+]
+
+app = FastAPI(
+    title="Dentalogic API",
+    description=(
+        "API del **Orchestrator** de Dentalogic: gestión multi-tenant de clínicas dentales. "
+        "Incluye auth (JWT + X-Admin-Token), pacientes, turnos, profesionales, chat WhatsApp, "
+        "calendario híbrido (local/Google), tratamientos y analíticas. "
+        "Documentación de contratos: **Swagger UI** en `/docs`, **ReDoc** en `/redoc`, **OpenAPI JSON** en `/openapi.json`."
+    ),
+    version=os.getenv("API_VERSION", "1.0.0"),
+    openapi_tags=OPENAPI_TAGS,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    lifespan=lifespan,
+)
 
 # Configurar CORS
 allowed_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "")
@@ -1341,6 +1375,36 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(admin_router)
 
+
+# OpenAPI: inyectar securitySchemes para que en Swagger UI se pueda usar Authorize (JWT + X-Admin-Token)
+_original_openapi = app.openapi
+
+
+def _custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = _original_openapi()
+    openapi_schema.setdefault("components", {})
+    openapi_schema["components"]["securitySchemes"] = {
+        "Bearer": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "JWT obtenido con POST /auth/login. Incluir como: Authorization: Bearer <token>.",
+        },
+        "X-Admin-Token": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-Admin-Token",
+            "description": "Token de infraestructura (env ADMIN_TOKEN). Requerido en todas las rutas /admin/*.",
+        },
+    }
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = _custom_openapi
+
 # --- SOCKET.IO CONFIGURATION ---
 # Create Socket.IO instance with async mode
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins=origins)
@@ -1365,9 +1429,9 @@ async def emit_appointment_event(event_type: str, data: Dict[str, Any]):
 # Make the emit function available to other modules
 app.state.emit_appointment_event = emit_appointment_event
 
-@app.post("/chat")
+@app.post("/chat", tags=["Chat IA"])
 async def chat_endpoint(req: ChatRequest):
-    """Endpoint de chat que persiste historial en BD."""
+    """Endpoint de chat que persiste historial en BD. Usado por WhatsApp Service y pruebas."""
     correlation_id = str(uuid.uuid4())
     # Log visible en cualquier nivel (WARNING) para diagnosticar si las peticiones llegan al orchestrator
     logger.warning(f"📩 CHAT received from={getattr(req, 'from_number', None) or getattr(req, 'phone', None)} to={getattr(req, 'to_number', None)} msg_preview={(req.final_message or '')[:60]!r}")
@@ -1571,8 +1635,9 @@ async def chat_endpoint(req: ChatRequest):
             content={"error": "Error interno del orquestador", "correlation_id": correlation_id}
         )
 
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 async def health():
+    """Estado del servicio. Público; usado por orquestadores y monitoreo."""
     return {"status": "ok", "service": "dental-orchestrator"}
 
 if __name__ == "__main__":

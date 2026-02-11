@@ -2,6 +2,18 @@
 
 Referencia de los endpoints del **Orchestrator** (FastAPI). Base URL típica: `http://localhost:8000` en desarrollo o la URL del servicio en producción.
 
+## Documentación interactiva (OpenAPI / Swagger)
+
+En la misma base del Orchestrator están disponibles:
+
+| URL | Descripción |
+|-----|-------------|
+| **[/docs](http://localhost:8000/docs)** | **Swagger UI**: contrato completo, agrupado por tags (Auth, Pacientes, Turnos, Chat, etc.). Permite probar endpoints desde el navegador; en *Authorize* se pueden configurar **Bearer** (JWT) y **X-Admin-Token**. |
+| **[/redoc](http://localhost:8000/redoc)** | **ReDoc**: documentación en formato lectura. |
+| **[/openapi.json](http://localhost:8000/openapi.json)** | Esquema OpenAPI 3.x en JSON para importar en Postman, Insomnia o herramientas de generación de clientes. |
+
+Sustituye `localhost:8000` por la URL del Orchestrator en tu entorno (ej. en producción: `https://dentalogic-orchestrator.ugwrjq.easypanel.host`).
+
 ---
 
 ## Índice

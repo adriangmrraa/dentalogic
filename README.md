@@ -104,6 +104,8 @@ docker-compose up --build
 | Servicio | URL | Función |
 | :--- | :--- | :--- |
 | **Orchestrator** | `http://localhost:8000` | Coordinador Clínico (FastAPI + LangChain) |
+| **Swagger UI (API)** | `http://localhost:8000/docs` | Contrato OpenAPI: todos los endpoints, agrupados por tag; probar con JWT y X-Admin-Token desde el navegador. |
+| **ReDoc / OpenAPI JSON** | `http://localhost:8000/redoc` y `/openapi.json` | Documentación en lectura y esquema JSON para Postman/Insomnia. |
 | **WhatsApp Service** | `http://localhost:8002` | Relay de Mensajería y Whisper |
 | **Operations Center** | `http://localhost:5173` | Centro de Operaciones Dental (React); UI en ES/EN/FR según Configuración. |
 
@@ -129,7 +131,7 @@ docker-compose up --build
 - Protocolo de conversión de contactos nuevos a pacientes activos.
 
 ### 🔌 [API Reference](docs/API_REFERENCE.md)
-- Endpoints administrativos: Tratamientos, Pacientes, Profesionales.
+- Endpoints administrativos: Tratamientos, Pacientes, Profesionales, Turnos, Chat, Calendario, etc. **Documentación interactiva:** Swagger en `/docs`, ReDoc en `/redoc`, OpenAPI JSON en `/openapi.json` (base URL del Orchestrator).
 
 ### 📊 [11. Análisis de Gaps](docs/11_gap_analysis_nexus_to_dental.md)
 - Estado actual de la implementación vs requerimientos finales.
