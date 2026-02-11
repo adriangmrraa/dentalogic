@@ -2,7 +2,7 @@
 
 **Propósito:** Este documento permite que otra IA (en otra conversación) tome contexto completo del proyecto Dentalogic: qué es, cómo está construido, cómo trabajar en él y dónde está cada cosa. Úsalo como punto de entrada único antes de tocar código.
 
-**Última actualización:** 2026-02-10
+**Última actualización:** 2026-02 (landing demo, formato canónico agente, scroll Staff, notificación derivación)
 
 ---
 
@@ -89,9 +89,12 @@ frontend_react/src/
 
 ## 7. Frontend – Rutas y vistas
 
+**Rutas públicas (sin ProtectedRoute):** `/login`, `/demo`.
+
 | Ruta | Vista | Notas |
 |------|--------|--------|
-| `/login` | LoginView | Registro con sede, especialidad, teléfono, matrícula para pro/secretary |
+| `/login` | LoginView | Registro con sede, especialidad, teléfono, matrícula para pro/secretary. Con `?demo=1`: prellenado y botón "Entrar a la demo" (login automático). |
+| `/demo` | LandingView | Landing pública: Probar app (→ /login?demo=1), Probar Agente IA (WhatsApp), Iniciar sesión (→ /login). Móvil-first, conversión. |
 | `/` | DashboardView | KPIs, urgencias, gráficos |
 | `/agenda` | AgendaView | FullCalendar, Socket.IO, leyenda origen (IA/Manual/GCal) traducida |
 | `/pacientes`, `/pacientes/:id` | PatientsView, PatientDetail | Listado y ficha clínica |
@@ -142,6 +145,8 @@ Todas las vistas anteriores usan `useTranslation()` y `t()` para respetar el sel
 | **docs/05_developer_notes.md** | Cómo añadir tools, paginación, debugging, Maintenance Robot, i18n, agenda móvil, analytics. |
 | **docs/07_workflow_guide.md** | Ciclo de tareas, Git, documentación, troubleshooting, comunicación entre servicios. |
 | **docs/25_idioma_plataforma_y_agente.spec.md** | Spec idioma UI + agente; sección 10 = i18n completado por vista. |
+| **docs/27_staff_scroll_aislamiento.spec.md** | Aislamiento de scroll en página Staff (Aprobaciones). |
+| **docs/28_landing_demo_publica.spec.md** | Spec landing pública `/demo`, login demo, CTAs Probar app / Probar Agente IA / Iniciar sesión. |
 | **docs/AUDIT_ESTADO_PROYECTO.md** | Estado detallado: endpoints por módulo, rutas frontend, estado por página, specs vs código, correcciones recientes. |
 | **docs/API_REFERENCE.md** | Contratos de API administrativa. |
 | **docs/PROMPT_CONTEXTO_IA_COMPLETO.md** | Prompt listo para copiar/pegar en otra conversación: reglas, workflows, skills, checklist. |

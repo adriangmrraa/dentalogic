@@ -69,4 +69,31 @@ Este documento resume las actualizaciones de código y documentación realizadas
 
 ---
 
+## 9. Sesión adicional – Formato canónico agente, fixes UX y landing demo (2026-02)
+
+### 9.1 Formato canónico y reintento (agente)
+- **Prompt (main.py):** Sección "FORMATO CANÓNICO AL LLAMAR TOOLS" para `book_appointment` (date_time día+24h, first_name/last_name, dni solo dígitos, insurance_provider PARTICULAR o obra social, treatment_reason como en list_services). Regla "NUNCA DAR POR PERDIDA UNA RESERVA": ante respuesta de tool que empiece por ❌ o ⚠️, el agente debe reintentar con formato canónico antes de decir al paciente que no pudo.
+- **Mensajes de error book_appointment:** Incluyen "Formato esperado: ..." cuando falla validación (pasado, datos faltantes, excepción).
+- **Documentación:** `docs/riesgos_entendimiento_agente_agendar.md` – sección "Contrato de formato: agente vs backend" (agente = fuente de formato canónico; backend = red de seguridad).
+
+### 9.2 Bug fix – Notificación de derivación
+- **Problema:** Al hacer clic en la notificación de derivación humana solo se abría la página de Chats, no el chat derivado.
+- **Causa:** ChatsView leía `window.history.state`; en React Router v6 el state está en `location.state`.
+- **Solución:** ChatsView usa `useLocation()` y `location.state?.selectPhone`; `fetchSessions` recibe ese valor y tras cargar sesiones selecciona la correspondiente y limpia el state con `navigate('/chats', { replace: true, state: {} })`.
+
+### 9.3 Scroll en página Staff (Aprobaciones)
+- **Problema:** No había scroll vertical en la lista de Requests / Active staff; los últimos ítems quedaban ocultos.
+- **Solución:** UserApprovalView con aislamiento de scroll: contenedor raíz `flex flex-col h-full min-h-0 overflow-hidden`; zona de lista `flex-1 min-h-0 overflow-y-auto`. Spec en `docs/27_staff_scroll_aislamiento.spec.md`.
+
+### 9.4 Contraste en formulario de registro (LoginView)
+- **Problema:** Las etiquetas del formulario de registro no se leían (mismo tono que el fondo oscuro).
+- **Solución:** Labels y subtítulo con color claro (rgba(255,255,255,0.95) / 0.9); mensaje "no hay clínicas" y asterisco obligatorio con mayor contraste.
+
+### 9.5 Landing pública y flujo demo
+- **Nueva ruta pública:** `/demo` (LandingView). Página de entrada para leads: hero, beneficios, credenciales de prueba (colapsables), CTAs "Probar app" (→ `/login?demo=1`), "Probar Agente IA por WhatsApp" (wa.me + mensaje predefinido), "Iniciar sesión con mi cuenta" (→ `/login`). Móvil-first y orientada a conversión; estética alineada con la plataforma.
+- **Login demo:** `/login?demo=1` prellena credenciales y muestra botón "Entrar a la demo"; al enviar se hace login y redirección al dashboard. Credenciales demo definidas en LoginView.tsx.
+- **Spec:** `docs/28_landing_demo_publica.spec.md`. Documentación: README (funcionalidad, estado actual, tabla docs), 01_architecture (rutas públicas, LandingView), 05_developer_notes (sección 23), 07_workflow_guide (ubicación doc), CONTEXTO_AGENTE_IA (rutas y índice).
+
+---
+
 *Documento generado según workflow Update Docs. Protocolo Non-Destructive Fusion.*

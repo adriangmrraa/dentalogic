@@ -68,6 +68,7 @@ git push origin feature/nueva-funcionalidad
 - **Prompt:** actualiza `docs/06_ai_prompt_template.md`
 - **Estado detallado (endpoints, frontend, BD):** actualiza `docs/AUDIT_ESTADO_PROYECTO.md`
 - **Idioma UI y agente:** actualiza `docs/25_idioma_plataforma_y_agente.spec.md`
+- **Landing / demo pública:** actualiza `docs/28_landing_demo_publica.spec.md`
 - **Contexto para otra IA:** actualiza `docs/CONTEXTO_AGENTE_IA.md` (punto de entrada para agentes en otra conversación)
 
 ---
