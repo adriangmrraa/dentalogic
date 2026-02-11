@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from '../context/LanguageContext';
 import api from '../api/axios';
 import { Lock, Mail, Shield, AlertCircle, CheckCircle } from 'lucide-react';
+
+const DEMO_EMAIL = 'gamarraadrian200@gmail.com';
+const DEMO_PASSWORD = 'Wstg1793.';
 
 const SPECIALTIES: { value: string; key: string }[] = [
   { value: 'Odontología General', key: 'specialty_general' },
@@ -44,6 +47,14 @@ const LoginView: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const from = location.state?.from?.pathname || "/";
+  const isDemo = new URLSearchParams(location.search).get('demo') === '1';
+
+  useEffect(() => {
+    if (isDemo) {
+      setEmail(DEMO_EMAIL);
+      setPassword(DEMO_PASSWORD);
+    }
+  }, [isDemo]);
 
   useEffect(() => {
     if (isRegistering) {
@@ -59,6 +70,21 @@ const LoginView: React.FC = () => {
     setLoading(true);
     try {
       const response = await api.post('/auth/login', { email, password });
+      login(response.data.access_token, response.data.user);
+      navigate(from, { replace: true });
+    } catch (err: any) {
+      setError(err.response?.data?.detail || t('login.login_error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDemoLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const response = await api.post('/auth/login', { email: DEMO_EMAIL, password: DEMO_PASSWORD });
       login(response.data.access_token, response.data.user);
       navigate(from, { replace: true });
     } catch (err: any) {
@@ -124,8 +150,19 @@ const LoginView: React.FC = () => {
           </div>
         )}
 
-        <form onSubmit={isRegistering ? handleRegister : handleLogin} className="auth-form">
-          {isRegistering && (
+        <form onSubmit={isRegistering ? handleRegister : isDemo ? handleDemoLogin : handleLogin} className="auth-form">
+          {isDemo && !isRegistering && (
+            <div className="input-group mb-6">
+              <p className="text-sm text-gray-300 mb-4">Cuenta demo lista. Un clic y entrás a la plataforma.</p>
+              <button type="submit" className="btn-primary auth-btn w-full" disabled={loading}>
+                {loading ? t('login.processing') : 'Entrar a la demo'}
+              </button>
+              <div className="mt-4 text-center">
+                <Link to="/login" className="text-sm text-cyan-300 hover:text-white">Iniciar sesión con mi cuenta</Link>
+              </div>
+            </div>
+          )}
+          {!isDemo && isRegistering && (
             <>
               <div className="input-group">
                 <label>{t('login.first_name')}</label>
@@ -153,6 +190,8 @@ const LoginView: React.FC = () => {
             </>
           )}
 
+          {!isDemo && (
+          <>
           <div className="input-group">
             <label>{t('login.email')}</label>
             <div className="input-wrapper">
@@ -206,7 +245,7 @@ const LoginView: React.FC = () => {
                 ))}
               </select>
               {clinics.length === 0 && (
-                <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginTop: '4px' }}>
+                <p className="text-sm mt-1.5 text-white/80">
                   {t('login.no_clinics')}
                 </p>
               )}
@@ -277,8 +316,11 @@ const LoginView: React.FC = () => {
           <button type="submit" className="btn-primary auth-btn" disabled={loading}>
             {loading ? t('login.processing') : (isRegistering ? t('login.submit_register') : t('login.submit_login'))}
           </button>
+          </>
+          )}
         </form>
 
+        {!isDemo && (
         <div className="auth-footer">
           <button
             type="button"
@@ -292,6 +334,7 @@ const LoginView: React.FC = () => {
             {isRegistering ? t('login.have_account') : t('login.request_access_link')}
           </button>
         </div>
+        )}
       </div>
 
       <style>{`
@@ -318,7 +361,7 @@ const LoginView: React.FC = () => {
           letter-spacing: -0.5px;
         }
         .login-header p {
-          color: var(--text-secondary);
+          color: rgba(255, 255, 255, 0.9);
           margin-bottom: 30px;
         }
         .logo-icon {
@@ -339,8 +382,9 @@ const LoginView: React.FC = () => {
         }
         .input-group label {
           display: block;
-          font-size: 0.85rem;
-          color: var(--text-secondary);
+          font-size: 0.9rem;
+          font-weight: 500;
+          color: rgba(255, 255, 255, 0.95);
           margin-bottom: 8px;
         }
         .input-wrapper {
@@ -416,7 +460,7 @@ const LoginView: React.FC = () => {
           color: white;
         }
         .required-dot {
-          color: rgba(255, 255, 255, 0.7);
+          color: rgba(255, 255, 255, 0.95);
         }
         @keyframes slideUp {
           from { opacity: 0; transform: translateY(20px); }

@@ -8,6 +8,7 @@ import ProfessionalAnalyticsView from './views/ProfessionalAnalyticsView';
 import ChatsView from './views/ChatsView';
 import TreatmentsView from './views/TreatmentsView';
 import LoginView from './views/LoginView';
+import LandingView from './views/LandingView';
 import UserApprovalView from './views/UserApprovalView';
 import ProfileView from './views/ProfileView';
 import ClinicsView from './views/ClinicsView';
@@ -23,6 +24,7 @@ function App() {
         <LanguageProvider>
         <Routes>
           <Route path="/login" element={<LoginView />} />
+          <Route path="/demo" element={<LandingView />} />
 
           <Route path="/*" element={
             <ProtectedRoute>
