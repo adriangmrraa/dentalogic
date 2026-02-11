@@ -1,7 +1,39 @@
-# API Reference - Dentalogic Admin
+# API Reference - Dentalogic
 
-## Autenticación
-Todas las rutas administrativas requieren el header `X-Admin-Token`.
+Referencia de los endpoints del **Orchestrator** (FastAPI). Base URL típica: `http://localhost:8000` en desarrollo o la URL del servicio en producción.
+
+---
+
+## Índice
+
+1. [Autenticación y headers](#autenticación-y-headers)
+2. [Auth (login, registro, perfil)](#auth-público-y-registro)
+3. [Configuración de clínica](#configuración-de-clínica-idioma-ui)
+4. [Usuarios y aprobaciones](#usuarios-y-aprobaciones)
+5. [Sedes (Tenants)](#sedes-tenants)
+6. [Pacientes](#pacientes)
+7. [Turnos (Appointments)](#turnos-appointments)
+8. [Chat (multi-tenant)](#chat-multi-tenant)
+9. [Profesionales](#profesionales)
+10. [Calendario y bloques](#calendario-y-bloques)
+11. [Tratamientos](#tratamientos-services)
+12. [Estadísticas y analíticas](#analítica-y-estadísticas)
+13. [Otros (health, chat IA)](#otros)
+
+---
+
+## Autenticación y headers
+
+Todas las rutas bajo **`/admin/*`** exigen:
+
+| Header | Obligatorio | Descripción |
+|--------|-------------|-------------|
+| **`Authorization`** | Sí | `Bearer <JWT>`. El JWT se obtiene con `POST /auth/login`. |
+| **`X-Admin-Token`** | Sí (si está configurado en servidor) | Token estático de infraestructura. El frontend lo inyecta desde `VITE_ADMIN_TOKEN`. Sin este header, el backend responde **401** aunque el JWT sea válido. |
+
+Rutas **públicas** (sin estos headers): `GET /auth/clinics`, `POST /auth/register`, `POST /auth/login`, `GET /health`.
+
+---
 
 ## Auth (público y registro)
 
@@ -33,6 +65,38 @@ Crea usuario con `status = 'pending'`. Para roles `professional` y `secretary` e
 
 El backend aplica fallbacks si la tabla `professionals` no tiene columnas `phone_number`, `specialty` o `updated_at` (parches 12d/12e en db.py).
 
+### Login
+`POST /auth/login`
+
+**Payload:** `email`, `password` (form/x-www-form-urlencoded o JSON).
+
+**Response (200):**
+```json
+{
+  "access_token": "<JWT>",
+  "token_type": "bearer",
+  "user": {
+    "id": 1,
+    "email": "user@clinica.com",
+    "role": "ceo",
+    "tenant_id": 1,
+    "allowed_tenant_ids": [1, 2]
+  }
+}
+```
+El frontend guarda `access_token` y lo envía en `Authorization: Bearer <JWT>` junto con `X-Admin-Token` en rutas `/admin/*`.
+
+### Usuario actual
+`GET /auth/me`
+
+Requiere `Authorization: Bearer <JWT>`. Devuelve el usuario autenticado (id, email, role, tenant_id, allowed_tenant_ids).
+
+### Perfil
+`GET /auth/profile` — Datos de perfil del usuario (incl. profesional si aplica).  
+`PATCH /auth/profile` — Actualizar perfil (campos permitidos según rol).
+
+---
+
 ## Configuración de clínica (idioma UI)
 
 ### Obtener configuración
@@ -50,31 +114,86 @@ Devuelve la configuración de la clínica del tenant resuelto del usuario (nombr
 
 Actualiza la configuración de la clínica. Solo se envían los campos a modificar.
 
+### Configuración de despliegue
+`GET /admin/config/deployment`
+
+Devuelve datos de configuración del despliegue (feature flags, URLs, etc.) para el frontend. Requiere autenticación admin.
+
 **Payload:**
 ```json
 { "ui_language": "en" }
 ```
 Valores permitidos: `"es"`, `"en"`, `"fr"`. Se persiste en `tenants.config.ui_language` del tenant resuelto.
 
+---
+
+## Usuarios y aprobaciones
+
+Todas las rutas requieren autenticación admin. Solo **CEO** puede aprobar/rechazar usuarios.
+
+### Usuarios pendientes
+`GET /admin/users/pending`
+
+Lista usuarios con `status = 'pending'` (registrados pero no aprobados). Útil para la vista de Aprobaciones.
+
+### Listar usuarios
+`GET /admin/users`
+
+Lista usuarios del sistema. Filtrado por tenant según rol (CEO ve todos los suyos; secretaria/profesional solo su tenant).
+
+### Cambiar estado de usuario
+`POST /admin/users/{user_id}/status`
+
+Aprueba o rechaza un usuario pendiente.
+
+**Payload:** `{ "status": "approved" }` o `{ "status": "rejected" }`.
+
+---
+
+## Sedes (Tenants)
+
+Solo **CEO** puede gestionar sedes. Requieren autenticación admin.
+
+### Listar sedes
+`GET /admin/tenants`
+
+Devuelve todas las clínicas/sedes del CEO.
+
+### Crear sede
+`POST /admin/tenants`
+
+**Payload:** Incluye `clinic_name`, `config` (JSON, ej. `calendar_provider`, `ui_language`), etc.
+
+### Actualizar sede
+`PUT /admin/tenants/{tenant_id}`
+
+Actualiza nombre y/o configuración de la sede.
+
+### Eliminar sede
+`DELETE /admin/tenants/{tenant_id}`
+
+Elimina la sede (restricciones de integridad según esquema).
+
+---
+
 ## Tratamientos (Services)
 
 ### Listar Tratamientos
 `GET /admin/treatment-types`
 
-Retorna todos los tipos de tratamiento configurados.
+Retorna todos los tipos de tratamiento configurados para el tenant. Aislado por `tenant_id`.
 
-**Response:**
-```json
-[
-  {
-    "code": "limpieza_profunda",
-    "name": "Limpieza Profunda",
-    "duration_minutes": 60,
-    "price": 5000,
-    "is_active": true
-  }
-]
-```
+**Response:** Lista de objetos con `code`, `name`, `description`, `default_duration_minutes`, `category`, `is_active`, etc.
+
+### Obtener por código
+`GET /admin/treatment-types/{code}`
+
+Devuelve un tipo de tratamiento por su `code`.
+
+### Duración por código
+`GET /admin/treatment-types/{code}/duration`
+
+Devuelve la duración en minutos del tratamiento (para agendar). Response: `{ "duration_minutes": 30 }`.
 
 ### Crear Tratamiento
 `POST /admin/treatment-types`
@@ -130,16 +249,14 @@ Devuelve las filas de `professionals` asociadas a ese `user_id`. Usado por el mo
 
 Crea o actualiza profesional (tenant_id, nombre, contacto, especialidad, matrícula, working_hours). El backend aplica fallbacks si faltan columnas `phone_number`, `specialty`, `updated_at` en la tabla `professionals`.
 
-### Sincronización Automática JIT
-`POST /admin/calendar/sync`
-
-Fuerza el mirroring entre Google Calendar y la base de datos local.
-- **Lógica**: Identifica bloqueos externos y los persiste como `google_calendar_blocks`.
-- **Automatización**: Invocado silenciosamente al montar la Agenda en el frontend.
-
 ### Bóveda de Credenciales (Internal)
 `GET /admin/internal/credentials/{name}`
-Obtiene credenciales internas (header `X-Internal-Token`).
+
+Obtiene credenciales internas. Requiere header **`X-Internal-Token`** (no JWT). Uso interno entre servicios.
+
+---
+
+## Calendario y bloques
 
 ### Connect Sovereign (Auth0 / Google Calendar)
 `POST /admin/calendar/connect-sovereign`
@@ -157,6 +274,18 @@ Guarda el token de Auth0 cifrado (Fernet) en la tabla `credentials` (category `g
 
 **Response:** `{ "status": "connected", "tenant_id": 1, "calendar_provider": "google" }`
 
+### Bloques de calendario
+`GET /admin/calendar/blocks` — Lista bloques (no disponibilidad) del tenant. Params: `professional_id`, fechas si aplica.  
+`POST /admin/calendar/blocks` — Crea bloque. Body: `google_event_id`, `title`, `description`, `start_datetime`, `end_datetime`, `all_day`, `professional_id`.  
+`DELETE /admin/calendar/blocks/{block_id}` — Elimina un bloque.
+
+### Sincronización (JIT)
+`POST /admin/calendar/sync` o `POST /admin/sync/calendar`
+
+Fuerza el mirroring entre Google Calendar y la BD local (bloqueos externos → `google_calendar_blocks`). Suele invocarse al cargar la Agenda.
+
+---
+
 ## Chat (multi-tenant)
 
 Las rutas de chat filtran por `tenant_id`; Human Override y ventana 24h son independientes por clínica.
@@ -171,16 +300,59 @@ Las rutas de chat filtran por `tenant_id`; Human Override y ventana 24h son inde
 
 ## Pacientes
 
+Todas las rutas de pacientes están aisladas por `tenant_id`.
+
+### Listar pacientes
+`GET /admin/patients`
+
+**Query params:** `limit`, `offset`, `search` (texto libre). Devuelve lista paginada de pacientes del tenant.
+
 ### Alta de Paciente
 `POST /admin/patients`
 
-Crea una ficha médica administrativamente. Incluye triaje inicial.
+Crea una ficha médica administrativamente. Incluye triaje inicial. Aislado por `tenant_id`.
 
-**Payload:**
-  "insurance_provider": "OSDE",
-  "urgency_level": "medium"
+**Payload (PatientCreate):**
+```json
+{
+  "first_name": "Juan",
+  "last_name": "Pérez",
+  "phone_number": "+5491112345678",
+  "email": "juan@mail.com",
+  "dni": "12345678",
+  "insurance": "OSDE"
 }
 ```
+Campos requeridos: `first_name`, `phone_number`. Opcionales: `last_name`, `email`, `dni`, `insurance`.
+
+### Obtener paciente por ID
+`GET /admin/patients/{id}`
+
+Devuelve la ficha del paciente (datos personales, contacto, obra social, etc.).
+
+### Actualizar paciente
+`PUT /admin/patients/{id}`
+
+Actualiza datos del paciente. Body: mismos campos que creación (parcial o completo según implementación).
+
+### Eliminar paciente
+`DELETE /admin/patients/{id}`
+
+Elimina el paciente del tenant (o soft-delete según esquema).
+
+### Historial clínico (records)
+`GET /admin/patients/{id}/records` — Lista notas/registros clínicos del paciente.  
+`POST /admin/patients/{id}/records` — Crea una nota clínica. Body: `content`, opcionalmente `odontogram_data`.
+
+### Búsqueda semántica
+`GET /admin/patients/search-semantic?q=<texto>`
+
+Búsqueda por texto sobre pacientes del tenant (nombre, teléfono, email, etc.).
+
+### Estado de obra social
+`GET /admin/patients/{patient_id}/insurance-status`
+
+Devuelve información de cobertura/obra social del paciente.
 
 ### Contexto Clínico del Paciente
 `GET /admin/patients/phone/{phone}/context`
@@ -208,6 +380,61 @@ Retorna información consolidada para la vista de chat (Última cita, próxima c
 }
 ```
 
+---
+
+## Turnos (Appointments)
+
+Todas las rutas de turnos están aisladas por `tenant_id`. La disponibilidad y reserva usan **calendario híbrido**: si `tenants.config.calendar_provider == 'google'` se usa Google Calendar; si `'local'`, solo BD local (`appointments` + bloques).
+
+### Listar turnos
+`GET /admin/appointments`
+
+**Query params:** `start_date`, `end_date` (ISO), `professional_id` (opcional). Devuelve turnos del tenant en el rango.
+
+### Verificar colisiones
+`GET /admin/appointments/check-collisions`
+
+Comprueba solapamientos antes de crear/editar. Params: `professional_id`, `start`, `end`, opcional `exclude_appointment_id`.
+
+### Crear turno
+`POST /admin/appointments`
+
+**Payload (AppointmentCreate):**
+```json
+{
+  "patient_id": 1,
+  "patient_phone": null,
+  "professional_id": 2,
+  "appointment_datetime": "2026-02-15T10:00:00",
+  "appointment_type": "checkup",
+  "notes": "Primera visita",
+  "check_collisions": true
+}
+```
+`patient_id` o `patient_phone` (para paciente rápido); `professional_id` y `appointment_datetime` obligatorios. `check_collisions` por defecto `true`.
+
+### Actualizar turno
+`PUT /admin/appointments/{id}`
+
+Actualiza fecha, profesional, tipo, notas, etc. Respeta calendario (Google o local) según tenant.
+
+### Cambiar estado
+`PATCH /admin/appointments/{id}/status` o `PUT /admin/appointments/{id}/status`
+
+Body: `{ "status": "confirmed" }` (o `cancelled`, `completed`, etc., según modelo).
+
+### Eliminar turno
+`DELETE /admin/appointments/{id}`
+
+Borra el turno; si hay evento en Google Calendar, se sincroniza la cancelación.
+
+### Próximos slots
+`GET /admin/appointments/next-slots`
+
+**Query params:** `professional_id`, `date` (opcional), `limit`. Devuelve los siguientes huecos disponibles para agendar (según calendario híbrido).
+
+---
+
 ## Analítica y Estadísticas
 
 ### Resumen de Estadísticas
@@ -231,6 +458,11 @@ Retorna métricas clave del sistema (IA, Ingresos, Urgencias).
 }
 ```
 
+### Resumen de profesionales (analytics)
+`GET /admin/analytics/professionals/summary`
+
+Métricas por profesional para el dashboard CEO (citas, ingresos, etc.). **Query params:** `start_date`, `end_date` (opcional; por defecto mes actual).
+
 ### Urgencias Recientes
 `GET /admin/chat/urgencies`
 
@@ -250,8 +482,39 @@ Lista los últimos casos de urgencia detectados por el sistema de triaje IA.
 ]
 ```
 
-## Parámetros Globales (Paginación)
-Todas las rutas administrativas soportan:
-- `limit`: Cantidad de registros (default: 50).
-- `offset`: Desplazamiento.
-- `search`: Filtro por texto libre.
+---
+
+## Otros
+
+### Health
+`GET /health`
+
+**Público.** Respuesta: `{ "status": "ok", "service": "dental-orchestrator" }`. Usado por orquestadores y monitoreo.
+
+### Chat (IA / WhatsApp)
+`POST /chat`
+
+Endpoint usado por el **WhatsApp Service** (y pruebas) para enviar mensajes al agente LangChain. Persiste historial en BD. No usa JWT ni X-Admin-Token; la seguridad se gestiona en el servicio que llama (webhook con secret, IP, etc.).
+
+**Payload:** Incluye identificador de conversación (ej. `phone`), `message`, y contexto de tenant/clínica según integración.
+
+---
+
+## Parámetros globales (paginación y filtros)
+
+En rutas de listado administrativas suelen soportarse:
+- **`limit`**: Cantidad de registros (default típico: 50).
+- **`offset`**: Desplazamiento para paginación.
+- **`search`**: Filtro por texto libre cuando aplique.
+
+---
+
+## Códigos de error habituales
+
+| Código | Significado |
+|--------|-------------|
+| **401** | No autenticado o token inválido. En `/admin/*` suele indicar JWT faltante/inválido o **falta de header `X-Admin-Token`**. |
+| **403** | Sin permiso para el recurso (ej. tenant no permitido para el usuario). |
+| **404** | Recurso no encontrado (paciente, turno, sede, etc.). |
+| **422** | Error de validación (body o query params incorrectos). |
+| **500** | Error interno del servidor. |

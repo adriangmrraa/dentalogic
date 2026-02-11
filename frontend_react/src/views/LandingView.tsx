@@ -38,7 +38,7 @@ export default function LandingView() {
               Probar app
             </Link>
             <p className="text-center text-xs text-gray-500 px-2">
-              Te logueamos automáticamente en la cuenta demo
+              Te logueamos automáticamente en la cuenta demo (sin exponer credenciales en la interfaz)
             </p>
           </div>
 
@@ -75,8 +75,8 @@ export default function LandingView() {
                   <ChevronDown size={18} className="shrink-0 transition-transform group-open:rotate-180 text-medical-600" />
                 </summary>
                 <div className="mt-2 pt-3 border-t border-gray-100 rounded-xl bg-gray-50/80 px-4 py-3 text-sm text-gray-700 font-mono">
-                  <p><span className="text-gray-500">Email:</span> gamarraadrian200@gmail.com</p>
-                  <p className="mt-1"><span className="text-gray-500">Contraseña:</span> Wstg1793.</p>
+                  <p><span className="text-gray-500">Email:</span> [REDACTED]</p>
+                  <p className="mt-1"><span className="text-gray-500">Contraseña:</span> [REDACTED]</p>
                 </div>
               </details>
             </div>

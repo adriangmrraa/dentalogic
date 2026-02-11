@@ -861,17 +861,17 @@ async def get_dashboard_stats(
             AND a.appointment_datetime >= CURRENT_DATE - INTERVAL '1 day' * $2
         """, tenant_id, days) or 0
 
-        # 5. Datos de crecimiento (Últimos N días)
-        growth_rows = await db.pool.fetch(f"""
+        # 5. Datos de crecimiento (Últimos N días) — parámetro $2 para evitar inyección
+        growth_rows = await db.pool.fetch("""
             SELECT 
                 DATE(appointment_datetime) as date,
                 COUNT(*) FILTER (WHERE source = 'ai') as ia_referrals,
                 COUNT(*) FILTER (WHERE status IN ('completed', 'attended')) as completed_appointments
             FROM appointments
-            WHERE tenant_id = $1 AND appointment_datetime >= CURRENT_DATE - INTERVAL '{days} days'
+            WHERE tenant_id = $1 AND appointment_datetime >= CURRENT_DATE - INTERVAL '1 day' * $2
             GROUP BY DATE(appointment_datetime)
             ORDER BY DATE(appointment_datetime) ASC
-        """, tenant_id)
+        """, tenant_id, days)
         
         growth_data = [
             {

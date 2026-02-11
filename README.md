@@ -222,6 +222,7 @@ graph TD
 | **Cambios recientes** | [cambios_recientes_2026-02-10.md](docs/cambios_recientes_2026-02-10.md) | Resumen de implementaciones y correcciones de la sesión 2026-02-10 (spec 26, disponibilidad, paciente+turno, docs). |
 | **Landing / Demo pública** | [28_landing_demo_publica.spec.md](docs/28_landing_demo_publica.spec.md) | Spec: página pública `/demo`, login demo `/login?demo=1`, Probar app / Probar Agente IA / Iniciar sesión; móvil y conversión. |
 | **Scroll Staff** | [27_staff_scroll_aislamiento.spec.md](docs/27_staff_scroll_aislamiento.spec.md) | Aislamiento de scroll en página Staff (Aprobaciones) para listas largas en desktop y móvil. |
+| **Seguridad (OWASP)** | [29_seguridad_owasp_auditoria.spec.md](docs/29_seguridad_owasp_auditoria.spec.md) | Auditoría según OWASP Top 10:2025; redacción de credenciales en UI demo ([REDACTED]); buenas prácticas SQL y auth. |
 
 ---
 
