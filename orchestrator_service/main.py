@@ -446,17 +446,17 @@ async def check_availability(date_query: str, professional_name: Optional[str] =
         if day_idx == 6:
             return f"Lo siento, el {date_query} es domingo y la clínica está cerrada. Atendemos Lunes a Sábados."
 
-        # 0. B) Obtener duración del tratamiento
-        duration = 30 # Default
+        # 0. B) Obtener duración del tratamiento (solo los cargados en Tratamientos)
+        duration = 30  # Default cuando no se especifica tratamiento
         if treatment_name:
             t_data = await db.pool.fetchrow("""
-                SELECT default_duration_minutes FROM treatment_types 
-                WHERE (name ILIKE $1 OR code ILIKE $1) AND is_available_for_booking = true
-                AND tenant_id = $2
+                SELECT default_duration_minutes FROM treatment_types
+                WHERE tenant_id = $1 AND (name ILIKE $2 OR code ILIKE $2) AND is_active = true AND is_available_for_booking = true
                 LIMIT 1
-            """, f"%{treatment_name}%", tenant_id)
-            if t_data:
-                duration = t_data['default_duration_minutes']
+            """, tenant_id, f"%{treatment_name}%")
+            if not t_data:
+                return "❌ Ese tratamiento no está en la lista de servicios de esta clínica. Los horarios solo se pueden consultar para tratamientos que devuelve 'list_services'. Llamá a list_services y usá solo uno de esos nombres para consultar disponibilidad."
+            duration = t_data['default_duration_minutes']
 
         # --- CEREBRO HÍBRIDO: google → gcal_service; local → solo tabla appointments ---
         calendar_provider = await get_tenant_calendar_provider(tenant_id)
@@ -643,11 +643,13 @@ async def book_appointment(date_time: str, treatment_reason: str,
 
         t_data = await db.pool.fetchrow("""
             SELECT code, default_duration_minutes FROM treatment_types
-            WHERE tenant_id = $1 AND (name ILIKE $2 OR code ILIKE $2) AND is_available_for_booking = true
+            WHERE tenant_id = $1 AND (name ILIKE $2 OR code ILIKE $2) AND is_active = true AND is_available_for_booking = true
             LIMIT 1
         """, tenant_id, f"%{treatment_reason}%")
-        duration = t_data["default_duration_minutes"] if t_data else 30
-        treatment_code = t_data["code"] if t_data else treatment_reason
+        if not t_data:
+            return "❌ Ese tratamiento no está disponible en esta clínica. Los únicos que se pueden agendar son los que devuelve la tool 'list_services'. Llamá a list_services y ofrecé solo esos al paciente; si pide otro, decile que en esta sede solo se agendan los de esa lista."
+        duration = t_data["default_duration_minutes"]
+        treatment_code = t_data["code"]
         end_apt = apt_datetime + timedelta(minutes=duration)
 
         # 2. Verificar/Crear paciente (aislado por tenant)
@@ -1220,11 +1222,12 @@ POLÍTICAS DURAS:
   - Usá 'derivhumano' INMEDIATAMENTE si: (a) URGENCIA crítica detectada por 'triage_urgency', (b) El paciente está frustrado o enojado, (c) Pide hablar con una persona.
   - CRÍTICO: Si decidís derivar, **DEBES USAR LA TOOL**.
 
-SERVICIOS (OBLIGATORIO DEFINIR UNO):
+SERVICIOS (OBLIGATORIO DEFINIR UNO — ESTRICTO):
+• TRATAMIENTOS SOLO LOS DE LA PLATAFORMA: Los únicos tratamientos que esta clínica ofrece para agendar son los que devuelve la tool 'list_services' (son los cargados en la sección Tratamientos de la plataforma). Está PROHIBIDO sugerir, ofrecer o mencionar ningún otro (ej. ortodoncia, implantes, blanqueamiento, endodoncia) a menos que figure en la respuesta de list_services. Si el paciente pide algo que no está en esa lista, decile que en esta sede solo se agendan los tratamientos que aparecen ahí y ofrecé llamar a list_services para mostrárselos.
 • Siempre se debe definir UN servicio/tratamiento antes de consultar disponibilidad o agendar. No agendes nunca sin motivo (tratamiento).
-• Si el paciente pregunta por disponibilidad o turnos sin decir el servicio, preguntale qué tratamiento o tipo de consulta necesita. Para saber qué tratamientos ofrecen, usá 'list_services' y ofrecé solo esos (nunca inventes).
+• Si el paciente pregunta por disponibilidad o turnos sin decir el servicio, preguntale qué tratamiento necesita. Para saber qué tratamientos ofrecen, usá 'list_services' y ofrecé ÚNICAMENTE esos (nunca inventes ni agregues otros).
 • Al hablar de servicios: solo mencioná tratamientos que devolvió 'list_services'. Si listás opciones, que sean únicamente las de la tool.
-• La duración del turno la define el servicio elegido: usá siempre 'check_availability' y 'book_appointment' con el nombre del tratamiento (ej. tal como figura en list_services) para que el sistema use la duración correcta.
+• La duración del turno la define el servicio elegido: usá siempre 'check_availability' y 'book_appointment' con el nombre del tratamiento tal como figura en list_services para que el sistema use la duración correcta.
 
 FLUJO DE AGENDAMIENTO (ORDEN ESTRICTO):
 1. SALUDO E IDENTIDAD: En el primer mensaje de la conversación, presentate como asistente de {clinic_name}.
