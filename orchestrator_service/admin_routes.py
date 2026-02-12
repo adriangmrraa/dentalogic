@@ -1654,7 +1654,7 @@ async def list_appointments(
 ):
     """Obtener turnos del calendario. Aislado por tenant_id (Regla de Oro)."""
     query = """
-        SELECT a.id, a.appointment_datetime, a.duration_minutes, a.status, a.urgency_level,
+        SELECT a.id, a.patient_id, a.appointment_datetime, a.duration_minutes, a.status, a.urgency_level,
                a.source, a.appointment_type, a.notes,
                (p.first_name || ' ' || COALESCE(p.last_name, '')) as patient_name, 
                p.phone_number as patient_phone,
