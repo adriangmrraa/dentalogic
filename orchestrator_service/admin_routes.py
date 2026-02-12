@@ -1888,14 +1888,14 @@ async def update_appointment_status(id: str, payload: StatusUpdate, request: Req
     return {"status": "updated", "appointment_id": str(id), "new_status": payload.status}
 
 @router.put("/appointments/{id}", dependencies=[Depends(verify_admin_token)], tags=["Turnos"])
-async def update_appointment(id: str, apt: AppointmentCreate, request: Request):
+async def update_appointment(id: str, apt: AppointmentCreate, request: Request, tenant_id: int = Depends(get_resolved_tenant_id)):
     """Actualizar datos de un turno (fecha, profesional, tipo, notas)."""
     try:
-        # 1. Obtener datos actuales
+        # 1. Obtener datos actuales (solo del tenant del usuario)
         old_apt = await db.pool.fetchrow("""
             SELECT id, professional_id, appointment_datetime, google_calendar_event_id, status
-            FROM appointments WHERE id = $1
-        """, id)
+            FROM appointments WHERE id = $1 AND tenant_id = $2
+        """, id, tenant_id)
         
         if not old_apt:
             raise HTTPException(status_code=404, detail="Turno no encontrado")
@@ -1909,12 +1909,13 @@ async def update_appointment(id: str, apt: AppointmentCreate, request: Request):
                 apt.professional_id,
                 apt.appointment_datetime.isoformat(),
                 60,
-                id # Excluir este mismo turno de la búsqueda de colisiones
+                id,  # Excluir este mismo turno de la búsqueda de colisiones
+                tenant_id=tenant_id,
             )
             if collision_response["has_collisions"]:
                 raise HTTPException(status_code=409, detail="Hay colisiones de horario en la nueva fecha/profesional")
 
-        # 3. Actualizar en Base de Datos
+        # 3. Actualizar en Base de Datos (solo si pertenece al tenant)
         await db.pool.execute("""
             UPDATE appointments SET 
                 patient_id = $1,
@@ -1923,8 +1924,8 @@ async def update_appointment(id: str, apt: AppointmentCreate, request: Request):
                 appointment_type = $4,
                 notes = $5,
                 updated_at = NOW()
-            WHERE id = $6
-        """, apt.patient_id, apt.professional_id, apt.appointment_datetime, apt.appointment_type, apt.notes, id)
+            WHERE id = $6 AND tenant_id = $7
+        """, apt.patient_id, apt.professional_id, apt.appointment_datetime, apt.appointment_type, apt.notes, id, tenant_id)
 
         # 4. Sincronizar con Google Calendar
         try:
