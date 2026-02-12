@@ -62,7 +62,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_SERVICE_URL", "http://orchestrator_service:8000")
 
 # Buffer y respuestas (Redis + ventana de acumulación)
-DEBOUNCE_SECONDS = int(os.getenv("WHATSAPP_DEBOUNCE_SECONDS", "16"))  # Ventana sin mensajes nuevos antes de procesar
+DEBOUNCE_SECONDS = int(os.getenv("WHATSAPP_DEBOUNCE_SECONDS", "11"))  # Ventana sin mensajes nuevos antes de procesar
 BUBBLE_DELAY_SECONDS = float(os.getenv("WHATSAPP_BUBBLE_DELAY_SECONDS", "4"))  # Delay entre cada burbuja de respuesta
 
 # Initialize structlog
