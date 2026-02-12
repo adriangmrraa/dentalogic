@@ -36,6 +36,7 @@ Cualquier criterio de aceptación o detalle técnico de los specs anteriores que
 
 ## Documentos de referencia principales
 
+- **Índice de toda la documentación:** [00_INDICE_DOCUMENTACION.md](00_INDICE_DOCUMENTACION.md) (lista de los 28 docs en `docs/`).
 - **Funcionalidad y uso:** `README.md`, `12_resumen_funcional_no_tecnico.md`
 - **Arquitectura y flujos:** `01_architecture.md`, `13_lead_patient_workflow.md`
 - **API:** `API_REFERENCE.md`, Swagger en `/docs` del Orchestrator

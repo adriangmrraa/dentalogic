@@ -268,6 +268,7 @@ docker-compose up -d --build
 
 | Document | Description |
 |----------|-------------|
+| [**00. Documentation index**](docs/00_INDICE_DOCUMENTACION.md) | Master index of all 28 docs in `docs/` with short descriptions. |
 | [**01. Architecture**](docs/01_architecture.md) | Microservices, Orchestrator, WhatsApp Service, hybrid calendar, Socket.IO. |
 | [**02. Environment variables**](docs/02_environment_variables.md) | OPENAI, YCloud, PostgreSQL, Redis, Google, CREDENTIALS_FERNET_KEY, etc. |
 | [**03. Deployment guide**](docs/03_deployment_guide.md) | EasyPanel, production configuration. |

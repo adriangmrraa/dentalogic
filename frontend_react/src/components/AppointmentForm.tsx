@@ -41,13 +41,20 @@ export default function AppointmentForm({
     const [error, setError] = useState<string | null>(null);
     const [collisionWarning, setCollisionWarning] = useState<string | null>(null);
 
+    // Format date for datetime-local input: local YYYY-MM-DDTHH:mm (avoid UTC display bug)
+    const toLocalDatetimeInput = (isoOrDate: string | Date): string => {
+        const d = new Date(isoOrDate);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
     // Initialize form data
     useEffect(() => {
         if (isOpen) {
             setFormData({
                 patient_id: initialData.patient_id?.toString() || '',
                 professional_id: initialData.professional_id?.toString() || (professionals.length > 0 ? professionals[0].id.toString() : ''),
-                appointment_datetime: initialData.appointment_datetime ? new Date(initialData.appointment_datetime).toISOString().slice(0, 16) : '',
+                appointment_datetime: initialData.appointment_datetime ? toLocalDatetimeInput(initialData.appointment_datetime) : '',
                 appointment_type: initialData.appointment_type || 'checkup',
                 notes: initialData.notes || '',
                 duration_minutes: initialData.duration_minutes || 30
@@ -102,7 +109,12 @@ export default function AppointmentForm({
 
         setLoading(true);
         try {
-            await onSubmit(formData);
+            // Send datetime as ISO so backend parses correctly (datetime-local gives local YYYY-MM-DDThh:mm)
+            const payload = {
+                ...formData,
+                appointment_datetime: new Date(formData.appointment_datetime).toISOString(),
+            };
+            await onSubmit(payload);
             onClose();
         } catch (err: any) {
             setError(err.response?.data?.message || 'Error al guardar');

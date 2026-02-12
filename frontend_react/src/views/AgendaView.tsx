@@ -706,6 +706,7 @@ export default function AgendaView() {
                 <FullCalendar
                   ref={calendarRef}
                   plugins={[dayGridPlugin, interactionPlugin, timeGridPlugin, resourceTimeGridPlugin, listPlugin]}
+                  schedulerLicenseKey="GPL-My-Project-Is-Open-Source"
                   initialView={currentView}
                   resources={resources}
                   editable={true}
@@ -731,6 +732,7 @@ export default function AgendaView() {
                     return selectInfo.start >= now;
                   }}
                   events={calendarEvents}
+                  datesSet={() => fetchData()}
                   dateClick={handleDateClick}
                   eventClick={handleEventClick}
                   slotEventOverlap={false}

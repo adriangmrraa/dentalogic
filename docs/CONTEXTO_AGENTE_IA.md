@@ -132,24 +132,40 @@ Todas las vistas anteriores usan `useTranslation()` y `t()` para respetar el sel
 
 ## 10. Documentación – Índice rápido
 
+**Índice maestro completo (28 docs en `docs/`):** [docs/00_INDICE_DOCUMENTACION.md](00_INDICE_DOCUMENTACION.md). Resumen a continuación.
+
 | Documento | Contenido |
 |-----------|-----------|
 | **AGENTS.md** (raíz) | Reglas de oro, soberanía, tools, Maintenance Robot, i18n. **Leer antes de modificar.** |
 | **README.md** | Visión general, para quién es, funcionalidades, multi-sede, idiomas, guía rápida, enlaces a docs. |
-| **docs/01_architecture.md** | Diagrama, microservicios, base de datos, seguridad, flujo urgencia. |
+| **docs/00_INDICE_DOCUMENTACION.md** | Índice de todos los documentos de `docs/` con descripción por archivo. |
+| **docs/01_architecture.md** | Diagrama, microservicios, base de datos, seguridad, flujo urgencia, calendario híbrido. |
 | **docs/02_environment_variables.md** | Variables de entorno por servicio. |
 | **docs/03_deployment_guide.md** | Despliegue (EasyPanel, etc.). |
 | **docs/04_agent_logic_and_persona.md** | Persona del agente, reglas de conversación, flujo de datos (servicio, profesional, disponibilidad, agendar). |
-| **docs/01_architecture.md**, **docs/08_troubleshooting_history.md** | Calendario local vs Google por clínica, `google_calendar_id` por profesional; troubleshooting "IA no ve disponibilidad". |
-| **docs/audit_26_calendario_hibrido_2026-02-10.md** | Auditoría spec 26 (match código vs spec). |
 | **docs/05_developer_notes.md** | Cómo añadir tools, paginación, debugging, Maintenance Robot, i18n, agenda móvil, analytics. |
+| **docs/06_ai_prompt_template.md** | Plantilla de prompt para el agente IA. |
 | **docs/07_workflow_guide.md** | Ciclo de tareas, Git, documentación, troubleshooting, comunicación entre servicios. |
-| **README (Idiomas)**, **docs/SPECS_IMPLEMENTADOS_INDICE.md** | Idioma UI (es/en/fr) + agente; i18n por vista. |
-| **AGENTS.md** (Aislamiento de Scroll) | Aislamiento de scroll en página Staff (Aprobaciones). |
-| **README (Landing)**, **docs/SPECS_IMPLEMENTADOS_INDICE.md** | Landing pública `/demo`, login demo, CTAs Probar app / Probar Agente IA / Iniciar sesión. |
-| **docs/AUDIT_ESTADO_PROYECTO.md** | Estado detallado: endpoints por módulo, rutas frontend, estado por página, specs vs código, correcciones recientes. |
-| **docs/API_REFERENCE.md** | Contratos de API administrativa. |
-| **docs/PROMPT_CONTEXTO_IA_COMPLETO.md** | Prompt listo para copiar/pegar en otra conversación: reglas, workflows, skills, checklist. |
+| **docs/08_troubleshooting_history.md** | Histórico de problemas y soluciones; calendario e IA "no ve disponibilidad". |
+| **docs/09_fase1_dental_datos_especificacion.md** | Fase 1 evolución de datos: especificación técnica, tablas, estado de implementación. |
+| **docs/11_gap_analysis_nexus_to_dental.md** | Análisis de gaps: implementación vs requerimientos finales. |
+| **docs/12_resumen_funcional_no_tecnico.md** | Resumen funcional en lenguaje no técnico. |
+| **docs/13_lead_patient_workflow.md** | Flujo lead → paciente: conversión de contactos a pacientes activos. |
+| **docs/29_seguridad_owasp_auditoria.md** | Auditoría OWASP Top 10:2025; JWT, X-Admin-Token, credenciales. |
+| **docs/30_audit_api_contrato_2026-02-09.md** | Auditoría contrato API: OpenAPI vs endpoints reales. |
+| **docs/31_audit_documentacion_2026-02-09.md** | Auditoría documentación: alineación SaaS, referencias a specs. |
+| **docs/API_REFERENCE.md** | Referencia completa de la API administrativa; Swagger/ReDoc. |
+| **docs/audit_26_calendario_hibrido_2026-02-10.md** | Auditoría spec 26 (match código vs spec). |
+| **docs/AUDIT_ESTADO_COMPLETO_POR_PAGINA.md** | Auditoría estado completo por página del frontend. |
+| **docs/AUDIT_ESTADO_PROYECTO.md** | Estado detallado: endpoints por módulo, rutas frontend, specs vs código. |
+| **docs/cambios_recientes_2026-02-10.md** | Resumen de cambios recientes (spec 26, disponibilidad, landing, docs). |
+| **docs/Instrucciones para IA.md** | Instrucciones para una IA que trabaje en el proyecto. |
+| **docs/MATRIZ_DECISION_SKILLS.md** | Matriz de decisión para elegir skills según tipo de tarea. |
+| **docs/mision_maestra_agenda.md** | Misión maestra de la agenda: objetivos y criterios. |
+| **docs/PROMPT_CONTEXTO_IA_COMPLETO.md** | Prompt listo para copiar/pegar: reglas, workflows, skills, checklist. |
+| **docs/PROTOCOLO_AUTONOMIA_SDD.md** | Protocolo autonomía SDD v2.0; criterios de detención. |
+| **docs/riesgos_entendimiento_agente_agendar.md** | Riesgos de entendimiento del agente al agendar; mitigaciones. |
+| **docs/SPECS_IMPLEMENTADOS_INDICE.md** | Índice de especificaciones implementadas; consolidación de specs. |
 
 ---
 
