@@ -4,6 +4,20 @@
 
 ---
 
+## Prompt para comenzar un nuevo chat
+
+**Qué hacer:** Abrí un **chat nuevo** con tu agente de IA de código (Cursor, Claude, etc.). En el **primer mensaje**, pegá **todo el bloque** que está más abajo (entre "Bloque para copiar y pegar (inicio)" y "Bloque para copiar y pegar (fin)").
+
+**Prompt corto alternativo** (si solo querés indicar el contexto en una línea):
+
+```
+Trabajo en el proyecto Dentalogic (clínica dental multi-tenant + agente WhatsApp). Lee AGENTS.md y docs/CONTEXTO_AGENTE_IA.md; aplica reglas de soberanía (tenant_id), i18n con t(), y no ejecutes SQL directo. Para flujos completos usa .agent/workflows/ (autonomy, specify, bug_fix, update-docs).
+```
+
+Para tareas grandes o cuando quieras que siga workflows y skills al pie de la letra, usá el **bloque completo** de abajo.
+
+---
+
 ## Bloque para copiar y pegar (inicio)
 
 ```
@@ -93,4 +107,4 @@ Cuando el usuario te pida un fix o cambio concreto, aplica estas reglas y, si co
 - Para tareas muy acotadas (ej. "traduce este botón") a veces basta con recordar: "En este proyecto usamos i18n con useTranslation() y t(); añade la clave en es, en y fr."
 - Para tareas grandes (nueva feature, refactor) es mejor pedir explícitamente: "Ejecuta el workflow /specify para esta idea" o "Sigue /autonomy para este objetivo."
 
-*Última actualización del prompt: 2026-02-08*
+*Última actualización del prompt: 2026-02-09 (prompt para nuevo chat, alternativa corta)*

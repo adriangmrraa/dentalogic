@@ -2,7 +2,9 @@
 
 **Propósito:** Este documento permite que otra IA (en otra conversación) tome contexto completo del proyecto Dentalogic: qué es, cómo está construido, cómo trabajar en él y dónde está cada cosa. Úsalo como punto de entrada único antes de tocar código.
 
-**Última actualización:** 2026-02 (landing demo, formato canónico agente, scroll Staff, notificación derivación)
+**Para comenzar una nueva conversación con una IA de código (ej. Cursor):** Usá el **prompt listo para copiar/pegar** en [docs/PROMPT_CONTEXTO_IA_COMPLETO.md](PROMPT_CONTEXTO_IA_COMPLETO.md). Copiá el bloque de ese archivo y pegarlo como **primer mensaje** del chat nuevo; así la IA carga reglas, workflows y checklist desde el inicio.
+
+**Última actualización:** 2026-02 (landing demo, agente tratamientos estrictos, agenda fixes, patient_id en turnos, buffer WhatsApp 11s, prompt nuevo chat)
 
 ---
 

@@ -44,6 +44,7 @@ Este documento lista **todos** los archivos de la carpeta `docs/` con una breve 
 | [PROTOCOLO_AUTONOMIA_SDD.md](PROTOCOLO_AUTONOMIA_SDD.md) | Protocolo de autonomía SDD v2.0: ciclo de retroalimentación, criterios de detención, soberanía de datos. |
 | [riesgos_entendimiento_agente_agendar.md](riesgos_entendimiento_agente_agendar.md) | Riesgos de entendimiento del agente al agendar: análisis y mitigaciones. |
 | [SPECS_IMPLEMENTADOS_INDICE.md](SPECS_IMPLEMENTADOS_INDICE.md) | Índice de especificaciones implementadas: consolidación de .spec.md retirados; dónde está documentada cada funcionalidad. |
+| [TRANSFORMACION_AGNOSTICA_NICHO.md](TRANSFORMACION_AGNOSTICA_NICHO.md) | Transformación a plataforma agnóstica de nicho: base reutilizable, qué cambia por nicho, ejemplo CRM vendedores/setters, 10 prompts clave para empezar; para arrancar conversación con agente de código (leer con CONTEXTO_AGENTE_IA y PROMPT_CONTEXTO_IA_COMPLETO). |
 
 ---
 
@@ -58,7 +59,7 @@ Este documento lista **todos** los archivos de la carpeta `docs/` con una breve 
 
 ## Total
 
-- **En `docs/`:** 28 archivos Markdown (15 numerados 01–31, 13 por nombre).
+- **En `docs/`:** 29 archivos Markdown (15 numerados 01–31, 14 por nombre).
 - **En raíz:** AGENTS.md, README.md.
 
 Para una lista detallada de endpoints y contratos API, usar [API_REFERENCE.md](API_REFERENCE.md) y Swagger en `http://localhost:8000/docs`.
