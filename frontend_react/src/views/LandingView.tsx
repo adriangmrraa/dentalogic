@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, MessageCircle, LogIn, Sparkles, Calendar, BarChart3, Zap, ChevronDown } from 'lucide-react';
 
-const WHATSAPP_NUMBER = '5493435256815';
+const WHATSAPP_NUMBER = '5491162793009';
 const WHATSAPP_PREDEFINED_MESSAGE = 'Hola, quisiera consultar por turnos para limpieza dental.';
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(WHATSAPP_PREDEFINED_MESSAGE)}`;
 

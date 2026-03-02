@@ -1444,12 +1444,12 @@ async def chat_endpoint(req: ChatRequest):
     # Buscamos el tenant_id basándonos en el número al que escribieron (to_number)
     # Si no viene to_number (ej: pruebas manuales), usamos el BOT_PHONE_NUMBER de ENV como fallback
     bot_number = req.to_number or os.getenv("BOT_PHONE_NUMBER") or "5491100000000"
-    # Normalizar: quitar todo lo que no sea dígito para comparar con BD (ej. 5493435256815 vs +5493435256815)
+    # Normalizar: quitar todo lo que no sea dígito para comparar con BD (ej. 5491162793009 vs +5491162793009)
     bot_number_clean = re.sub(r"\D", "", bot_number) if bot_number else ""
 
     tenant = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number = $1", bot_number)
     if not tenant and bot_number_clean:
-        # Intentar match solo por dígitos (ej. 5493435256815 vs +5493435256815)
+        # Intentar match solo por dígitos (ej. 5491162793009 vs +5491162793009)
         tenant = await db.pool.fetchrow(
             "SELECT id FROM tenants WHERE REGEXP_REPLACE(bot_phone_number, '[^0-9]', '', 'g') = $1",
             bot_number_clean,
