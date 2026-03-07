@@ -21,6 +21,7 @@ Este documento lista **todos** los archivos de la carpeta `docs/` con una breve 
 | 11 | [11_gap_analysis_nexus_to_dental.md](11_gap_analysis_nexus_to_dental.md) | Análisis de gaps: estado de implementación vs requerimientos finales. |
 | 12 | [12_resumen_funcional_no_tecnico.md](12_resumen_funcional_no_tecnico.md) | Resumen funcional en lenguaje no técnico: qué hace la plataforma, cerebro, dashboard, trabajo en equipo, registro y aprobación, control humano. |
 | 13 | [13_lead_patient_workflow.md](13_lead_patient_workflow.md) | Flujo lead → paciente: protocolo de conversión de contactos a pacientes activos. |
+| 14 | [WHATSAPP_INTEGRATION_DEEP_DIVE.md](WHATSAPP_INTEGRATION_DEEP_DIVE.md) | **NUEVO** - Análisis exhaustivo de la integración con WhatsApp: arquitectura, flujos, buffer/debounce, transcripción, configuración, troubleshooting (Marzo 2026). |
 | 29 | [29_seguridad_owasp_auditoria.md](29_seguridad_owasp_auditoria.md) | Auditoría de seguridad OWASP Top 10:2025; cómo gestiona el backend la seguridad; JWT + X-Admin-Token; redacción de credenciales en demo. |
 | 30 | [30_audit_api_contrato_2026-02-09.md](30_audit_api_contrato_2026-02-09.md) | Auditoría del contrato API: verificación de que OpenAPI y documentación coinciden con los endpoints reales. |
 | 31 | [31_audit_documentacion_2026-02-09.md](31_audit_documentacion_2026-02-09.md) | Auditoría de documentación: alineación con la plataforma SaaS; corrección de referencias a specs consolidados. |
@@ -45,6 +46,7 @@ Este documento lista **todos** los archivos de la carpeta `docs/` con una breve 
 | [riesgos_entendimiento_agente_agendar.md](riesgos_entendimiento_agente_agendar.md) | Riesgos de entendimiento del agente al agendar: análisis y mitigaciones. |
 | [SPECS_IMPLEMENTADOS_INDICE.md](SPECS_IMPLEMENTADOS_INDICE.md) | Índice de especificaciones implementadas: consolidación de .spec.md retirados; dónde está documentada cada funcionalidad. |
 | [TRANSFORMACION_AGNOSTICA_NICHO.md](TRANSFORMACION_AGNOSTICA_NICHO.md) | Transformación a plataforma agnóstica de nicho: base reutilizable, qué cambia por nicho, ejemplo CRM vendedores/setters, 10 prompts clave para empezar; para arrancar conversación con agente de código (leer con CONTEXTO_AGENTE_IA y PROMPT_CONTEXTO_IA_COMPLETO). |
+| [WHATSAPP_INTEGRATION_DEEP_DIVE.md](WHATSAPP_INTEGRATION_DEEP_DIVE.md) | **NUEVO** - Análisis exhaustivo de la integración con WhatsApp: arquitectura, flujos, buffer/debounce, transcripción, configuración, troubleshooting (Marzo 2026). |
 
 ---
 
