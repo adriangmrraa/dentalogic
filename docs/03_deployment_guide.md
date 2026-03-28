@@ -99,7 +99,40 @@ https://wa.tudominio.com/webhook
 
 **Nota:** El Orchestrator ejecuta migraciones de BD automáticamente en startup (via lifespan event).
 
-### 2.3 Frontend React (Puerto 80) - PÚBLICO
+**Variables de entorno requeridas del Orchestrator (lista completa):**
+```
+# Infraestructura (OBLIGATORIAS)
+POSTGRES_DSN=postgresql+asyncpg://postgres:PASS@dentalogic_postgres:5432/postgres?sslmode=disable
+REDIS_URL=redis://default:PASS@dentalogic_redis:6379
+ADMIN_TOKEN=...                    # Debe coincidir con VITE_ADMIN_TOKEN
+INTERNAL_SECRET_KEY=...            # Firma JWT - NUNCA cambiar post-deploy
+INTERNAL_API_TOKEN=...             # Token M2M entre servicios
+OPENAI_API_KEY=sk-proj-...
+CORS_ORIGINS=https://dentalogic-frontend.ugwrjq.easypanel.host
+PLATFORM_URL=https://dentalogic-frontend.ugwrjq.easypanel.host
+LOG_LEVEL=info
+
+# WhatsApp
+YCLOUD_API_KEY=...
+YCLOUD_WEBHOOK_SECRET=...
+
+# Bridge (si se usa CRM VENTAS)
+BRIDGE_API_TOKEN=...
+CRM_VENTAS_BRIDGE_URL=...
+
+# SMTP (si handoff activo)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=...
+SMTP_PASS=...
+HANDOFF_EMAIL=...
+
+# Meta/Google Ads (si se usan)
+FACEBOOK_APP_ID=...
+FACEBOOK_APP_SECRET=...
+```
+
+### 2.3 Frontend React (Puerto 80) - PUBLICO
 
 ```
 1. Add Service → Docker
@@ -108,50 +141,82 @@ https://wa.tudominio.com/webhook
 4. Puerto: 80
 5. Dominio: admin.tudominio.com (HTTPS)
 6. Healthcheck: (la UI es React, puede no tener endpoint /health)
-7. Variables de Entorno:
-   - ADMIN_TOKEN=... (copia el mismo del Orchestrator)
+7. Variables de Entorno (BUILD ARGS - se inyectan en build-time):
+   - VITE_API_URL=https://dentalogic-orchestrator.ugwrjq.easypanel.host
+   - VITE_WS_URL=wss://dentalogic-orchestrator.ugwrjq.easypanel.host
+   - VITE_ADMIN_TOKEN=... (DEBE coincidir con ADMIN_TOKEN del Orchestrator)
+   - VITE_APP_NAME=Dentalogic
+   - NODE_ENV=production
+   - VITE_DEMO_WHATSAPP=5493435256815 (opcional, para landing de demo)
+   - VITE_FACEBOOK_APP_ID=... (solo si se usa Meta)
+   - VITE_META_CONFIG_ID=... (solo si se usa Meta Embedded Signup)
+   - VITE_DEFAULT_TENANT_ID=1 (opcional)
    - ORCHESTRATOR_URL=http://orchestrator_service:8000 (o deja en blanco para auto-detectar)
 8. Deploy
 ```
+
+**IMPORTANTE - Build Args:** Las variables `VITE_*` son inyectadas en build-time por Vite y quedan embebidas en el bundle estático de JavaScript. Cualquier cambio en estas variables requiere un **re-build y re-deploy** del frontend. No basta con cambiar la variable en EasyPanel; hay que forzar un nuevo build.
 
 **Auto-detección de URL:**
 Si no especificas `ORCHESTRATOR_URL`, el Frontend React lo detecta automáticamente:
 - `localhost` → `http://localhost:8000`
 - `frontend-react.domain.com` → `orchestrator-service.domain.com`
 
-## 3. Mapeo de Puertos y Networking
+## 3. Docker Services y Mapeo de Puertos
 
-| Servicio | Puerto Interno | Exposición Pública | URL |
-| :--- | :--- | :--- | :--- |
-| whatsapp_service | 8002 | ✅ SÍ | `https://wa.tudominio.com` |
-| orchestrator_service | 8000 | ❌ NO (interno) | `http://orchestrator_service:8000` (red interna) |
-| frontend_react | 80 | ✅ SÍ | `https://admin.tudominio.com` |
-| postgres | 5432 | ❌ NO (solo desde servicios) | `postgres://...@postgres:5432` |
-| redis | 6379 | ❌ NO (solo desde servicios) | `redis://redis:6379` |
+El proyecto consta de 5 servicios Docker que se comunican por red interna de EasyPanel:
+
+| Servicio | Puerto Interno | Exposición Pública | URL | Descripción |
+| :--- | :--- | :--- | :--- | :--- |
+| orchestrator | 8000 | ❌ NO (interno) | `http://orchestrator_service:8000` (red interna) | Backend FastAPI - API REST, WebSocket, agente IA |
+| frontend | 80 (nginx) | ✅ SÍ | `https://admin.tudominio.com` | React SPA servida por nginx |
+| whatsapp_service | 8002 | ✅ SÍ | `https://wa.tudominio.com` | Webhook receiver para YCloud |
+| postgres | 5432 | ❌ NO (solo desde servicios) | `postgres://...@dentalogic_postgres:5432` | Base de datos principal |
+| redis | 6379 | ❌ NO (solo desde servicios) | `redis://dentalogic_redis:6379` | Cache, sessions, deduplicación |
 
 ## 4. Pasos Críticos Post-Deploy
 
-### 4.1 Migraciones de Base de Datos
+### 4.1 Sistema de Auto-Migración (db.py)
 
-El `orchestrator_service` ejecuta migraciones automáticamente en startup:
+El `orchestrator_service` ejecuta migraciones automáticamente en cada startup, sin intervención manual. El sistema tiene dos fases:
+
+**Fase 1 - Schema base:**
 ```python
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Conecta a DB
     await db.connect()
-    
+
     # Ejecuta schema (dentalogic_schema.sql)
     # El sistema usa un Smart Splitter para ejecutar cada sentencia individualmente
     # garantizando compatibilidad con funciones PL/pgSQL complejas.
     await sync_environment()
 ```
 
+**Fase 2 - Patches acumulativos (`_run_auto_migrations` en `db.py`):**
+
+Tras ejecutar el schema base, el sistema ejecuta una lista ordenada de **patches** SQL idempotentes (bloques `DO $$`). Cada patch se ejecuta dentro de una transacción y agrega columnas, tablas o constraints que evolucionan el esquema sin destruir datos existentes.
+
+```
+db.connect()
+  └── _run_auto_migrations()
+        ├── Schema base (dentalogic_schema.sql) → CREATE TABLE IF NOT EXISTS ...
+        └── Patches[] → DO $$ bloques idempotentes ejecutados en orden
+              ├── Patch 1: tabla users, columna user_id en professionals
+              ├── Patch 2: ...
+              └── Patch N: ...
+```
+
+**Agregar un nuevo patch:** Editar `orchestrator_service/db.py`, buscar la lista `patches = [...]` dentro de `_run_auto_migrations()`, y agregar un nuevo bloque `DO $$` al final de la lista. Los patches deben ser **idempotentes** (usar `IF NOT EXISTS`, `IF EXISTS`, etc.).
+
 **Si la BD es nueva:**
-- Se crean tablas desde `dentalogic_schema.sql` (ejecutar manualmente)
+- Se crean tablas desde `dentalogic_schema.sql` automaticamente
+- Los patches se ejecutan y completan la estructura
 - Se crea un "default tenant" usando las variables de entorno
 
 **Si ya existe:**
 - Las migraciones son idempotentes (CREATE TABLE IF NOT EXISTS)
+- Los patches solo agregan lo que falta, nunca destruyen datos
 - No sobreescriben datos existentes (por defecto)
 
 **Para resetear BD (en desarrollo):**
@@ -399,7 +464,109 @@ Orchestrator Service:
   - RAM trigger: 80%
 ```
 
-## 10. Despliegue Alternativo: Docker Compose (Desarrollo)
+## 10. Checklist Post-Deploy
+
+Despues de cada deploy, verificar los siguientes puntos para asegurarse de que todo funciona correctamente:
+
+### 10.1 Verificar Login
+
+```
+1. Abrir https://admin.tudominio.com
+2. Hacer login con usuario existente
+3. Verificar que el dashboard carga sin errores 401
+4. Si falla: revisar que INTERNAL_SECRET_KEY no haya cambiado entre deploys
+5. Si es primer deploy: crear usuario via POST /admin/auth/register
+```
+
+### 10.2 Verificar WhatsApp
+
+```
+1. Enviar mensaje de prueba al número del bot
+2. Verificar en logs del orchestrator que llega el webhook
+3. Verificar que el bot responde en <30s
+4. Si no responde: revisar YCLOUD_API_KEY, YCLOUD_WEBHOOK_SECRET, ORCHESTRATOR_SERVICE_URL
+5. Verificar deduplicación: enviar el mismo mensaje 2 veces rápido, debe responder solo 1 vez
+```
+
+### 10.3 Verificar Socket.io (Notificaciones Real-Time)
+
+```
+1. Abrir el dashboard en el navegador
+2. Abrir DevTools → Network → WS
+3. Verificar que hay conexión WebSocket activa a wss://orchestrator...
+4. Enviar un mensaje de WhatsApp y verificar que aparece en tiempo real en el chat del panel
+5. Si falla: revisar VITE_WS_URL, CORS_ORIGINS, y que el orchestrator expone /socket.io/
+```
+
+### 10.4 Verificar Agenda
+
+```
+1. Ir a la sección Agenda en el panel
+2. Verificar que carga la lista de profesionales
+3. Crear un turno de prueba
+4. Si se usa Google Calendar: verificar que el evento aparece en GCal
+5. Cancelar el turno de prueba y verificar que se actualiza
+```
+
+### 10.5 Checklist Rápido (Copiar y Pegar)
+
+```
+- [ ] Frontend carga sin errores en consola
+- [ ] Login funciona (no hay 401 / Signature expired)
+- [ ] Dashboard muestra datos del tenant correcto
+- [ ] WhatsApp: bot responde a mensaje de prueba
+- [ ] Socket.io: conexión WS activa en DevTools
+- [ ] Socket.io: mensajes aparecen en real-time en el panel
+- [ ] Agenda: lista de profesionales carga
+- [ ] Agenda: se puede crear y cancelar un turno
+- [ ] Logs del orchestrator no muestran errores CRITICAL
+- [ ] Health endpoints responden 200: /health en orchestrator y whatsapp_service
+```
+
+## 11. EasyPanel: Resumen de Pasos de Despliegue (Setup Actual)
+
+Referencia rápida para desplegar desde cero en EasyPanel:
+
+```
+1. Crear proyecto en EasyPanel Dashboard → New Project
+
+2. Add-ons de infraestructura:
+   a. PostgreSQL (v13+) → copiar DSN → POSTGRES_DSN
+   b. Redis (Alpine) → copiar URL → REDIS_URL
+
+3. Servicio: orchestrator-service
+   - Source: GitHub repo
+   - Dockerfile: orchestrator_service/Dockerfile
+   - Puerto: 8000
+   - Dominio: (interno, o exponer si se necesita acceso directo)
+   - Env vars: ver sección 2.2 de esta guía (lista completa arriba)
+   - Deploy
+
+4. Servicio: whatsapp-service
+   - Source: GitHub repo
+   - Dockerfile: whatsapp_service/Dockerfile
+   - Puerto: 8002
+   - Dominio: wa.tudominio.com (HTTPS via Let's Encrypt)
+   - Env vars: YCLOUD_API_KEY, YCLOUD_WEBHOOK_SECRET, ORCHESTRATOR_SERVICE_URL, INTERNAL_API_TOKEN, REDIS_URL
+   - Deploy
+
+5. Servicio: frontend-react
+   - Source: GitHub repo
+   - Dockerfile: frontend_react/Dockerfile
+   - Puerto: 80
+   - Dominio: admin.tudominio.com (HTTPS)
+   - Build args: VITE_API_URL, VITE_WS_URL, VITE_ADMIN_TOKEN, NODE_ENV=production, etc.
+   - Deploy
+   ** IMPORTANTE: las VITE_* son build args, cambiarlas requiere re-build **
+
+6. Configurar webhook en YCloud:
+   - URL: https://wa.tudominio.com/webhook/ycloud
+   - Secret: mismo valor que YCLOUD_WEBHOOK_SECRET
+
+7. Ejecutar checklist post-deploy (sección 10)
+```
+
+## 12. Despliegue Alternativo: Docker Compose (Desarrollo)
 
 Para desarrollo local:
 
@@ -430,4 +597,4 @@ docker-compose up --build
 
 ---
 
-*Guía de Despliegue Nexus v3 © 2025*
+*Guía de Despliegue Dentalogic v3 © 2025-2026*

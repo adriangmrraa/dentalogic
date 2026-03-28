@@ -526,6 +526,114 @@ En rutas de listado administrativas suelen soportarse:
 
 ---
 
+## Demo Tracking (sesiones y leads)
+
+Endpoints para el seguimiento de sesiones de demostración y captación de leads.
+
+### Iniciar sesión de tracking
+`POST /tracking/session`
+
+Crea una nueva sesión de seguimiento para un visitante de la demo.
+
+**Payload:**
+```json
+{
+  "visitor_id": "uuid-or-fingerprint",
+  "source": "landing_page",
+  "metadata": {}
+}
+```
+
+**Response (201):**
+```json
+{
+  "session_id": "uuid",
+  "created_at": "2026-03-28T10:00:00Z"
+}
+```
+
+### Registrar evento de tracking
+`POST /tracking/event`
+
+Registra un evento dentro de una sesión de demo (clic, navegación, interacción, etc.).
+
+**Payload:**
+```json
+{
+  "session_id": "uuid",
+  "event_type": "button_click",
+  "event_data": {}
+}
+```
+
+### Listar demo leads (SuperAdmin/CEO)
+`GET /tracking/superadmin/leads`
+
+Devuelve la lista de leads captados desde las demos. Requiere rol **superadmin** o **ceo**.
+
+**Query params:** `limit`, `offset`, `status` (opcional).
+
+### Timeline de eventos de un lead
+`GET /tracking/superadmin/leads/:id/events`
+
+Devuelve la línea de tiempo completa de eventos asociados a un lead. Requiere rol **superadmin** o **ceo**.
+
+**Response:** Lista ordenada cronológicamente de eventos (`event_type`, `event_data`, `timestamp`).
+
+---
+
+## Bridge API (CRM VENTAS)
+
+Endpoints de integración (bridge) para conectar con el sistema CRM VENTAS externo. Usan autenticación por token dedicado.
+
+### Autenticación Bridge
+
+| Header | Obligatorio | Descripción |
+|--------|-------------|-------------|
+| **`X-Bridge-Token`** | Si | Token dedicado para la integración bridge. Se configura en el entorno del Orchestrator. Sin este header, el backend responde **401**. |
+
+> **Nota:** Los endpoints bridge NO usan JWT ni X-Admin-Token. La autenticación se realiza exclusivamente mediante `X-Bridge-Token`.
+
+### Listar leads para CRM
+`GET /api/bridge/v1/leads`
+
+Devuelve leads pendientes de sincronización o todos los leads según filtros, para consumo del CRM VENTAS.
+
+**Query params:** `status`, `since` (ISO datetime), `limit`, `offset`.
+
+**Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "name": "Juan Pérez",
+    "email": "juan@mail.com",
+    "phone": "+5491112345678",
+    "source": "demo_landing",
+    "status": "new",
+    "synced": false,
+    "created_at": "2026-03-28T10:00:00Z"
+  }
+]
+```
+
+### Marcar lead como sincronizado
+`PUT /api/bridge/v1/leads/:id/sync`
+
+Marca un lead como sincronizado con el CRM externo, evitando duplicación en futuras consultas.
+
+**Payload:**
+```json
+{
+  "synced": true,
+  "external_id": "crm-internal-id"
+}
+```
+
+**Response:** `{ "id": "uuid", "synced": true, "synced_at": "2026-03-28T12:00:00Z" }`
+
+---
+
 ## Códigos de error habituales
 
 | Código | Significado |

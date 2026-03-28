@@ -364,3 +364,36 @@ Las especificaciones listadas se consolidaron en **docs/SPECS_IMPLEMENTADOS_INDI
 ---
 
 *Documento generado por workflow Audit – Dentalogic / Antigravity. Última actualización doc: 2026-02-08. Secciones 9–9.6 ampliadas por workflow Update Docs (Non-Destructive Fusion).*
+
+---
+
+## 10. Estado Actual (2026-03-28)
+
+*Sección agregada por Non-Destructive Fusion. Todo el contenido anterior permanece intacto.*
+
+### 10.1 Frontend
+
+- **71 archivos fuente** en `frontend_react/src/components` y vistas.
+- **100% paridad con ClinicForge:** todas las funcionalidades del repositorio de referencia replicadas y verificadas.
+- **Tema dark glassmorphic completo:** glassmorphism aplicado de forma consistente en toda la interfaz (paneles, modales, sidebar, cards).
+- **10 archivos extra** respecto a ClinicForge:
+  - **SuperAdmin** (vista y lógica de superadministrador)
+  - **DynamicShowcase** (componente de demostración dinámica)
+  - **Tracking** (módulo de seguimiento de sesiones demo / leads)
+  - **Particles** (efecto visual de partículas para landing/demo)
+
+### 10.2 Auditoría de seguridad
+
+- **28 issues encontrados** en auditoría de seguridad:
+  - **4 críticos**
+  - **6 altos**
+  - Detalles completos en `docs/specs` (documentos de auditoría de seguridad).
+
+### 10.3 Auditoría de UI
+
+- **Todos los botones funcionales:** 50+ botones auditados, **0 defectos cosméticos** detectados.
+- **Mobile scroll corregido:** problema de scroll en vistas móviles resuelto definitivamente.
+
+### 10.4 Base de datos
+
+- **Auto-migration Patch 16:** migración automática para tablas `demo_leads` (soporte del módulo de tracking de demos). Se ejecuta de forma idempotente en el arranque del backend junto con los parches anteriores (12–15).

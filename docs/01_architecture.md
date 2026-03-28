@@ -186,5 +186,115 @@ Dentalogic implementa una arquitectura de **Seguridad de Triple Capa**:
 
 ---
 
+## 7. Frontend Architecture (Updated 2026-03-28)
+
+**Stack:** React 18 + TypeScript + Vite + Tailwind CSS
+
+**Escala actual:** 27 vistas, 28+ componentes reutilizables, tema oscuro glassmórfico (Sovereign Glass).
+
+**Dependencias clave de UI:**
+- **FullCalendar:** Calendario interactivo multi-vista (día, semana, mes) con arrastrar y soltar.
+- **Recharts:** Gráficos del dashboard analítico y de profesionales.
+- **Socket.IO client:** Sincronización en tiempo real de turnos, chats y notificaciones.
+- **framer-motion:** Animaciones de transición, modales, tooltips y micro-interacciones.
+
+**Sistema de Componentes Glass:**
+- **GlassCard:** Componente base con `backdrop-blur`, bordes translúcidos y sombras que envuelve tarjetas, modales y paneles en toda la plataforma.
+- **ParticleBackground:** Fondo animado de partículas utilizado en landing (`/demo`) y login para reforzar la identidad visual.
+
+**Internacionalización (i18n):**
+- Idiomas soportados: Español (ES), English (EN), Français (FR).
+- Implementación vía `LanguageContext` / `LanguageProvider` que envuelve toda la app.
+- Archivos de traducción: `src/locales/es.json`, `en.json`, `fr.json`.
+- Selector de idioma en Configuración (solo CEO); cambio instantáneo en toda la plataforma.
+
+**Autenticación y Roles:**
+- JWT (HS256) con payload que incluye `role` y `tenant_id`.
+- Roles soportados: `ceo`, `professional`, `secretary`, `superadmin`.
+- Flujo de aprobación: registro → estado `pending` → activación por CEO.
+- Rutas protegidas mediante `ProtectedRoute`; rutas públicas: `/login`, `/demo`.
+
+---
+
+## 8. SuperAdmin & Lead Tracking System
+
+**Auto-creación de leads:**
+- Cada mensaje entrante de WhatsApp genera automáticamente un registro `demo_lead` si el remitente no existe en el sistema.
+- Esto garantiza que ningún contacto comercial se pierda, independientemente de si el paciente completa el flujo de reserva.
+
+**Engagement Scoring:**
+- Sistema de puntuación que acumula interacciones del lead:
+  - **Page views:** Visitas a la landing y páginas públicas.
+  - **Clicks:** Interacciones con CTAs y elementos de conversión.
+  - **WhatsApp messages:** Mensajes enviados al agente IA.
+  - **Appointments:** Turnos agendados (mayor peso en el score).
+- El score permite priorizar leads en el CRM y segmentar campañas.
+
+**Bridge API para CRM VENTAS:**
+- Endpoint: `POST /api/bridge/v1/leads`
+- Permite integración bidireccional con el sistema CRM VENTAS externo.
+- Expone datos de leads, scores y estado de conversión para sincronización automatizada.
+
+**Auto-migración:**
+- Las tablas y columnas del sistema de leads se crean automáticamente vía el **Patch 16** del Maintenance Robot en `orchestrator_service/db.py`.
+- Migración idempotente: se puede re-ejecutar sin riesgo en cada arranque del servicio.
+
+---
+
+## 9. Public Pages
+
+**Landing (`/demo`):**
+- Página de conversión pública con `ParticleBackground` animado.
+- Social proof popups (`ConversionPopups`) que muestran actividad reciente de otros usuarios.
+- CTAs principales: "Probar app" (→ `/login?demo=1`), "Probar Agente IA" (→ WhatsApp), "Iniciar sesión".
+- Diseño mobile-first orientado a maximizar tasa de conversión.
+
+**Login (`/login`):**
+- Diseño split-screen: panel izquierdo con formulario de credenciales, panel derecho con carrusel de imágenes + efectos de partículas.
+- Soporte para flujo demo (`?demo=1`): prellena credenciales y muestra botón "Entrar a la demo".
+
+**AnamnesisPublicView:**
+- Formulario público de anamnesis para pacientes, accesible sin autenticación.
+- Validación por token único: cada enlace es específico para un paciente y tiene expiración.
+- Permite que el paciente complete su historia clínica antes de la consulta presencial.
+
+---
+
+## 10. Key Components Added (2026-03-28)
+
+**Odontogram:**
+- Componente SVG interactivo con notación FDI (Fédération Dentaire Internationale).
+- 10 estados visuales por pieza dental (sano, caries, obturación, extracción, etc.).
+- Permite registro visual del estado bucal directamente sobre el diagrama.
+
+**NovaWidget (Voice AI):**
+- Widget de asistente de voz con inteligencia artificial integrada.
+- 3 pestañas: **Chat** (conversación con la IA), **Salud** (resumen de estado clínico), **Insights** (recomendaciones personalizadas).
+- Interfaz flotante accesible desde cualquier vista de la plataforma.
+
+**OnboardingGuide:**
+- Sistema de onboarding interactivo con 14 guías contextuales.
+- Efecto 3D tilt en tarjetas y navegación por swipe entre pasos.
+- Se activa automáticamente para usuarios nuevos y puede re-lanzarse desde el menú.
+
+**ConversionPopups:**
+- Notificaciones de social proof que aparecen en la landing (`/demo`).
+- Muestran actividad reciente simulada/real (ej: "Un consultorio en Buenos Aires se registró hace 3 minutos").
+- Patrón de aparición temporizado para maximizar la percepción de actividad.
+
+**MetaTokenBanner:**
+- Banner informativo para configuración de tokens de integración con Meta (Facebook/Instagram).
+- Guía al usuario en el proceso de vinculación de cuentas de redes sociales.
+
+**PageTips:**
+- Sistema de tips contextuales por página que muestra sugerencias relevantes según la vista activa.
+- Contenido traducido en los 3 idiomas soportados (ES/EN/FR).
+
+**DynamicShowcase:**
+- Componente de presentación dinámica utilizado en landing y páginas de marketing.
+- Renderiza features y beneficios con animaciones de entrada escalonadas.
+
+---
+
 *Documentación Dentalogic © 2026*
 泛
