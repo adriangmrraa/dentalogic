@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { MessageSquare, Calendar, Activity as LucideActivity, DollarSign, TrendingUp, TrendingDown, Target, Zap, Clock, ArrowUpRight, User, AlertCircle } from 'lucide-react';
 import {
@@ -91,6 +92,7 @@ const UrgencyBadge = ({ level, t }: { level: UrgencyRecord['urgency_level'], t: 
 
 export default function DashboardView() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<AnalyticsStats | null>(null);
   const [urgencies, setUrgencies] = useState<UrgencyRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -353,7 +355,7 @@ export default function DashboardView() {
           <div className="overflow-hidden flex flex-col mb-4">
             <div className="p-6 border-b border-white/[0.06] flex justify-between items-center">
               <h2 className="text-lg font-semibold text-white">{t('dashboard.urgencies_recent')}</h2>
-              <button className="text-blue-400 text-sm font-semibold hover:underline px-3 py-2">{t('dashboard.see_all')}</button>
+              <button onClick={() => navigate('/chats')} className="text-blue-400 text-sm font-semibold hover:underline px-3 py-2">{t('dashboard.see_all')}</button>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[600px]">
