@@ -33,8 +33,8 @@ export default function LandingView() {
       <main className="flex-1 w-full overflow-x-hidden relative z-10">
 
         {/* ═══════════ HERO ═══════════ */}
-        <section className="flex flex-col items-center justify-center min-h-screen px-4 py-12 sm:py-16">
-          <motion.div {...fadeUp} transition={{ duration: 0.7 }} className="w-full max-w-3xl mx-auto text-center space-y-8">
+        <section className="flex flex-col items-center justify-center min-h-screen px-4 sm:px-8 lg:px-16 py-12 sm:py-16">
+          <motion.div {...fadeUp} transition={{ duration: 0.7 }} className="w-full max-w-4xl xl:max-w-5xl mx-auto text-center space-y-8">
 
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
               className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-500/20 border border-blue-500/30 text-blue-400 shadow-xl shadow-blue-500/10 mb-2">
@@ -71,7 +71,7 @@ export default function LandingView() {
 
         {/* ═══════════ STATS BAR ═══════════ */}
         <motion.section {...fadeUp} transition={{ delay: 0.2 }}
-          className="max-w-4xl mx-auto px-4 -mt-8 mb-20">
+          className="max-w-6xl xl:max-w-7xl mx-auto px-4 sm:px-8 lg:px-16 -mt-8 mb-20">
           <div className="flex justify-center gap-8 sm:gap-16 py-6 px-8 rounded-2xl bg-white/[0.03] border border-white/[0.06] backdrop-blur-xl">
             {[
               { value: '20+', label: t('landing.stat_professionals') || 'Profesionales' },
@@ -87,7 +87,7 @@ export default function LandingView() {
         </motion.section>
 
         {/* ═══════════ FEATURES GRID ═══════════ */}
-        <section className="max-w-6xl mx-auto px-4 py-20">
+        <section className="max-w-7xl xl:max-w-[90rem] mx-auto px-4 sm:px-8 lg:px-16 py-20">
           <motion.div {...fadeUp} className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
               {t('landing.features_title') || 'Todo lo que tu clinica necesita'}
@@ -135,7 +135,7 @@ export default function LandingView() {
         </section>
 
         {/* ═══════════ HOW IT WORKS ═══════════ */}
-        <section className="max-w-4xl mx-auto px-4 py-20">
+        <section className="max-w-6xl xl:max-w-7xl mx-auto px-4 sm:px-8 lg:px-16 py-20">
           <motion.div {...fadeUp} className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
               {t('landing.how_title') || 'Como funciona'}
@@ -163,7 +163,7 @@ export default function LandingView() {
         </section>
 
         {/* ═══════════ TESTIMONIAL / SOCIAL PROOF ═══════════ */}
-        <section className="max-w-4xl mx-auto px-4 py-20">
+        <section className="max-w-6xl xl:max-w-7xl mx-auto px-4 sm:px-8 lg:px-16 py-20">
           <motion.div {...fadeUp}
             className="rounded-3xl border border-white/[0.08] bg-white/[0.03] p-8 sm:p-12 text-center relative overflow-hidden">
             <div className="absolute inset-0 opacity-[0.03] bg-cover bg-center" style={{ backgroundImage: `url(${SHOWCASE_IMAGES[0]})` }} />
@@ -182,7 +182,7 @@ export default function LandingView() {
         </section>
 
         {/* ═══════════ FINAL CTA ═══════════ */}
-        <section className="max-w-3xl mx-auto px-4 py-20 text-center">
+        <section className="max-w-5xl xl:max-w-6xl mx-auto px-4 sm:px-8 lg:px-16 py-20 text-center">
           <motion.div {...fadeUp}>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
               {t('landing.final_cta_title') || 'Transforma tu clinica hoy'}
