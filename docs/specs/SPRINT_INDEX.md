@@ -15,6 +15,8 @@
 | 4 | Marketing & Leads | [fase4_marketing_leads.spec.md](fase4_marketing_leads.spec.md) | ALTA | Fase 1 | 8 | 2 |
 | 5 | Integraciones | [fase5_integraciones.spec.md](fase5_integraciones.spec.md) | MEDIA-ALTA | Fase 4 | 7 | 3 |
 | 6 | Features Especiales | [fase6_features_especiales.spec.md](fase6_features_especiales.spec.md) | MEDIA | Fase 1 | 2 | 3 |
+| 7 | SuperAdmin & Lead Tracking | [fase7_superadmin_tracking.spec.md](fase7_superadmin_tracking.spec.md) | ALTA | - | ~8 | - |
+| 8 | CRM VENTAS Bridge API | [fase8_crm_bridge_api.spec.md](fase8_crm_bridge_api.spec.md) | ALTA | Fase 7 | ~4 | - |
 
 ---
 
@@ -24,16 +26,22 @@
 FASE 1 (Design System) ──┬──→ FASE 2 (Médicos) ──→ FASE 3 (Páginas)
                           ├──→ FASE 4 (Marketing) ──→ FASE 5 (Integraciones)
                           └──→ FASE 6 (Features Especiales)
+
+FASE 7 (SuperAdmin & Lead Tracking) ──→ FASE 8 (CRM VENTAS Bridge API)
 ```
 
 **Ejecución paralela posible:**
 - Después de Fase 1: Fases 2, 4 y 6 pueden ejecutarse en paralelo
 - Fase 3 requiere Fase 2 completada
 - Fase 5 requiere Fase 4 completada
+- Fase 7 es independiente y puede ejecutarse en paralelo con cualquier otra fase
+- Fase 8 requiere Fase 7 completada
 
 ---
 
 ## Resumen de Entregables
+
+### Total estimado: ~37 archivos nuevos (Fases 1-8)
 
 ### Componentes Nuevos (22 archivos):
 1. `GlassCard.tsx`
@@ -78,6 +86,17 @@ FASE 1 (Design System) ──┬──→ FASE 2 (Médicos) ──→ FASE 3 (P�
 - `leads`
 - `lead_timeline`
 - `message_templates`
+
+### Fase 7 - SuperAdmin & Lead Tracking (~8 archivos):
+- Backend routes (SuperAdmin endpoints)
+- Frontend views (SuperAdmin dashboard, lead management)
+- DB migration (SuperAdmin role, demo tracking tables)
+- Demo tracking middleware
+
+### Fase 8 - CRM VENTAS Bridge API (~4 archivos):
+- Bridge routes (public REST API)
+- Auth middleware (API key / token validation)
+- Webhook handler (CRM VENTAS events)
 
 ---
 
