@@ -715,3 +715,9 @@ Feature: Bridge API - Audit Log
   - Estado de conexión con CRM VENTAS (last successful sync)
   - Cola de outbox (pendientes / fallidos)
   - Últimos entries del audit log
+
+---
+
+## 14. Clarificaciones Resueltas
+- **Red de Confianza**: Se priorizará el token JWT/Bridge.
+- **Alertas de Fallos (Outbox)**: Sí, se implementará un sistema de alerta para cuando haya errores enviando leads o la cola se sature.

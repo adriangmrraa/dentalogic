@@ -303,7 +303,7 @@ export default function ProfessionalsView() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 border-l-4 border-primary">
             <div className="text-xs text-white/50 uppercase font-bold tracking-tight">{t('professionals.total_staff')}</div>
-            <div className="text-3xl font-black mt-1 text-gray-900">{professionals.length}</div>
+            <div className="text-3xl font-black mt-1 text-white">{professionals.length}</div>
           </div>
           <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 border-l-4 border-green-500">
             <div className="text-xs text-white/50 uppercase font-bold tracking-tight">{t('professionals.active_doctors')}</div>
@@ -355,7 +355,7 @@ export default function ProfessionalsView() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <h3 className="font-bold text-gray-900 truncate leading-tight">
+                      <h3 className="font-bold text-white truncate leading-tight">
                         Dr. {professional.name}
                       </h3>
                       {professional.is_active ? (
@@ -494,7 +494,7 @@ export default function ProfessionalsView() {
                   {editingProfessional.id ? <Edit size={24} /> : <Plus size={24} />}
                 </div>
                 <div>
-                  <h2 className="text-xl font-black text-gray-900">
+                  <h2 className="text-xl font-black text-white">
                     {editingProfessional.id ? t('professionals.edit_profile_medical') : t('professionals.new_team_member')}
                   </h2>
                   <p className="text-xs font-bold text-white/40 uppercase tracking-widest mt-0.5">
@@ -504,7 +504,7 @@ export default function ProfessionalsView() {
               </div>
               <button
                 onClick={closeModal}
-                className="p-2.5 hover:bg-gray-50 rounded-2xl transition-all text-white/40 hover:text-gray-900 border border-transparent hover:border-gray-100"
+                className="p-2.5 hover:bg-gray-50 rounded-2xl transition-all text-white/40 hover:text-white border border-transparent hover:border-gray-100"
               >
                 <X size={24} />
               </button>
@@ -698,7 +698,7 @@ export default function ProfessionalsView() {
                                 />
                                 <div className="w-10 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
                               </label>
-                              <span className={`text-sm font-black uppercase tracking-widest ${config.enabled ? 'text-gray-900' : 'text-white/40'
+                              <span className={`text-sm font-black uppercase tracking-widest ${config.enabled ? 'text-white' : 'text-white/40'
                                 }`}>
                                 {t('approvals.day_' + day.key)}
                               </span>
@@ -776,7 +776,7 @@ export default function ProfessionalsView() {
               <button
                 type="button"
                 onClick={closeModal}
-                className="w-full sm:w-auto px-8 py-3.5 text-sm font-black uppercase tracking-widest text-white/40 hover:text-gray-900 border border-transparent hover:border-gray-100 rounded-2xl transition-all min-h-[44px]"
+                className="w-full sm:w-auto px-8 py-3.5 text-sm font-black uppercase tracking-widest text-white/40 hover:text-white border border-transparent hover:border-gray-100 rounded-2xl transition-all min-h-[44px]"
               >
                 {t('professionals.close')}
               </button>

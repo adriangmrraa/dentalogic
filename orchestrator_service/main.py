@@ -33,6 +33,8 @@ import socketio
 from db import db
 from admin_routes import router as admin_router
 from auth_routes import router as auth_router
+from demo_tracking_routes import router as demo_tracking_router
+from bridge_routes import router as bridge_router
 from email_service import email_service
 
 # --- CONFIGURACIÓN ---
@@ -1377,6 +1379,8 @@ app.add_middleware(
 # --- RUTAS ---
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(demo_tracking_router, prefix="/api/tracking", tags=["Demo Tracking"])
+app.include_router(bridge_router, prefix="/api/bridge", tags=["Bridge API"])
 
 
 # OpenAPI: inyectar securitySchemes para que en Swagger UI se pueda usar Authorize (JWT + X-Admin-Token)

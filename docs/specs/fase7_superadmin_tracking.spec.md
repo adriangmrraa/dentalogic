@@ -580,3 +580,10 @@ CREATE INDEX idx_demo_lead_status_history_lead_id ON demo_lead_status_history(le
 - ActivityFeed: scroll con animacion fadeIn para nuevos eventos
 - LeadScoreBadge: circulo con progreso animado, colores: rojo (0-30), amber (31-60), verde (61-100)
 - Todo responsive, pero optimizado para desktop (uso interno)
+
+---
+
+## 9. Clarificaciones Resueltas
+- **Seguridad Superadmin**: Se usará contraseña segura y JWT `httpOnly` sin acceso desde UI (Anti-hackeo).
+- **Limpieza de Leads**: Se guardará el histórico infinito, pero se agregará un botón inteligente en el panel para limpiar leads inactivos (>60 días sin responder).
+- **Manejo de Sesiones**: Cada dispositivo/navegador se toma como una sesión independiente. Se permite iniciar sesión múltiple del superadmin.

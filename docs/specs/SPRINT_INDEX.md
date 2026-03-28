@@ -17,6 +17,7 @@
 | 6 | Features Especiales | [fase6_features_especiales.spec.md](fase6_features_especiales.spec.md) | MEDIA | Fase 1 | 2 | 3 |
 | 7 | SuperAdmin & Lead Tracking | [fase7_superadmin_tracking.spec.md](fase7_superadmin_tracking.spec.md) | ALTA | - | ~8 | - |
 | 8 | CRM VENTAS Bridge API | [fase8_crm_bridge_api.spec.md](fase8_crm_bridge_api.spec.md) | ALTA | Fase 7 | ~4 | - |
+| 9 | Premium UI Animations | [fase9_premium_ui_animations.spec.md](fase9_premium_ui_animations.spec.md) | ALTA | Fase 1 | 2 | 2 |
 
 ---
 
@@ -41,7 +42,7 @@ FASE 7 (SuperAdmin & Lead Tracking) ──→ FASE 8 (CRM VENTAS Bridge API)
 
 ## Resumen de Entregables
 
-### Total estimado: ~37 archivos nuevos (Fases 1-8)
+### Total estimado: ~41 archivos nuevos (Fases 1-9)
 
 ### Componentes Nuevos (22 archivos):
 1. `GlassCard.tsx`
@@ -97,6 +98,10 @@ FASE 7 (SuperAdmin & Lead Tracking) ──→ FASE 8 (CRM VENTAS Bridge API)
 - Bridge routes (public REST API)
 - Auth middleware (API key / token validation)
 - Webhook handler (CRM VENTAS events)
+
+### Fase 9 - Premium UI Animations (2 archivos):
+- Componente DynamicShowcase
+- Refactor LandingView con `useSmartScroll`
 
 ---
 
