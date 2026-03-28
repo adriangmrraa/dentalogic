@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp \"C:/Users/Asus/Documents/estabilizacion/laura delgado/clinicforge/frontend_react/src/locales/en.json\" \"C:/Users/Asus/Documents/estabilizacion/dentalogic/frontend_react/src/locales/en.json\")",
+      "Bash(cp \"C:/Users/Asus/Documents/estabilizacion/laura delgado/clinicforge/frontend_react/src/locales/fr.json\" \"C:/Users/Asus/Documents/estabilizacion/dentalogic/frontend_react/src/locales/fr.json\")"
+    ]
+  }
+}

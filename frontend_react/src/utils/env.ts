@@ -4,6 +4,8 @@
  * Reads environment variables from:
  * 1. window.__ENV__ (injected at runtime by docker-entrypoint.sh in production)
  * 2. import.meta.env (injected at build time by Vite in development)
+ *
+ * This ensures the app works both locally (vite dev) and in Docker/EasyPanel.
  */
 
 interface RuntimeEnv {
@@ -25,6 +27,9 @@ declare global {
     }
 }
 
+/**
+ * Get an environment variable, checking runtime injection first, then Vite build-time.
+ */
 export function getEnv(key: keyof RuntimeEnv): string {
     // 1. Runtime injection (Docker/EasyPanel)
     const runtimeVal = window.__ENV__?.[key];
@@ -35,6 +40,7 @@ export function getEnv(key: keyof RuntimeEnv): string {
     // 2. Vite build-time injection (local dev)
     const viteVal = (import.meta.env as Record<string, string>)?.[key];
 
+    // Debug logging for Admin Token
     if (key === 'VITE_ADMIN_TOKEN') {
         if (runtimeVal === 'RUNTIME_REPLACE') console.error('Detected RUNTIME_REPLACE in window.__ENV__.VITE_ADMIN_TOKEN');
         if (viteVal === 'RUNTIME_REPLACE') console.error('Detected RUNTIME_REPLACE in import.meta.env.VITE_ADMIN_TOKEN');

@@ -3,14 +3,14 @@ export interface GoogleCampaign {
   name: string;
   status: 'ENABLED' | 'PAUSED' | 'REMOVED' | 'ARCHIVED';
   type: 'SEARCH' | 'DISPLAY' | 'VIDEO' | 'SHOPPING' | 'PERFORMANCE_MAX' | string;
-  budget: number;
+  budget: number; // Micros
   impressions: number;
   clicks: number;
-  cost: number;
+  cost: number; // Micros
   conversions: number;
-  conversions_value: number;
+  conversions_value: number; // Micros
   ctr: number;
-  cpc: number;
+  cpc: number; // Micros
   conversion_rate: number;
   roas: number;
   start_date: string;
@@ -21,9 +21,9 @@ export interface GoogleCampaign {
 export interface GoogleMetrics {
   impressions: number;
   clicks: number;
-  cost: number;
+  cost: number; // Already in currency (not micros)
   conversions: number;
-  conversions_value: number;
+  conversions_value: number; // Already in currency (not micros)
   ctr: number;
   cpc: number;
   conversion_rate: number;
@@ -157,12 +157,14 @@ export interface GoogleSyncResult {
   timestamp?: string;
 }
 
+// Wizard types
 export interface GoogleWizardStep {
   id: 'welcome' | 'configure' | 'authorize' | 'complete' | 'error';
   title: string;
   description: string;
 }
 
+// Campaign performance metrics
 export interface CampaignPerformance {
   campaign_id: string;
   campaign_name: string;
@@ -179,11 +181,22 @@ export interface CampaignPerformance {
   roas: number;
 }
 
+// Time range options
 export type TimeRange =
-  | 'today' | 'yesterday' | 'last_7d' | 'last_14d' | 'last_30d'
-  | 'last_90d' | 'this_month' | 'last_month' | 'this_year' | 'last_year'
-  | 'lifetime' | 'all';
+  | 'today'
+  | 'yesterday'
+  | 'last_7d'
+  | 'last_14d'
+  | 'last_30d'
+  | 'last_90d'
+  | 'this_month'
+  | 'last_month'
+  | 'this_year'
+  | 'last_year'
+  | 'lifetime'
+  | 'all';
 
+// Chart data interfaces
 export interface MetricChartData {
   date: string;
   impressions: number;
@@ -204,15 +217,20 @@ export interface PlatformComparisonData {
   conversion_rate: number;
 }
 
+// Google Ads API error types
 export interface GoogleApiError {
   error: {
     code: number;
     message: string;
     status: string;
-    details?: Array<{ '@type': string; [key: string]: any }>;
+    details?: Array<{
+      '@type': string;
+      [key: string]: any;
+    }>;
   };
 }
 
+// OAuth token response
 export interface GoogleTokenResponse {
   access_token: string;
   expires_in: number;
@@ -222,6 +240,7 @@ export interface GoogleTokenResponse {
   id_token?: string;
 }
 
+// User info response
 export interface GoogleUserInfo {
   sub: string;
   email: string;
@@ -233,6 +252,7 @@ export interface GoogleUserInfo {
   locale?: string;
 }
 
+// Utility types for form handling
 export interface GoogleConnectionFormData {
   client_id: string;
   client_secret: string;
@@ -241,6 +261,7 @@ export interface GoogleConnectionFormData {
   login_redirect_uri: string;
 }
 
+// Settings/configuration types
 export interface GoogleAdsSettings {
   auto_sync: boolean;
   sync_frequency: 'hourly' | 'daily' | 'weekly';
