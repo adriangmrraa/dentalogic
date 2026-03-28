@@ -46,7 +46,7 @@ export default function DateStrip({ selectedDate, onDateSelect }: DateStripProps
     const isToday = (date: Date) => date.toDateString() === new Date().toDateString();
 
     return (
-        <div className="flex flex-col bg-white border-b border-gray-100 py-2 shadow-sm shrink-0 z-10">
+        <div className="flex flex-col bg-white border-b border-white/[0.04] py-2 shadow-sm shrink-0 z-10">
             <div
                 ref={scrollRef}
                 className="flex overflow-x-auto hide-scrollbar px-4 gap-2 pb-1"
@@ -66,14 +66,14 @@ export default function DateStrip({ selectedDate, onDateSelect }: DateStripProps
                                     ? 'bg-blue-600 text-white shadow-md scale-105'
                                     : today
                                         ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                        : 'bg-white text-gray-500 hover:bg-gray-50 border border-transparent'
+                                        : 'bg-white text-white/50 hover:bg-white/[0.02] border border-transparent'
                                 }
               `}
                         >
-                            <span className={`text-[10px] uppercase font-semibold ${selected ? 'text-blue-100' : 'text-gray-400'}`}>
+                            <span className={`text-[10px] uppercase font-semibold ${selected ? 'text-blue-100' : 'text-white/40'}`}>
                                 {dayName}
                             </span>
-                            <span className={`text-xl font-bold leading-none ${selected ? 'text-white' : 'text-gray-700'}`}>
+                            <span className={`text-xl font-bold leading-none ${selected ? 'text-white' : 'text-white/70'}`}>
                                 {dayNum}
                             </span>
                             {today && !selected && (

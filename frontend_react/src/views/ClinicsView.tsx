@@ -112,8 +112,8 @@ export default function ClinicsView() {
     if (loading) {
         return (
             <div className="h-full flex flex-col items-center justify-center gap-3 min-h-0 overflow-y-auto">
-                <Loader2 className="animate-spin text-medical-600" size={32} />
-                <p className="text-medical-800 font-medium">{t('common.loading')}</p>
+                <Loader2 className="animate-spin text-blue-400" size={32} />
+                <p className="text-white font-medium">{t('common.loading')}</p>
             </div>
         );
     }
@@ -127,7 +127,7 @@ export default function ClinicsView() {
                 action={
                     <button
                         onClick={() => handleOpenModal()}
-                        className="flex items-center justify-center gap-2 bg-medical-600 text-white px-4 py-2.5 rounded-xl hover:bg-medical-700 transition-all shadow-md font-medium text-sm sm:text-base active:scale-[0.98]"
+                        className="flex items-center justify-center gap-2 bg-blue-500/20 text-white px-4 py-2.5 rounded-xl hover:bg-blue-500/30 transition-all shadow-md font-medium text-sm sm:text-base active:scale-[0.98]"
                     >
                         <Plus size={20} /> {t('clinics.new_clinic')}
                     </button>
@@ -144,17 +144,17 @@ export default function ClinicsView() {
                 {clinicas.map((clinica) => (
                     <div
                         key={clinica.id}
-                        className="bg-white rounded-xl shadow-sm border border-medical-100 overflow-hidden hover:shadow-md transition-shadow group"
+                        className="bg-white/[0.03] rounded-xl  border border-white/[0.04] overflow-hidden hover:shadow-md transition-shadow group"
                     >
                         <div className="p-5 space-y-4">
                             <div className="flex justify-between items-start">
-                                <div className="bg-medical-50 p-3 rounded-lg text-medical-600 group-hover:bg-medical-600 group-hover:text-white transition-colors">
+                                <div className="bg-blue-500/10 p-3 rounded-lg text-blue-400 group-hover:bg-blue-500/20 group-hover:text-white transition-colors">
                                     <Building2 size={24} />
                                 </div>
                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
                                         onClick={() => handleOpenModal(clinica)}
-                                        className="p-2 text-medical-600 hover:bg-medical-50 rounded-lg transition-colors"
+                                        className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
                                     >
                                         <Edit size={18} />
                                     </button>
@@ -168,18 +168,18 @@ export default function ClinicsView() {
                             </div>
 
                             <div>
-                                <h3 className="font-bold text-medical-900 text-lg">{clinica.clinic_name}</h3>
-                                <div className="flex items-center gap-2 text-medical-600 mt-2 text-sm">
+                                <h3 className="font-bold text-white text-lg">{clinica.clinic_name}</h3>
+                                <div className="flex items-center gap-2 text-blue-400 mt-2 text-sm">
                                     <Phone size={14} className="shrink-0" />
                                     <span className="font-mono">{clinica.bot_phone_number}</span>
                                 </div>
-                                <div className="flex items-center gap-2 text-medical-500 mt-1 text-xs">
+                                <div className="flex items-center gap-2 text-blue-400 mt-1 text-xs">
                                     <Calendar size={12} className="shrink-0" />
                                     <span>{calendarProviderLabel(clinica.config?.calendar_provider || 'local')}</span>
                                 </div>
                             </div>
 
-                            <div className="pt-4 border-t border-medical-50 flex justify-between items-center text-xs text-medical-400">
+                            <div className="pt-4 border-t border-medical-50 flex justify-between items-center text-xs text-blue-300">
                                 <span>ID: {clinica.id}</span>
                                 <span>{t('common.since')}: {new Date(clinica.created_at).toLocaleDateString()}</span>
                             </div>
@@ -190,10 +190,10 @@ export default function ClinicsView() {
 
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md animate-scale-in">
+                    <div className="bg-white/[0.03] rounded-xl shadow-2xl w-full max-w-md animate-scale-in">
                         <div className="p-6 border-b">
                             <h2 className="text-xl font-bold flex items-center gap-2">
-                                {editingClinica ? <Edit className="text-medical-600" /> : <Plus className="text-medical-600" />}
+                                {editingClinica ? <Edit className="text-blue-400" /> : <Plus className="text-blue-400" />}
                                 {editingClinica ? t('clinics.edit_clinic') : t('clinics.create_clinic')}
                             </h2>
                         </div>
@@ -206,7 +206,7 @@ export default function ClinicsView() {
                             )}
 
                             <div className="space-y-2">
-                                <label className="text-sm font-semibold text-medical-700">{t('clinics.clinic_name_label')}</label>
+                                <label className="text-sm font-semibold text-white/70">{t('clinics.clinic_name_label')}</label>
                                 <input
                                     required
                                     type="text"
@@ -218,7 +218,7 @@ export default function ClinicsView() {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-semibold text-medical-700">{t('clinics.bot_phone_label')}</label>
+                                <label className="text-sm font-semibold text-white/70">{t('clinics.bot_phone_label')}</label>
                                 <input
                                     required
                                     type="text"
@@ -227,13 +227,13 @@ export default function ClinicsView() {
                                     value={formData.bot_phone_number}
                                     onChange={(e) => setFormData({ ...formData, bot_phone_number: e.target.value })}
                                 />
-                                <p className="text-[10px] text-medical-400 italic">
+                                <p className="text-[10px] text-blue-300 italic">
                                     {t('clinics.bot_phone_help')}
                                 </p>
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-semibold text-medical-700 flex items-center gap-2">
+                                <label className="text-sm font-semibold text-white/70 flex items-center gap-2">
                                     <Calendar size={14} /> {t('clinics.calendar_provider_label')}
                                 </label>
                                 <select
@@ -247,7 +247,7 @@ export default function ClinicsView() {
                                         </option>
                                     ))}
                                 </select>
-                                <p className="text-[10px] text-medical-400 italic">
+                                <p className="text-[10px] text-blue-300 italic">
                                     {t('clinics.calendar_help')}
                                 </p>
                             </div>
@@ -256,14 +256,14 @@ export default function ClinicsView() {
                                 <button
                                     type="button"
                                     onClick={() => setIsModalOpen(false)}
-                                    className="flex-1 py-2 text-medical-700 font-medium hover:bg-medical-50 rounded-lg transition-all"
+                                    className="flex-1 py-2 text-white/70 font-medium hover:bg-blue-500/10 rounded-lg transition-all"
                                 >
                                     {t('common.cancel')}
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={saving}
-                                    className="flex-1 py-2 bg-medical-600 text-white font-bold rounded-lg hover:bg-medical-700 transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
+                                    className="flex-1 py-2 bg-blue-500/20 text-white font-bold rounded-lg hover:bg-blue-500/30 transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {saving ? <Loader2 className="animate-spin" size={20} /> : t('common.save')}
                                 </button>

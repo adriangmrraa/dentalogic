@@ -3,6 +3,7 @@ import { Settings, Globe, Loader2, CheckCircle2 } from 'lucide-react';
 import api from '../api/axios';
 import { useTranslation } from '../context/LanguageContext';
 import PageHeader from '../components/PageHeader';
+import GlassCard from '../components/GlassCard';
 
 type UiLanguage = 'es' | 'en' | 'fr';
 
@@ -29,9 +30,7 @@ export default function ConfigView() {
     const [success, setSuccess] = useState<string | null>(null);
     const [selectedLang, setSelectedLang] = useState<UiLanguage>('en');
 
-    useEffect(() => {
-        fetchSettings();
-    }, []);
+    useEffect(() => { fetchSettings(); }, []);
 
     const fetchSettings = async () => {
         try {
@@ -39,56 +38,40 @@ export default function ConfigView() {
             const res = await api.get<ClinicSettings>('/admin/settings/clinic');
             setSettings(res.data);
             setSelectedLang((res.data.ui_language as UiLanguage) || 'en');
-        } catch (err) {
-            setError(t('config.load_error'));
-        } finally {
-            setLoading(false);
-        }
+        } catch (err) { setError(t('config.load_error')); }
+        finally { setLoading(false); }
     };
 
     const handleLanguageChange = async (value: UiLanguage) => {
-        setSelectedLang(value);
-        setSuccess(null);
-        setError(null);
-        setLanguage(value);
-        setSaving(true);
+        setSelectedLang(value); setSuccess(null); setError(null); setLanguage(value); setSaving(true);
         try {
             await api.patch('/admin/settings/clinic', { ui_language: value });
             setSettings((prev) => (prev ? { ...prev, ui_language: value } : null));
             setSuccess(t('config.saved'));
-        } catch (err) {
-            setError(t('config.save_error'));
-        } finally {
-            setSaving(false);
-        }
+        } catch (err) { setError(t('config.save_error')); }
+        finally { setSaving(false); }
     };
 
     if (loading) {
         return (
             <div className="p-6 flex items-center justify-center min-h-[200px]">
-                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
             </div>
         );
     }
 
     return (
-        <div className="p-6 max-w-2xl">
-            <PageHeader
-                title={t('config.title')}
-                subtitle={t('config.subtitle')}
-                icon={<Settings size={22} />}
-            />
+        <div className="p-4 lg:p-6 max-w-2xl h-full overflow-y-auto">
+            <PageHeader title={t('config.title')} subtitle={t('config.subtitle')} icon={<Settings size={22} />} />
 
             {settings && (
                 <div className="space-y-6">
-                    <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                    <GlassCard>
                         <div className="flex items-center gap-2 mb-4">
-                            <Globe size={20} className="text-gray-600" />
-                            <h2 className="text-lg font-semibold text-gray-800">{t('config.language_label')}</h2>
+                            <Globe size={20} className="text-blue-400" />
+                            <h2 className="text-lg font-semibold text-white">{t('config.language_label')}</h2>
                         </div>
-                        <p className="text-sm text-gray-500 mb-4">
-                            {t('config.language_help')}
-                        </p>
+                        <p className="text-sm text-white/40 mb-4">{t('config.language_help')}</p>
                         <div className="flex flex-wrap gap-3">
                             {LANGUAGE_OPTIONS.map((opt) => (
                                 <button
@@ -96,10 +79,10 @@ export default function ConfigView() {
                                     type="button"
                                     onClick={() => handleLanguageChange(opt.value)}
                                     disabled={saving}
-                                    className={`px-4 py-2.5 rounded-xl font-medium transition-colors border-2 min-h-[44px] touch-manipulation ${
+                                    className={`px-4 py-2.5 rounded-xl font-medium transition-all border min-h-[44px] touch-manipulation ${
                                         selectedLang === opt.value
-                                            ? 'border-blue-600 bg-blue-50 text-blue-700'
-                                            : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                                            ? 'border-blue-500/40 bg-blue-500/10 text-blue-400'
+                                            : 'border-white/[0.08] bg-white/[0.04] text-white/60 hover:bg-white/[0.06]'
                                     }`}
                                 >
                                     {saving && selectedLang === opt.value ? (
@@ -110,22 +93,19 @@ export default function ConfigView() {
                                 </button>
                             ))}
                         </div>
-                        <p className="text-xs text-gray-400 mt-3">
-                            {t('config.current_clinic')}: <strong>{settings.name}</strong>
+                        <p className="text-xs text-white/30 mt-3">
+                            {t('config.current_clinic')}: <strong className="text-white/50">{settings.name}</strong>
                         </p>
-                    </div>
+                    </GlassCard>
                 </div>
             )}
 
             {error && (
-                <div className="mt-4 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
-                    {error}
-                </div>
+                <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{error}</div>
             )}
             {success && (
-                <div className="mt-4 p-4 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm flex items-center gap-2">
-                    <CheckCircle2 size={18} />
-                    {success}
+                <div className="mt-4 p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-sm flex items-center gap-2">
+                    <CheckCircle2 size={18} /> {success}
                 </div>
             )}
         </div>

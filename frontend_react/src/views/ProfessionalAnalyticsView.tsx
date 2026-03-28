@@ -69,19 +69,19 @@ export default function ProfessionalAnalyticsView() {
             case 'Risk: Cancellations':
                 return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800"><AlertTriangle size={12} /> Risk</span>;
             default:
-                return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{tag}</span>;
+                return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-white/[0.04] text-white">{tag}</span>;
         }
     };
 
     return (
-        <div className="flex flex-col h-full overflow-hidden bg-slate-50">
+        <div className="flex flex-col h-full overflow-hidden bg-white/[0.02]">
             <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
                 <PageHeader
                     title={t('analytics.strategic_title')}
                     subtitle={t('analytics.strategic_subtitle')}
                     icon={<BarChart3 size={22} />}
                     action={
-                        <span className="text-xs sm:text-sm text-slate-500">{t('analytics.realtime_data')}</span>
+                        <span className="text-xs sm:text-sm text-white/50">{t('analytics.realtime_data')}</span>
                     }
                 />
 
@@ -122,8 +122,8 @@ export default function ProfessionalAnalyticsView() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 {/* Chart Section */}
-                    <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4">{t('analytics.comparative_performance')}</h3>
+                    <div className="lg:col-span-2 bg-white/[0.03] border border-white/[0.06] rounded-2xl border border-white/[0.04] shadow-sm p-5">
+                    <h3 className="text-lg font-bold text-white mb-4">{t('analytics.comparative_performance')}</h3>
                     <div className="h-80">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={data} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -141,70 +141,70 @@ export default function ProfessionalAnalyticsView() {
                     </div>
 
                     {/* Top Performers / Strategic Insights */}
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl border border-white/[0.04] shadow-sm p-5">
+                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                         <TrendingUp className="text-medical-500" /> {t('analytics.insights')}
                     </h3>
                     <div className="space-y-4">
                         {data.slice(0, 5).map((prof) => (
-                            <div key={prof.id} className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors">
+                            <div key={prof.id} className="flex items-start gap-3 p-3 rounded-xl hover:bg-white/[0.02] transition-colors">
                                 <div className="w-10 h-10 rounded-full bg-medical-100 flex items-center justify-center text-medical-700 font-bold shrink-0">
                                     {prof.name.charAt(0)}
                                 </div>
                                 <div>
-                                    <h4 className="font-medium text-slate-900 text-sm">{prof.name}</h4>
-                                    <p className="text-xs text-slate-500 mb-2">{prof.specialty}</p>
+                                    <h4 className="font-medium text-white text-sm">{prof.name}</h4>
+                                    <p className="text-xs text-white/50 mb-2">{prof.specialty}</p>
                                     <div className="flex flex-wrap gap-1">
-                                        {prof.tags.length > 0 ? prof.tags.map(tag => getTagBadge(tag)) : <span className="text-xs text-gray-400">{t('analytics.no_tags')}</span>}
+                                        {prof.tags.length > 0 ? prof.tags.map(tag => getTagBadge(tag)) : <span className="text-xs text-white/40">{t('analytics.no_tags')}</span>}
                                     </div>
                                 </div>
                             </div>
                         ))}
-                        {data.length === 0 && <p className="text-sm text-slate-400 text-center py-4">{t('analytics.no_data')}</p>}
+                        {data.length === 0 && <p className="text-sm text-white/40 text-center py-4">{t('analytics.no_data')}</p>}
                     </div>
                     </div>
                 </div>
 
                 {/* Detailed Table */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="p-4 sm:p-6 border-b border-slate-100">
-                    <h3 className="text-lg font-bold text-slate-800">{t('analytics.operational_detail')}</h3>
+                <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl border border-white/[0.04] shadow-sm overflow-hidden">
+                <div className="p-4 sm:p-6 border-b border-white/[0.04]">
+                    <h3 className="text-lg font-bold text-white">{t('analytics.operational_detail')}</h3>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full">
-                        <thead className="bg-slate-50">
+                        <thead className="bg-white/[0.02]">
                             <tr>
-                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('analytics.professional')}</th>
-                                <th className="px-4 sm:px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">{t('analytics.appointments')}</th>
-                                <th className="px-4 sm:px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">{t('analytics.completion')}</th>
-                                <th className="px-4 sm:px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">{t('analytics.retention')}</th>
-                                <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">{t('analytics.revenue_est')}</th>
-                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('analytics.tags')}</th>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">{t('analytics.professional')}</th>
+                                <th className="px-4 sm:px-6 py-3 text-center text-xs font-medium text-white/50 uppercase tracking-wider">{t('analytics.appointments')}</th>
+                                <th className="px-4 sm:px-6 py-3 text-center text-xs font-medium text-white/50 uppercase tracking-wider">{t('analytics.completion')}</th>
+                                <th className="px-4 sm:px-6 py-3 text-center text-xs font-medium text-white/50 uppercase tracking-wider">{t('analytics.retention')}</th>
+                                <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-white/50 uppercase tracking-wider">{t('analytics.revenue_est')}</th>
+                                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">{t('analytics.tags')}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {data.map((prof) => (
-                                <tr key={prof.id} className="hover:bg-slate-50/80">
+                                <tr key={prof.id} className="hover:bg-white/[0.02]/80">
                                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm font-medium text-slate-900">{prof.name}</div>
-                                        <div className="text-xs text-slate-500">{prof.specialty}</div>
+                                        <div className="text-sm font-medium text-white">{prof.name}</div>
+                                        <div className="text-xs text-white/50">{prof.specialty}</div>
                                     </td>
-                                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-center text-sm text-slate-600">
+                                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-center text-sm text-white/60">
                                         {prof.metrics.total_appointments}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-center">
-                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${prof.metrics.completion_rate > 90 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${prof.metrics.completion_rate > 90 ? 'bg-emerald-100 text-emerald-800' : 'bg-white/[0.04] text-white/70'
                                             }`}>
                                             {prof.metrics.completion_rate}%
                                         </span>
                                     </td>
-                                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-center text-sm text-slate-600">
+                                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-center text-sm text-white/60">
                                         {prof.metrics.retention_rate}%
                                     </td>
-                                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-right text-sm text-slate-900 font-medium">
+                                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-right text-sm text-white font-medium">
                                         ${prof.metrics.revenue.toLocaleString()}
                                     </td>
-                                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-white/50">
                                         <div className="flex gap-1 flex-wrap">
                                             {prof.tags.map(tag => getTagBadge(tag))}
                                         </div>
