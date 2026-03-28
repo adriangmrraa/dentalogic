@@ -52,3 +52,22 @@ export const GlassCard: React.FC<GlassCardProps> = ({
 };
 
 export default GlassCard;
+
+// Pre-defined images for different contexts
+export const CARD_IMAGES = {
+  revenue: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&q=60',
+  appointments: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=400&q=60',
+  patients: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=400&q=60',
+  completion: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&q=60',
+  analytics: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&q=60',
+  marketing: 'https://images.unsplash.com/photo-1533750349088-cd871a92f312?w=400&q=60',
+  dental: 'https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=400&q=60',
+  clinic: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=400&q=60',
+  tech: 'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=400&q=60',
+  team: 'https://images.unsplash.com/photo-1521791136064-7986c2920216?w=400&q=60',
+  calendar: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=400&q=60',
+  chat: 'https://images.unsplash.com/photo-1577563908411-5077b6dc7624?w=400&q=60',
+  leads: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400&q=60',
+  tokens: 'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=400&q=60',
+  profile: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&q=60',
+};
