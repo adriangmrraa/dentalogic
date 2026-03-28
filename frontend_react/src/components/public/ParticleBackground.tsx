@@ -56,12 +56,10 @@ export default function ParticleBackground({ particleCount = 60, className = '' 
       color: COLORS[Math.floor(Math.random() * COLORS.length)],
     }));
 
+    // Use window-level mouse tracking so particles react even when pointer-events-none
     const handleMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
       mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    };
-    const handleMouseLeave = () => {
-      mouseRef.current = { x: -1000, y: -1000 };
     };
     const handleTouchMove = (e: TouchEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -69,9 +67,8 @@ export default function ParticleBackground({ particleCount = 60, className = '' 
       mouseRef.current = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
     };
 
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mouseleave', handleMouseLeave);
-    canvas.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
 
     const animate = () => {
       const cw = canvas.offsetWidth;
@@ -171,9 +168,8 @@ export default function ParticleBackground({ particleCount = 60, className = '' 
     return () => {
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener('resize', resize);
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('mouseleave', handleMouseLeave);
-      canvas.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('touchmove', handleTouchMove);
     };
   }, [particleCount]);
 

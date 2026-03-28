@@ -9,6 +9,7 @@ import { X, Wifi, WifiOff, Bell, UserPlus, Calendar, AlertTriangle, HelpCircle }
 import MetaTokenBanner from './MetaTokenBanner';
 import { NovaWidget } from './NovaWidget';
 import OnboardingGuide from './OnboardingGuide';
+import ParticleBackground from './public/ParticleBackground';
 import PageTips from './PageTips';
 
 interface LayoutProps {
@@ -203,6 +204,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }: LayoutProps) => {
 
   return (
     <div className="flex h-screen bg-[#06060e] relative overflow-hidden">
+      {/* Subtle ambient particles across all pages */}
+      <ParticleBackground particleCount={25} className="opacity-30 pointer-events-none" />
       {/* Mobile Backdrop */}
       {isMobileMenuOpen && (
         <div

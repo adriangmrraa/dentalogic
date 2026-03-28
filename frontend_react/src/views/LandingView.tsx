@@ -1,9 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Shield, MessageCircle, LogIn, Sparkles, Calendar, BarChart3, Zap, ChevronDown } from 'lucide-react';
+import { Shield, MessageCircle, LogIn, Sparkles, Calendar, BarChart3, Zap, ChevronDown, CheckCircle, Users, Clock, Star, ArrowRight, Stethoscope } from 'lucide-react';
 import { useTranslation } from '../context/LanguageContext';
-import DynamicShowcase from '../components/public/DynamicShowcase';
 import ParticleBackground from '../components/public/ParticleBackground';
 import { useDemoTracking } from '../hooks/useDemoTracking';
 
@@ -11,148 +10,205 @@ const DEMO_WHATSAPP = import.meta.env.VITE_DEMO_WHATSAPP || '5493435256815';
 const DEMO_MESSAGE = 'Hola, quisiera consultar por turnos.';
 const WHATSAPP_URL = `https://wa.me/${DEMO_WHATSAPP}?text=${encodeURIComponent(DEMO_MESSAGE)}`;
 
+const SHOWCASE_IMAGES = [
+  'https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=800&q=80',
+  'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=800&q=80',
+  'https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=800&q=80',
+];
+
+const fadeUp = {
+  initial: { opacity: 0, y: 30 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true },
+};
+
 export default function LandingView() {
   const { t } = useTranslation();
   const { trackEvent } = useDemoTracking();
 
   return (
     <div className="min-h-screen flex flex-col relative" style={{ background: 'radial-gradient(ellipse at top right, #0d1830, #06060e 60%)' }}>
-      {/* Interactive Particle Background */}
-      <ParticleBackground particleCount={70} />
+      <ParticleBackground particleCount={80} />
 
-      <main className="flex-1 w-full pb-12 sm:pb-16 overflow-x-hidden relative z-10">
-        {/* Hero Section */}
-        <section className="flex flex-col items-center justify-center min-h-[90vh] px-4 py-8 sm:p-6 md:p-8">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="w-full max-w-md sm:max-w-lg mx-auto space-y-6 sm:space-y-8"
-          >
-            {/* Hero Header */}
-            <header className="text-center pt-2 sm:pt-0">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-                className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-blue-500/20 border border-blue-500/30 text-blue-400 shadow-xl shadow-blue-500/10 mb-4 sm:mb-5"
-              >
-                <Shield size={28} className="sm:w-8 sm:h-8" strokeWidth={2} />
-              </motion.div>
-              <p className="text-xs sm:text-sm font-semibold text-blue-400 uppercase tracking-widest mb-2">
-                {t('landing.platform_label')}
+      <main className="flex-1 w-full overflow-x-hidden relative z-10">
+
+        {/* ═══════════ HERO ═══════════ */}
+        <section className="flex flex-col items-center justify-center min-h-screen px-4 py-12 sm:py-16">
+          <motion.div {...fadeUp} transition={{ duration: 0.7 }} className="w-full max-w-3xl mx-auto text-center space-y-8">
+
+            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+              className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-500/20 border border-blue-500/30 text-blue-400 shadow-xl shadow-blue-500/10 mb-2">
+              <Stethoscope size={32} strokeWidth={1.8} />
+            </motion.div>
+
+            <div>
+              <p className="text-sm font-bold text-blue-400 uppercase tracking-[0.2em] mb-4">
+                {t('landing.platform_label') || 'Plataforma para clinicas dentales'}
               </p>
-              <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight leading-tight mb-4">
-                {t('landing.headline')}
+              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold text-white tracking-tight leading-[1.1]">
+                {t('landing.headline') || 'Agenda, pacientes e IA en una sola app'}
               </h1>
-              <p className="mt-4 text-base sm:text-lg text-white/50 max-w-sm mx-auto leading-relaxed">
-                {t('landing.subheadline')}
+              <p className="mt-6 text-lg sm:text-xl text-white/40 max-w-xl mx-auto leading-relaxed">
+                {t('landing.subheadline') || 'Proba la plataforma en un clic. Sin tarjeta. Acceso inmediato a la demo.'}
               </p>
-            </header>
+            </div>
 
-            {/* CTA principal */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="space-y-3 sm:space-y-4"
-            >
-              <Link
-                to="/login?demo=1"
-                onClick={() => trackEvent('button_click', { button: 'try_app' })}
-                className="flex items-center justify-center gap-3 w-full rounded-2xl py-4 sm:py-5 text-base sm:text-lg font-bold text-gray-900 bg-white hover:bg-white/90 active:scale-[0.98] transition-all shadow-xl shadow-white/10 min-h-[52px] sm:min-h-[56px] touch-manipulation"
-              >
-                <Zap size={22} className="shrink-0" />
-                {t('landing.cta_try_app')}
+            {/* CTAs */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+              <Link to="/login?demo=1" onClick={() => trackEvent('button_click', { button: 'try_app' })}
+                className="flex items-center justify-center gap-3 px-8 py-4 text-base font-bold text-gray-900 bg-white rounded-2xl hover:bg-white/90 active:scale-[0.98] transition-all shadow-xl shadow-white/10 min-h-[56px]">
+                <Zap size={20} /> {t('landing.cta_try_app') || 'Probar app'}
               </Link>
-              <p className="text-center text-xs text-white/30 px-2 font-medium">
-                {t('landing.cta_disclaimer')}
-              </p>
-            </motion.div>
-
-            {/* Card: beneficios + credenciales */}
-            <motion.section
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 }}
-              className="rounded-2xl sm:rounded-3xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl shadow-2xl overflow-hidden"
-            >
-              <div className="p-5 sm:p-8 space-y-5 sm:space-y-6">
-                <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
-                  <Sparkles className="text-blue-400 shrink-0" size={20} />
-                  {t('landing.demo_title')}
-                </h2>
-                <ul className="space-y-3 sm:space-y-4 text-white/70 text-sm sm:text-base font-medium">
-                  <li className="flex items-center gap-4">
-                    <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 shrink-0 border border-blue-500/20">
-                      <Calendar size={18} />
-                    </span>
-                    <span>{t('landing.feature_agenda')}</span>
-                  </li>
-                  <li className="flex items-center gap-4">
-                    <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 shrink-0 border border-emerald-500/20">
-                      <MessageCircle size={18} />
-                    </span>
-                    <span>{t('landing.feature_ai')}</span>
-                  </li>
-                  <li className="flex items-center gap-4">
-                    <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-violet-500/10 text-violet-400 shrink-0 border border-violet-500/20">
-                      <BarChart3 size={18} />
-                    </span>
-                    <span>{t('landing.feature_analytics')}</span>
-                  </li>
-                </ul>
-                <details className="group pt-2">
-                  <summary className="flex items-center justify-between gap-2 py-3 rounded-xl px-4 bg-white/[0.04] hover:bg-white/[0.06] transition-colors cursor-pointer list-none text-sm font-semibold text-white/50 hover:text-white/70 select-none touch-manipulation">
-                    <span>{t('landing.demo_credentials_title')}</span>
-                    <ChevronDown size={18} className="shrink-0 transition-transform duration-300 group-open:rotate-180 text-blue-400" />
-                  </summary>
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    className="mt-3 p-4 rounded-xl bg-white/[0.04] border border-white/[0.06] text-sm text-white/60 font-mono"
-                  >
-                    <p><span className="text-white/30">Email:</span> ceo@example.com</p>
-                    <p className="mt-2"><span className="text-white/30">{t('landing.credentials_password') || 'Pass'}:</span> Ceo12345</p>
-                  </motion.div>
-                </details>
-              </div>
-            </motion.section>
-
-            {/* CTAs secundarios */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.8 }}
-              className="space-y-3 sm:space-y-4 pt-2"
-            >
-              <a
-                href={WHATSAPP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => trackEvent('whatsapp_click', { button: 'whatsapp_cta' })}
-                className="flex items-center justify-center gap-3 w-full rounded-2xl py-3.5 sm:py-4 text-sm sm:text-base font-semibold border border-emerald-500/30 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-[0.98] transition-all min-h-[48px] touch-manipulation"
-              >
-                <MessageCircle size={20} className="shrink-0" />
-                {t('landing.cta_whatsapp')}
+              <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('whatsapp_click', {})}
+                className="flex items-center justify-center gap-3 px-8 py-4 text-base font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl hover:bg-emerald-500/20 active:scale-[0.98] transition-all min-h-[56px]">
+                <MessageCircle size={20} /> {t('landing.cta_whatsapp') || 'Probar agente WhatsApp'}
               </a>
-              <div className="pt-2">
-                <Link
-                  to="/login"
-                  className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-sm font-semibold text-white/40 hover:text-white/70 hover:bg-white/[0.04] transition-colors min-h-[44px] touch-manipulation"
-                >
-                  <LogIn size={18} />
-                  {t('landing.cta_login')}
-                </Link>
-              </div>
             </motion.div>
+
+            <p className="text-xs text-white/20">{t('landing.cta_disclaimer') || 'Te logueamos automaticamente en la cuenta demo'}</p>
           </motion.div>
         </section>
 
-        {/* Dynamic Showcase Section */}
-        <div className="relative z-10 border-t border-white/[0.06] mt-20">
-          <DynamicShowcase />
-        </div>
+        {/* ═══════════ STATS BAR ═══════════ */}
+        <motion.section {...fadeUp} transition={{ delay: 0.2 }}
+          className="max-w-4xl mx-auto px-4 -mt-8 mb-20">
+          <div className="flex justify-center gap-8 sm:gap-16 py-6 px-8 rounded-2xl bg-white/[0.03] border border-white/[0.06] backdrop-blur-xl">
+            {[
+              { value: '20+', label: t('landing.stat_professionals') || 'Profesionales' },
+              { value: '5K+', label: t('landing.stat_patients') || 'Pacientes' },
+              { value: '99.9%', label: t('landing.stat_uptime') || 'Uptime' },
+            ].map((stat, i) => (
+              <div key={i} className="text-center">
+                <div className="text-2xl sm:text-3xl font-black text-white">{stat.value}</div>
+                <div className="text-xs text-white/30 font-medium mt-1">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </motion.section>
+
+        {/* ═══════════ FEATURES GRID ═══════════ */}
+        <section className="max-w-6xl mx-auto px-4 py-20">
+          <motion.div {...fadeUp} className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
+              {t('landing.features_title') || 'Todo lo que tu clinica necesita'}
+            </h2>
+            <p className="text-white/40 text-lg max-w-2xl mx-auto">
+              {t('landing.features_subtitle') || 'Una plataforma completa que transforma la gestion de tu clinica dental'}
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[
+              { icon: Calendar, title: t('landing.feat_agenda') || 'Agenda inteligente', desc: t('landing.feat_agenda_desc') || 'Gestion de turnos por profesional y sede. Sincronizacion con Google Calendar. Recordatorios automaticos.', color: 'blue', img: SHOWCASE_IMAGES[0] },
+              { icon: MessageCircle, title: t('landing.feat_ai') || 'Agente IA 24/7', desc: t('landing.feat_ai_desc') || 'Atencion automatica por WhatsApp. Agenda turnos, responde dudas, detecta urgencias y cobra senas.', color: 'emerald', img: SHOWCASE_IMAGES[1] },
+              { icon: BarChart3, title: t('landing.feat_analytics') || 'Analitica avanzada', desc: t('landing.feat_analytics_desc') || 'Dashboard con KPIs en tiempo real. Ingresos, tasa de asistencia, rendimiento por profesional.', color: 'violet', img: SHOWCASE_IMAGES[2] },
+              { icon: Sparkles, title: t('landing.feat_odontogram') || 'Odontograma digital', desc: t('landing.feat_odontogram_desc') || 'Registro clinico visual con 10 estados por pieza dental. Animaciones y colores por patologia.', color: 'amber' },
+              { icon: Users, title: t('landing.feat_patients') || 'Ficha de pacientes', desc: t('landing.feat_patients_desc') || 'Historia clinica completa, anamnesis digital, galeria de documentos y radiografias.', color: 'cyan' },
+              { icon: Star, title: t('landing.feat_marketing') || 'Marketing Hub', desc: t('landing.feat_marketing_desc') || 'ROI real de Meta Ads y Google Ads. Atribucion de pacientes por campaña.', color: 'pink' },
+            ].map((feat, i) => {
+              const colorMap: Record<string, string> = {
+                blue: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+                emerald: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+                violet: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
+                amber: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+                cyan: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+                pink: 'bg-pink-500/10 text-pink-400 border-pink-500/20',
+              };
+              return (
+                <motion.div key={i} {...fadeUp} transition={{ delay: i * 0.1 }}
+                  className="relative rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6 overflow-hidden group hover:border-white/[0.12] transition-all duration-500">
+                  {feat.img && (
+                    <div className="absolute inset-0 opacity-[0.04] group-hover:opacity-[0.08] transition-opacity duration-700 bg-cover bg-center"
+                      style={{ backgroundImage: `url(${feat.img})`, filter: 'blur(1px)' }} />
+                  )}
+                  <div className="relative z-10">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center border mb-4 ${colorMap[feat.color]}`}>
+                      <feat.icon size={22} />
+                    </div>
+                    <h3 className="text-lg font-bold text-white mb-2">{feat.title}</h3>
+                    <p className="text-sm text-white/40 leading-relaxed">{feat.desc}</p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ═══════════ HOW IT WORKS ═══════════ */}
+        <section className="max-w-4xl mx-auto px-4 py-20">
+          <motion.div {...fadeUp} className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
+              {t('landing.how_title') || 'Como funciona'}
+            </h2>
+          </motion.div>
+
+          <div className="space-y-6">
+            {[
+              { step: '1', title: t('landing.step1_title') || 'Proba la demo', desc: t('landing.step1_desc') || 'Un clic y entras a la plataforma completa. Sin registrarte, sin tarjeta.', icon: Zap },
+              { step: '2', title: t('landing.step2_title') || 'Habla con la IA', desc: t('landing.step2_desc') || 'Escribile al agente por WhatsApp. Ve como agenda un turno automaticamente.', icon: MessageCircle },
+              { step: '3', title: t('landing.step3_title') || 'Ve la magia', desc: t('landing.step3_desc') || 'La notificacion aparece en tiempo real. El turno se refleja en la agenda. Todo automatico.', icon: Sparkles },
+            ].map((s, i) => (
+              <motion.div key={i} {...fadeUp} transition={{ delay: i * 0.15 }}
+                className="flex gap-6 items-start p-6 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
+                <div className="w-12 h-12 rounded-xl bg-blue-500/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-lg font-black shrink-0">
+                  {s.step}
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white mb-1">{s.title}</h3>
+                  <p className="text-white/40">{s.desc}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+
+        {/* ═══════════ TESTIMONIAL / SOCIAL PROOF ═══════════ */}
+        <section className="max-w-4xl mx-auto px-4 py-20">
+          <motion.div {...fadeUp}
+            className="rounded-3xl border border-white/[0.08] bg-white/[0.03] p-8 sm:p-12 text-center relative overflow-hidden">
+            <div className="absolute inset-0 opacity-[0.03] bg-cover bg-center" style={{ backgroundImage: `url(${SHOWCASE_IMAGES[0]})` }} />
+            <div className="relative z-10">
+              <div className="flex justify-center gap-1 mb-6">
+                {[...Array(5)].map((_, i) => <Star key={i} size={20} className="text-amber-400 fill-amber-400" />)}
+              </div>
+              <blockquote className="text-xl sm:text-2xl text-white/80 font-medium leading-relaxed mb-6 italic">
+                {t('landing.testimonial_text') || '"Desde que implementamos Dentalogic, la atencion automatica por WhatsApp nos triplicó los turnos agendados fuera de horario."'}
+              </blockquote>
+              <div className="text-white/40 text-sm">
+                <span className="text-white/60 font-semibold">{t('landing.testimonial_author') || 'Dra. Martinez'}</span> — {t('landing.testimonial_role') || 'Directora, Clinica Dental Premium'}
+              </div>
+            </div>
+          </motion.div>
+        </section>
+
+        {/* ═══════════ FINAL CTA ═══════════ */}
+        <section className="max-w-3xl mx-auto px-4 py-20 text-center">
+          <motion.div {...fadeUp}>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
+              {t('landing.final_cta_title') || 'Transforma tu clinica hoy'}
+            </h2>
+            <p className="text-white/40 text-lg mb-8 max-w-xl mx-auto">
+              {t('landing.final_cta_desc') || 'Unite a las clinicas que ya gestionan todo con inteligencia artificial'}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link to="/login?demo=1"
+                className="flex items-center justify-center gap-3 px-8 py-4 text-base font-bold text-gray-900 bg-white rounded-2xl hover:bg-white/90 active:scale-[0.98] transition-all shadow-xl">
+                <Zap size={20} /> {t('landing.cta_try_app') || 'Probar app'}
+              </Link>
+              <Link to="/login"
+                className="flex items-center justify-center gap-2 px-8 py-4 text-base font-semibold text-white/50 border border-white/[0.08] rounded-2xl hover:bg-white/[0.04] transition-all">
+                <LogIn size={18} /> {t('landing.cta_login') || 'Iniciar sesion'}
+              </Link>
+            </div>
+          </motion.div>
+        </section>
+
+        {/* Footer */}
+        <footer className="border-t border-white/[0.06] py-8 text-center">
+          <p className="text-xs text-white/20">
+            © {new Date().getFullYear()} Dentalogic. {t('landing.footer') || 'Inteligencia artificial para clinicas dentales.'}
+          </p>
+        </footer>
       </main>
     </div>
   );
