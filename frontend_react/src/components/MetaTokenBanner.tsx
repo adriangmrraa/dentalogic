@@ -1,59 +1,66 @@
-import React, { useState } from 'react';
-import { AlertTriangle, X, ExternalLink, Wifi } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { AlertTriangle, RefreshCw, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
 
-interface MetaTokenBannerProps {
-  status: 'valid' | 'expiring_soon' | 'expired' | 'not_connected';
-  expiresAt?: string;
-  onReconnect: () => void;
+export default function MetaTokenBanner() {
+    const [status, setStatus] = useState<{ days_left: number; needs_reconnect: boolean } | null>(null);
+    const [dismissed, setDismissed] = useState(false);
+    const { user } = useAuth();
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        // Solo para CEO
+        if (user?.role !== 'ceo') return;
+
+        const checkToken = async () => {
+            try {
+                const { data } = await api.get('/admin/marketing/token-status');
+                if (data.needs_reconnect || (data.days_left !== null && data.days_left <= 7)) {
+                    setStatus(data);
+                }
+            } catch (error) {
+                // Silently fail - endpoint may not exist yet
+            }
+        };
+
+        checkToken();
+        const interval = setInterval(checkToken, 3600000);
+        return () => clearInterval(interval);
+    }, [user]);
+
+    if (!status || dismissed) return null;
+
+    const isExpiringSoon = status.days_left !== null && status.days_left <= 7;
+    const isExpired = status.needs_reconnect;
+
+    if (!isExpiringSoon && !isExpired) return null;
+
+    return (
+        <div className={`w-full py-3 px-6 flex items-center justify-between animate-in slide-in-from-top duration-500 shadow-md z-50 ${isExpired ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white'
+            }`}>
+            <div className="flex items-center gap-3">
+                <AlertTriangle size={20} className="animate-pulse" />
+                <p className="text-sm font-bold">
+                    {isExpired
+                        ? "Tu conexion con Meta Ads ha expirado. Reconecta ahora para no perder datos."
+                        : `Tu conexion con Meta Ads expira en ${status.days_left} dias. Reconecta para evitar interrupciones.`
+                    }
+                </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+                <button
+                    onClick={() => navigate('/marketing?reconnect=true')}
+                    className="bg-white/20 hover:bg-white/30 backdrop-blur-md px-4 py-1.5 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 border border-white/30"
+                >
+                    <RefreshCw size={14} /> Reconectar Ahora
+                </button>
+                <button onClick={() => setDismissed(true)} className="hover:bg-black/10 p-1 rounded-lg transition-colors">
+                    <X size={18} />
+                </button>
+            </div>
+        </div>
+    );
 }
-
-export const MetaTokenBanner: React.FC<MetaTokenBannerProps> = ({ status, expiresAt, onReconnect }) => {
-  const [dismissed, setDismissed] = useState(false);
-
-  if (status === 'valid' || dismissed) return null;
-
-  const config = {
-    expiring_soon: {
-      bg: 'bg-amber-500/10 border-amber-500/20',
-      text: 'text-amber-400',
-      icon: <AlertTriangle size={16} className="text-amber-400" />,
-      message: `Tu conexión con Meta expira${expiresAt ? ` el ${new Date(expiresAt).toLocaleDateString()}` : ' pronto'}.`,
-      action: 'Reconectar',
-    },
-    expired: {
-      bg: 'bg-red-500/10 border-red-500/20',
-      text: 'text-red-400',
-      icon: <AlertTriangle size={16} className="text-red-400" />,
-      message: 'Conexión con Meta expirada. Los leads no se están recibiendo.',
-      action: 'Reconectar ahora',
-    },
-    not_connected: {
-      bg: 'bg-blue-500/10 border-blue-500/20',
-      text: 'text-blue-400',
-      icon: <Wifi size={16} className="text-blue-400" />,
-      message: 'Conecta Meta para recibir leads automáticamente.',
-      action: 'Conectar',
-    },
-  }[status];
-
-  return (
-    <div className={`mx-4 mt-2 px-4 py-2.5 rounded-xl border flex items-center gap-3 animate-slide-up ${config.bg}`}>
-      {config.icon}
-      <p className={`text-sm flex-1 ${config.text}`}>{config.message}</p>
-      <button
-        onClick={onReconnect}
-        className={`text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.10] transition-colors flex items-center gap-1.5 ${config.text}`}
-      >
-        <ExternalLink size={12} /> {config.action}
-      </button>
-      <button
-        onClick={() => setDismissed(true)}
-        className="text-white/30 hover:text-white/60 transition-colors"
-      >
-        <X size={14} />
-      </button>
-    </div>
-  );
-};
-
-export default MetaTokenBanner;
