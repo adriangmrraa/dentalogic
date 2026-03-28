@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -9,33 +9,43 @@ interface ModalProps {
     size?: 'md' | 'lg' | 'xl';
 }
 
-const sizeMap = {
-    md: 'max-w-md',
-    lg: 'max-w-lg',
-    xl: 'max-w-2xl',
+const sizeClasses = {
+    md: 'lg:max-w-md',
+    lg: 'lg:max-w-2xl',
+    xl: 'lg:max-w-4xl'
 };
 
 export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'lg' }) => {
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => { document.body.style.overflow = ''; };
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     return (
         <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 z-[100] flex items-end lg:items-center justify-center lg:p-4 bg-black/50 backdrop-blur-sm"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
-            <div className={`${sizeMap[size]} w-full bg-surface-2 border border-white/[0.08] rounded-2xl shadow-elevated animate-modal-in max-h-[90vh] overflow-hidden flex flex-col`}>
+            <div className={`relative w-full ${sizeClasses[size]} bg-white border-t lg:border border-gray-200 rounded-t-2xl lg:rounded-2xl shadow-2xl flex flex-col max-h-[92vh] lg:max-h-[85vh]`}>
                 {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b border-white/[0.06] shrink-0">
-                    <h2 className="text-lg font-semibold text-white">{title}</h2>
+                <div className="flex justify-between items-center px-5 py-4 lg:px-6 lg:py-5 border-b border-gray-100 shrink-0">
+                    <h2 className="text-lg lg:text-xl font-bold text-gray-900">{title}</h2>
                     <button
                         onClick={onClose}
-                        className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/[0.06] transition-colors"
+                        className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors active:bg-gray-200"
                     >
                         <X size={20} />
                     </button>
                 </div>
+
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-5">
+                <div className="px-5 py-4 lg:px-6 lg:py-5 overflow-y-auto overscroll-contain" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
                     {children}
                 </div>
             </div>

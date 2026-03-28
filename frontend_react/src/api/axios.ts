@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance, type AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios';
+import { getEnv } from '../utils/env';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = getEnv('VITE_API_URL') || 'http://localhost:3000';
 export const BACKEND_URL = API_URL;
 const MAX_RETRIES = 3;
 const BASE_DELAY = 1000;
@@ -11,16 +12,16 @@ const BASE_DELAY = 1000;
 
 // Get current tenant ID from storage or context
 export const getCurrentTenantId = (): string | null => {
-  // Try to get from localStorage first (for persistent sessions)
-  const storedTenant = localStorage.getItem('X-Tenant-ID');
+  // Try to get from localStorage (X-Tenant-ID is preferred, tenant_id is legacy/fallback)
+  const storedTenant = localStorage.getItem('X-Tenant-ID') || localStorage.getItem('tenant_id');
   if (storedTenant) return storedTenant;
 
   // Try to get from session storage
-  const sessionTenant = sessionStorage.getItem('X-Tenant-ID');
+  const sessionTenant = sessionStorage.getItem('X-Tenant-ID') || sessionStorage.getItem('tenant_id');
   if (sessionTenant) return sessionTenant;
 
-  // Default tenant for development (can be overridden by environment)
-  return import.meta.env.VITE_DEFAULT_TENANT_ID || 'default';
+  // Default tenant for development
+  return getEnv('VITE_DEFAULT_TENANT_ID') || '1';
 };
 
 // Set tenant ID for the session
@@ -41,11 +42,6 @@ export const clearTenantId = (): void => {
 // ============================================
 // AXIOS INSTANCE
 // ============================================
-
-interface RetryConfig {
-  retries: number;
-  delay: number;
-}
 
 // Utility para delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -68,29 +64,38 @@ const api: AxiosInstance = axios.create({
     'Content-Type': 'application/json',
   },
   timeout: 30000,
+  withCredentials: true, // Nexus Security: Permitir HttpOnly Cookies
 });
 
 // Request interceptor: agregar token y X-Tenant-ID
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // 1. Get tokens from localStorage
-    let adminToken = localStorage.getItem('ADMIN_TOKEN');
-    const jwtToken = localStorage.getItem('JWT_TOKEN');
+    // 1. Infrastructure token: SIEMPRE desde env (nunca cacheado en localStorage)
+    // Prioridad: window.__ENV__ (runtime Docker) → import.meta.env (build Vite) → localStorage (legado)
+    const envToken = getEnv('VITE_ADMIN_TOKEN');
+    let adminToken: string | null = null;
 
-    // Auto-init for Admin Token (Compatibility)
-    if (!adminToken) {
-      const envToken = import.meta.env.VITE_ADMIN_TOKEN;
-      if (envToken) {
-        localStorage.setItem('ADMIN_TOKEN', envToken);
-        adminToken = envToken;
-      }
+    if (envToken && envToken !== 'RUNTIME_REPLACE' && envToken.length > 0) {
+      adminToken = envToken;
+    } else {
+      // Fallback legado: leer de localStorage por compatibilidad con versiones anteriores
+      adminToken = localStorage.getItem('ADMIN_TOKEN');
+      if (adminToken === 'RUNTIME_REPLACE') adminToken = null;
     }
 
     if (config.headers) {
-      // Layer 1: Infrastructure Security
-      if (adminToken) config.headers['X-Admin-Token'] = adminToken;
+      // Layer 1: Infrastructure Security (Static)
+      if (adminToken && adminToken !== 'RUNTIME_REPLACE') {
+        config.headers['X-Admin-Token'] = adminToken;
+      } else if (adminToken === 'RUNTIME_REPLACE') {
+        console.error('🚫 Blocked request with "RUNTIME_REPLACE" token');
+        return Promise.reject(new Error('Auth blocked: Corrupt token detected'));
+      }
 
       // Layer 2: Identity Security (Nexus v7.6)
+      // El JWT se envía automáticamente vía Cookies HttpOnly gracias a withCredentials: true.
+      // Se RESTAURA fallback a cabecera Bearer para entornos donde las cookies sean bloqueadas o el backend sea strict.
+      const jwtToken = localStorage.getItem('access_token');
       if (jwtToken) {
         config.headers['Authorization'] = `Bearer ${jwtToken}`;
       }
@@ -102,8 +107,10 @@ api.interceptors.request.use(
       config.headers['X-Tenant-ID'] = tenantId;
     }
 
-    // Log request
-    console.log(`[API] ${config.method?.toUpperCase()} ${config.url} [Tenant: ${tenantId}]`);
+    // Log solo en desarrollo — evitar exponer estructura de API en producción
+    if (import.meta.env.DEV) {
+      console.log(`[API] ${config.method?.toUpperCase()} ${config.url} [Tenant: ${tenantId}]`);
+    }
 
     // Agregar retry count metadata
     (config as any).metadata = { retryCount: 0 };
@@ -119,7 +126,9 @@ api.interceptors.request.use(
 // Response interceptor con exponential backoff y retry automático
 api.interceptors.response.use(
   (response) => {
-    console.log(`[API] ✅ ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
+    if (import.meta.env.DEV) {
+      console.log(`[API] ✅ ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
+    }
     return response;
   },
   async (error: AxiosError) => {
@@ -149,10 +158,47 @@ api.interceptors.response.use(
 
     // Manejo específico de errores
     if (status === 401) {
-      console.warn('[API] ⚠️ Unauthorized - Limpiando token');
-      localStorage.removeItem('ADMIN_TOKEN');
+      const errorData = error.response?.data as any;
+      const errorDetail = errorData?.detail || errorData?.error || '';
+      const isAdminTokenError = errorDetail.includes('X-Admin-Token') ||
+        errorDetail.includes('admin_token') ||
+        errorDetail.includes('infraestructura');
 
-      if (!window.location.pathname.includes('/login')) {
+      if (isAdminTokenError) {
+        console.warn('[API] 🔧 ADMIN_TOKEN error detectado - Intentando autoreparación');
+
+        // 1. Obtener token del entorno (VITE_ADMIN_TOKEN)
+        const envToken = import.meta.env.VITE_ADMIN_TOKEN;
+
+        // 2. Si hay token en entorno Y no está en localStorage, restaurarlo
+        if (envToken && envToken !== 'RUNTIME_REPLACE' && envToken.length > 10) {
+          console.log('[API] 🔄 Restaurando ADMIN_TOKEN desde variables de entorno');
+          localStorage.setItem('ADMIN_TOKEN', envToken);
+
+          // 3. Reintentar la request inmediatamente con nuevo token
+          if (originalConfig && retryCount <= MAX_RETRIES) {
+            originalConfig._retryCount = retryCount;
+            const delayMs = 100; // Retry rápido
+            console.log(`[API] 🔁 Reintentando request con token restaurado`);
+
+            await delay(delayMs);
+            return api(originalConfig);
+          }
+        } else {
+          console.error('[API] 🔥 ERROR: No se puede restaurar ADMIN_TOKEN - VITE_ADMIN_TOKEN inválido o vacío');
+          console.log('[API] 💡 Longitud VITE_ADMIN_TOKEN:', envToken?.length || 0);
+        }
+      } else {
+        // Error 401 normal (JWT expirado, no admin token)
+        console.warn('[API] ⚠️ Unauthorized - Limpiando JWT solamente');
+        localStorage.removeItem('access_token');
+      }
+
+      // No redirigir si estamos en una página pública legal (Spec Meta Review)
+      const publicRoutes = ['/privacy', '/terms', '/demo'];
+      const isPublicRoute = publicRoutes.some(route => window.location.pathname.startsWith(route));
+
+      if (!window.location.pathname.includes('/login') && !isPublicRoute) {
         window.location.href = '/login';
       }
     } else if (status === 403) {

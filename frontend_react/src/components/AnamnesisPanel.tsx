@@ -1,329 +1,339 @@
-import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Save, Heart, Pill, AlertTriangle, Cigarette, FileText } from 'lucide-react';
-import GlassCard from './GlassCard';
+import { useState, useEffect } from 'react';
+import { AlertTriangle, Pill, Baby, HeartPulse, Cigarette, Scissors, Brain, Frown, CheckCircle, Edit2, Save, X } from 'lucide-react';
+import api from '../api/axios';
+import { useTranslation } from '../context/LanguageContext';
 
-export interface AnamnesisData {
-  personalHistory: {
-    allergies: string[];
-    medications: string[];
-    chronicConditions: string[];
-    surgeries: string[];
-    pregnancyStatus?: 'none' | 'pregnant' | 'lactating';
-  };
-  dentalHistory: {
-    lastVisit?: string;
-    brushingFrequency: string;
-    flossing: boolean;
-    sensitivity: string[];
-    bruxism: boolean;
-    previousTreatments: string[];
-  };
-  habits: {
-    smoking: boolean;
-    alcohol: boolean;
-    diet: string;
-  };
-  observations: string;
-  consentSigned: boolean;
-  consentDate?: string;
-  lastUpdated: string;
-  updatedBy: string;
+// ============================================================
+// Tipos
+// ============================================================
+interface MedicalHistory {
+  base_diseases?: string;
+  habitual_medication?: string;
+  allergies?: string;
+  previous_surgeries?: string;
+  is_smoker?: string;
+  smoker_amount?: string;
+  pregnancy_lactation?: string;
+  negative_experiences?: string;
+  specific_fears?: string;
+  anamnesis_completed_at?: string;
+  anamnesis_completed_via?: string;
+  anamnesis_last_edited_by?: string;
+  anamnesis_last_edited_at?: string;
+}
+
+interface AnamnesisField {
+  key: keyof MedicalHistory;
+  label: string;
+  icon: React.ReactNode;
+  alertLevel: 'none' | 'warning' | 'danger'; // badge visual si hay dato
 }
 
 interface AnamnesisPanelProps {
-  patientId: string;
-  anamnesis: AnamnesisData;
-  onSave: (data: AnamnesisData) => void;
-  readOnly?: boolean;
+  /** Modo de carga: por ID de paciente o por teléfono */
+  patientId?: number;
+  phone?: string;
+  /** Si se pasa directamente el objeto, no se hace fetch */
+  medicalHistory?: MedicalHistory | null;
+  /** El rol del usuario autenticado (para habilitar/deshabilitar edición) */
+  userRole?: 'ceo' | 'secretary' | 'professional';
+  /** Compacto = para panel lateral de ChatsView. Expandido = para PatientDetail tab */
+  compact?: boolean;
+  /** Callback tras guardar (para refrescar padre) */
+  onSaved?: () => void;
+  /** Incrementar para forzar refetch (ej. cuando llega PATIENT_UPDATED con update_type anamnesis_saved) */
+  refreshKey?: number;
 }
 
-const CollapsibleSection: React.FC<{
-  title: string;
-  icon: React.ReactNode;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}> = ({ title, icon, defaultOpen = false, children }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+// ============================================================
+// Definición de campos
+// ============================================================
+const ANAMNESIS_FIELDS: AnamnesisField[] = [
+  {
+    key: 'base_diseases',
+    label: 'Enfermedades de base',
+    icon: <HeartPulse size={15} />,
+    alertLevel: 'none',
+  },
+  {
+    key: 'habitual_medication',
+    label: 'Medicación habitual',
+    icon: <Pill size={15} />,
+    alertLevel: 'warning', // naranja si hay dato
+  },
+  {
+    key: 'allergies',
+    label: 'Alergias',
+    icon: <AlertTriangle size={15} />,
+    alertLevel: 'danger', // rojo si hay dato
+  },
+  {
+    key: 'previous_surgeries',
+    label: 'Cirugías previas',
+    icon: <Scissors size={15} />,
+    alertLevel: 'none',
+  },
+  {
+    key: 'is_smoker',
+    label: 'Fumador/a',
+    icon: <Cigarette size={15} />,
+    alertLevel: 'none',
+  },
+  {
+    key: 'smoker_amount',
+    label: 'Cantidad de cigarrillos',
+    icon: <Cigarette size={15} />,
+    alertLevel: 'none',
+  },
+  {
+    key: 'pregnancy_lactation',
+    label: 'Embarazo / Lactancia',
+    icon: <Baby size={15} />,
+    alertLevel: 'danger', // rojo si hay dato
+  },
+  {
+    key: 'negative_experiences',
+    label: 'Experiencias negativas',
+    icon: <Frown size={15} />,
+    alertLevel: 'none',
+  },
+  {
+    key: 'specific_fears',
+    label: 'Miedos específicos',
+    icon: <Brain size={15} />,
+    alertLevel: 'none',
+  },
+];
 
-  return (
-    <GlassCard className="mb-3" hover={false}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between group"
-      >
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400">{icon}</div>
-          <h3 className="text-sm font-semibold text-white">{title}</h3>
-        </div>
-        <div className="text-white/40 group-hover:text-white/60 transition-colors">
-          {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-        </div>
-      </button>
-      {isOpen && (
-        <div className="mt-4 pt-4 border-t border-white/[0.06] animate-slide-up">
-          {children}
-        </div>
-      )}
-    </GlassCard>
-  );
-};
+// ============================================================
+// Helpers
+// ============================================================
+function isAlertValue(val?: string): boolean {
+  if (!val) return false;
+  const lower = val.toLowerCase().trim();
+  return lower !== 'no' && lower !== 'ninguno' && lower !== 'ninguna' && lower !== '-' && lower !== '';
+}
 
-const TagList: React.FC<{
-  items: string[];
-  onChange?: (items: string[]) => void;
-  readOnly?: boolean;
-  color?: string;
-}> = ({ items, onChange, readOnly, color = 'blue' }) => {
-  const [input, setInput] = useState('');
-  const colorMap: Record<string, string> = {
-    blue: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-    red: 'bg-red-500/10 text-red-400 border-red-500/20',
-    amber: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    green: 'bg-green-500/10 text-green-400 border-green-500/20',
-  };
+function alertClass(level: 'none' | 'warning' | 'danger', hasValue: boolean): string {
+  if (!hasValue || level === 'none') return 'text-white/40';
+  if (level === 'danger') return 'text-red-500';
+  return 'text-orange-500';
+}
 
-  const handleAdd = () => {
-    if (input.trim() && onChange) {
-      onChange([...items, input.trim()]);
-      setInput('');
+function badgeClass(level: 'none' | 'warning' | 'danger', hasValue: boolean): string {
+  if (!hasValue || level === 'none') return '';
+  if (level === 'danger') return 'inline-block ml-1 w-2 h-2 rounded-full bg-red-500';
+  return 'inline-block ml-1 w-2 h-2 rounded-full bg-orange-400';
+}
+
+// ============================================================
+// Componente principal
+// ============================================================
+export default function AnamnesisPanel({
+  patientId,
+  phone,
+  medicalHistory: externalHistory,
+  userRole = 'secretary',
+  compact = false,
+  onSaved,
+  refreshKey,
+}: AnamnesisPanelProps) {
+  const { t } = useTranslation();
+  const [history, setHistory] = useState<MedicalHistory | null>(externalHistory ?? null);
+  const [resolvedPatientId, setResolvedPatientId] = useState<number | undefined>(patientId);
+  const [loading, setLoading] = useState(!externalHistory && !!(patientId || phone));
+  const [editing, setEditing] = useState(false);
+  const [editData, setEditData] = useState<MedicalHistory>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canEdit = userRole === 'ceo' || userRole === 'professional';
+
+  // ---- Fetch si no se pasó medicalHistory directamente ----
+  useEffect(() => {
+    if (externalHistory !== undefined) {
+      setHistory(externalHistory);
+      setLoading(false);
+      return;
+    }
+    if (!patientId && !phone) return;
+
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        let res;
+        if (patientId) {
+          res = await api.get(`/admin/patients/${patientId}`);
+        } else {
+          res = await api.get(`/admin/patients/by-phone/${encodeURIComponent(phone!)}`);
+          setResolvedPatientId(res.data?.id);
+        }
+        setHistory(res.data?.medical_history ?? null);
+        if (!resolvedPatientId) setResolvedPatientId(res.data?.id);
+      } catch (e: any) {
+        setError(e?.response?.status === 404 ? 'Paciente no encontrado.' : 'Error al cargar anamnesis.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientId, phone, refreshKey]);
+
+  // ---- Guardar ----
+  const handleSave = async () => {
+    if (!resolvedPatientId) return;
+    setSaving(true);
+    try {
+      const res = await api.patch(`/admin/patients/${resolvedPatientId}/anamnesis`, editData);
+      setHistory(res.data.medical_history);
+      setEditing(false);
+      onSaved?.();
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? 'Error al guardar.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  return (
-    <div>
-      <div className="flex flex-wrap gap-2 mb-2">
-        {items.map((item, i) => (
-          <span key={i} className={`px-2.5 py-1 rounded-full text-xs font-medium border ${colorMap[color]}`}>
-            {item}
-            {!readOnly && onChange && (
-              <button
-                onClick={() => onChange(items.filter((_, idx) => idx !== i))}
-                className="ml-1.5 opacity-60 hover:opacity-100"
-              >
-                ×
-              </button>
-            )}
-          </span>
-        ))}
-        {items.length === 0 && <span className="text-xs text-white/20">Sin registros</span>}
+  // ---- Render estados ----
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-6 text-white/30 text-sm">
+        <div className="animate-spin mr-2">◌</div> Cargando anamnesis...
       </div>
-      {!readOnly && onChange && (
-        <div className="flex gap-2 mt-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAdd())}
-            placeholder="Agregar..."
-            className="flex-1 px-3 py-1.5 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs focus:outline-none focus:border-blue-500/40"
-          />
+    );
+  }
+
+  if (error) {
+    return <p className="text-red-500 text-xs py-2 px-3">{error}</p>;
+  }
+
+  if (!history || Object.keys(history).filter(k => !k.startsWith('anamnesis_')).length === 0) {
+    return (
+      <div className={`flex flex-col items-center justify-center gap-2 ${compact ? 'py-4' : 'py-8'} text-white/30`}>
+        <HeartPulse size={compact ? 20 : 32} className="opacity-40" />
+        <p className="text-xs text-center">Este paciente aún no<br/>completó la anamnesis.</p>
+      </div>
+    );
+  }
+
+  // ---- Render edición ----
+  if (editing) {
+    return (
+      <div className="space-y-3 p-3">
+        {ANAMNESIS_FIELDS.map(f => (
+          <div key={f.key}>
+            <label className="block text-xs font-medium text-white/60 mb-1 flex items-center gap-1">
+              <span className={alertClass(f.alertLevel, isAlertValue(history?.[f.key] ?? editData[f.key]))}>{f.icon}</span>
+              {f.label}
+            </label>
+            <input
+              className="w-full px-2 py-1.5 border border-white/[0.08] rounded bg-white/[0.04] text-white text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              defaultValue={history?.[f.key] ?? ''}
+              onChange={e => setEditData(prev => ({ ...prev, [f.key]: e.target.value }))}
+            />
+          </div>
+        ))}
+        {error && <p className="text-red-500 text-xs">{error}</p>}
+        <div className="flex gap-2 pt-2">
           <button
-            onClick={handleAdd}
-            className="px-3 py-1.5 bg-white/[0.06] text-white/60 rounded-lg text-xs hover:bg-white/[0.10] transition-colors"
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-1 px-3 py-1.5 bg-primary text-white text-xs rounded hover:bg-primary-dark disabled:opacity-50"
           >
-            +
+            <Save size={12} /> {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+          <button
+            onClick={() => { setEditing(false); setError(null); }}
+            className="flex items-center gap-1 px-3 py-1.5 bg-white/[0.04] text-white/60 text-xs rounded hover:bg-white/[0.08]"
+          >
+            <X size={12} /> Cancelar
           </button>
         </div>
-      )}
-    </div>
-  );
-};
+      </div>
+    );
+  }
 
-const CheckField: React.FC<{
-  label: string;
-  checked: boolean;
-  onChange?: (v: boolean) => void;
-  readOnly?: boolean;
-}> = ({ label, checked, onChange, readOnly }) => (
-  <label className="flex items-center gap-3 cursor-pointer group">
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={(e) => !readOnly && onChange?.(e.target.checked)}
-      disabled={readOnly}
-      className="w-4 h-4 rounded border-white/[0.12] bg-white/[0.04] text-blue-500 focus:ring-blue-500/20 disabled:opacity-50"
-    />
-    <span className="text-sm text-white/60 group-hover:text-white/80">{label}</span>
-  </label>
-);
-
-export const AnamnesisPanel: React.FC<AnamnesisPanelProps> = ({
-  patientId,
-  anamnesis,
-  onSave,
-  readOnly = false,
-}) => {
-  const [data, setData] = useState<AnamnesisData>(anamnesis);
-  const [hasChanges, setHasChanges] = useState(false);
-
-  const update = (updater: (d: AnamnesisData) => AnamnesisData) => {
-    setData((prev) => {
-      const next = updater(prev);
-      setHasChanges(true);
-      return next;
-    });
-  };
+  // ---- Render visualización ----
+  // En modo compacto, mostramos solo lo que tiene valor (incluyendo "No")
+  // Pero agrupamos smoker_amount con is_smoker
+  const fieldsWithValues = ANAMNESIS_FIELDS.filter(f => {
+    const val = history[f.key];
+    if (f.key === 'smoker_amount') return false; // Se maneja dentro de is_smoker
+    return val !== undefined && val !== null && val !== '';
+  });
 
   return (
-    <div>
-      {/* Personal History */}
-      <CollapsibleSection title="Historia Personal" icon={<Heart size={16} />} defaultOpen>
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs text-white/40 uppercase font-semibold mb-2 block">Alergias</label>
-            <TagList
-              items={data.personalHistory.allergies}
-              onChange={(items) => update((d) => ({ ...d, personalHistory: { ...d.personalHistory, allergies: items } }))}
-              readOnly={readOnly}
-              color="red"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-white/40 uppercase font-semibold mb-2 block">Medicamentos actuales</label>
-            <TagList
-              items={data.personalHistory.medications}
-              onChange={(items) => update((d) => ({ ...d, personalHistory: { ...d.personalHistory, medications: items } }))}
-              readOnly={readOnly}
-              color="amber"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-white/40 uppercase font-semibold mb-2 block">Condiciones crónicas</label>
-            <TagList
-              items={data.personalHistory.chronicConditions}
-              onChange={(items) => update((d) => ({ ...d, personalHistory: { ...d.personalHistory, chronicConditions: items } }))}
-              readOnly={readOnly}
-            />
-          </div>
-          <div>
-            <label className="text-xs text-white/40 uppercase font-semibold mb-2 block">Cirugías previas</label>
-            <TagList
-              items={data.personalHistory.surgeries}
-              onChange={(items) => update((d) => ({ ...d, personalHistory: { ...d.personalHistory, surgeries: items } }))}
-              readOnly={readOnly}
-              color="green"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-white/40 uppercase font-semibold mb-2 block">Estado de embarazo</label>
-            <select
-              value={data.personalHistory.pregnancyStatus || 'none'}
-              onChange={(e) => update((d) => ({ ...d, personalHistory: { ...d.personalHistory, pregnancyStatus: e.target.value as any } }))}
-              disabled={readOnly}
-              className="px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white text-sm w-full focus:outline-none focus:border-blue-500/40"
-            >
-              <option value="none">No aplica</option>
-              <option value="pregnant">Embarazada</option>
-              <option value="lactating">Lactancia</option>
-            </select>
-          </div>
-        </div>
-      </CollapsibleSection>
-
-      {/* Dental History */}
-      <CollapsibleSection title="Historia Dental" icon={<FileText size={16} />}>
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs text-white/40 uppercase font-semibold mb-2 block">Última visita</label>
-            <input
-              type="date"
-              value={data.dentalHistory.lastVisit || ''}
-              onChange={(e) => update((d) => ({ ...d, dentalHistory: { ...d.dentalHistory, lastVisit: e.target.value } }))}
-              disabled={readOnly}
-              className="px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white text-sm w-full focus:outline-none focus:border-blue-500/40"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-white/40 uppercase font-semibold mb-2 block">Frecuencia de cepillado</label>
-            <select
-              value={data.dentalHistory.brushingFrequency}
-              onChange={(e) => update((d) => ({ ...d, dentalHistory: { ...d.dentalHistory, brushingFrequency: e.target.value } }))}
-              disabled={readOnly}
-              className="px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white text-sm w-full focus:outline-none focus:border-blue-500/40"
-            >
-              <option value="1x">1 vez al día</option>
-              <option value="2x">2 veces al día</option>
-              <option value="3x">3 veces al día</option>
-              <option value="irregular">Irregular</option>
-            </select>
-          </div>
-          <div className="space-y-2">
-            <CheckField label="Usa hilo dental" checked={data.dentalHistory.flossing} onChange={(v) => update((d) => ({ ...d, dentalHistory: { ...d.dentalHistory, flossing: v } }))} readOnly={readOnly} />
-            <CheckField label="Bruxismo" checked={data.dentalHistory.bruxism} onChange={(v) => update((d) => ({ ...d, dentalHistory: { ...d.dentalHistory, bruxism: v } }))} readOnly={readOnly} />
-          </div>
-          <div>
-            <label className="text-xs text-white/40 uppercase font-semibold mb-2 block">Sensibilidades</label>
-            <TagList
-              items={data.dentalHistory.sensitivity}
-              onChange={(items) => update((d) => ({ ...d, dentalHistory: { ...d.dentalHistory, sensitivity: items } }))}
-              readOnly={readOnly}
-              color="amber"
-            />
-          </div>
-        </div>
-      </CollapsibleSection>
-
-      {/* Habits */}
-      <CollapsibleSection title="Hábitos" icon={<Cigarette size={16} />}>
-        <div className="space-y-3">
-          <CheckField label="Fumador" checked={data.habits.smoking} onChange={(v) => update((d) => ({ ...d, habits: { ...d.habits, smoking: v } }))} readOnly={readOnly} />
-          <CheckField label="Consumo de alcohol" checked={data.habits.alcohol} onChange={(v) => update((d) => ({ ...d, habits: { ...d.habits, alcohol: v } }))} readOnly={readOnly} />
-          <div>
-            <label className="text-xs text-white/40 uppercase font-semibold mb-2 block">Dieta</label>
-            <input
-              type="text"
-              value={data.habits.diet}
-              onChange={(e) => update((d) => ({ ...d, habits: { ...d.habits, diet: e.target.value } }))}
-              disabled={readOnly}
-              className="px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white text-sm w-full focus:outline-none focus:border-blue-500/40"
-              placeholder="Ej: Alta en azúcares..."
-            />
-          </div>
-        </div>
-      </CollapsibleSection>
-
-      {/* Observations */}
-      <CollapsibleSection title="Observaciones" icon={<AlertTriangle size={16} />}>
-        <textarea
-          value={data.observations}
-          onChange={(e) => update((d) => ({ ...d, observations: e.target.value }))}
-          disabled={readOnly}
-          rows={4}
-          className="w-full px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white text-sm resize-none focus:outline-none focus:border-blue-500/40"
-          placeholder="Observaciones generales del paciente..."
-        />
-        <div className="mt-3">
-          <CheckField
-            label="Consentimiento informado firmado"
-            checked={data.consentSigned}
-            onChange={(v) => update((d) => ({ ...d, consentSigned: v, consentDate: v ? new Date().toISOString() : undefined }))}
-            readOnly={readOnly}
-          />
-        </div>
-      </CollapsibleSection>
-
-      {/* Save */}
-      {!readOnly && (
-        <div className="flex items-center justify-between mt-4">
-          <span className="text-[10px] text-white/20">
-            Última actualización: {data.lastUpdated} por {data.updatedBy}
-          </span>
+    <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
+      {/* Header con botón de editar (Solo en modo expandido) */}
+      {canEdit && !compact && (
+        <div className="flex justify-end">
           <button
-            onClick={() => { onSave(data); setHasChanges(false); }}
-            disabled={!hasChanges}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-medium transition-all
-              ${hasChanges
-                ? 'bg-white text-gray-900 hover:scale-105 active:scale-95 shadow-lg animate-pulse-glow'
-                : 'bg-white/[0.04] text-white/30 cursor-not-allowed'
-              }`}
+            onClick={() => { setEditing(true); setEditData({}); }}
+            className="flex items-center gap-1 text-xs text-primary hover:underline"
           >
-            <Save size={16} />
-            Guardar anamnesis
+            <Edit2 size={12} /> Editar
           </button>
         </div>
       )}
+
+      {/* Campos */}
+      {fieldsWithValues.length === 0 ? (
+        <p className="text-xs text-white/30 text-center py-2">Sin datos cargados.</p>
+      ) : (
+        fieldsWithValues.map(f => {
+          let val = history[f.key]!;
+          const hasAlert = isAlertValue(val);
+          
+          // Especial: Combinar fumador
+          if (f.key === 'is_smoker' && history.smoker_amount) {
+            val = `${val} (${history.smoker_amount})`;
+          }
+
+          return (
+            <div
+              key={f.key}
+              className={`flex items-start gap-2 ${compact ? 'text-xs' : 'text-sm'} ${hasAlert && f.alertLevel !== 'none' ? 'bg-red-500/10 border border-red-500/20 rounded p-1.5' : ''}`}
+            >
+              <span className={`mt-0.5 flex-shrink-0 ${alertClass(f.alertLevel, hasAlert)}`}>{f.icon}</span>
+              <div className="min-w-0 flex-1">
+                <p className={`font-medium text-white/60 flex items-center gap-1 ${compact ? 'text-[10px]' : 'text-xs'} leading-none mb-0.5`}>
+                  {f.label}
+                  {hasAlert && f.alertLevel !== 'none' && <span className={badgeClass(f.alertLevel, hasAlert)} />}
+                </p>
+                <p className={`text-white break-words leading-tight ${compact ? 'text-[11px]' : ''}`}>
+                  {val === 'No' || val === 'no' ? <span className="text-white/30">No</span> : val}
+                </p>
+              </div>
+            </div>
+          );
+        })
+      )}
+
+      {/* Fecha de completado */}
+      {history.anamnesis_completed_at && (
+        <div className={`flex items-center gap-1 text-white/30 ${compact ? 'text-[10px]' : 'text-xs'} pt-1 border-t border-white/[0.06]`}>
+          <CheckCircle size={10} className="text-green-500" />
+          Completado:{' '}
+          {new Date(history.anamnesis_completed_at).toLocaleDateString('es-AR', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+          })}
+          {history.anamnesis_completed_via && ` vía ${history.anamnesis_completed_via}`}
+        </div>
+      )}
+
+      {/* Botón editar en modo compact (al final) */}
+      {canEdit && compact && (
+        <button
+          id="btn-edit-anamnesis-compact"
+          onClick={() => { setEditing(true); setEditData({}); }}
+          className="w-full flex items-center justify-center gap-1 py-1 px-2 border border-primary text-primary rounded text-[10px] font-bold hover:bg-primary/5 transition-colors mt-2"
+        >
+          <Edit2 size={10} /> {t('common.edit')} {t('chats.anamnesis')}
+        </button>
+      )}
     </div>
   );
-};
-
-export default AnamnesisPanel;
+}

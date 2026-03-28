@@ -1,387 +1,461 @@
-import { useState, useEffect } from 'react';
-import { DollarSign, Users, CalendarCheck, UserCheck, TrendingUp, TrendingDown } from 'lucide-react';
-import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+/**
+ * Dashboard CEO: Tokens, métricas del agente IA y estado del sistema.
+ * Consume la API /admin/dashboard/metrics - diseño integrado con ClinicForge.
+ */
+import { useEffect, useState } from 'react';
+import {
+  Zap,
+  DollarSign,
+  TrendingUp,
+  Activity,
+  Database,
+  Cpu,
+  RefreshCw,
+  AlertCircle,
+  BarChart3,
+  Settings,
+  Check,
+  MessageSquare,
+  Brain,
+  Mic,
+  Sparkles
+} from 'lucide-react';
 import api from '../api/axios';
-import { useTranslation } from '../context/LanguageContext';
 import PageHeader from '../components/PageHeader';
-import GlassCard from '../components/GlassCard';
+import GlassCard, { CARD_IMAGES } from '../components/GlassCard';
+import {
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar
+} from 'recharts';
 
-interface ExecutiveStats {
-  monthly_revenue: number;
-  previous_month_revenue: number;
-  new_patients: number;
-  attendance_rate: number;
-  active_professionals: number;
-  revenue_chart: { month: string; revenue: number }[];
-  appointments_by_professional: { name: string; appointments: number }[];
+interface TokenMetrics {
+  totals?: {
+    total_cost_usd: number;
+    total_tokens: number;
+    total_conversations: number;
+    avg_tokens_per_conversation: number;
+    avg_cost_per_conversation: number;
+  };
+  today?: { cost_usd: number; total_tokens: number; conversations: number };
+  current_month?: { cost_usd: number };
 }
 
-interface ProfessionalPerformance {
-  id: number;
-  name: string;
-  completed_appointments: number;
-  cancellation_rate: number;
-  revenue: number;
+interface ServiceBreakdown {
+  service: string;
+  model: string;
+  total_tokens: number;
+  cost_usd: number;
+  calls: number;
 }
 
-const darkTooltipStyle = {
-  backgroundColor: '#0d1117',
-  border: '1px solid rgba(255,255,255,0.06)',
-  borderRadius: '12px',
-  color: '#fff',
-  fontSize: '13px',
-  padding: '10px 14px',
-};
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(value);
+interface MetricsResponse {
+  timestamp: string;
+  status?: string;
+  message?: string;
+  token_metrics?: TokenMetrics;
+  daily_usage?: { date: string; total_tokens: number; cost_usd: number }[];
+  model_usage?: { model: string; total_tokens: number }[];
+  service_breakdown?: ServiceBreakdown[];
+  db_stats?: Record<string, number>;
+  projections?: Record<string, number>;
+  current_config?: Record<string, string>;
+  system_metrics?: Record<string, unknown>;
 }
 
-function getTrendPercent(current: number, previous: number): number {
-  if (previous === 0) return current > 0 ? 100 : 0;
-  return Math.round(((current - previous) / previous) * 100);
+const StatCard = ({
+  title,
+  value,
+  icon: Icon,
+  color,
+  subtitle,
+  image
+}: {
+  title: string;
+  value: string | number;
+  icon: any;
+  color: string;
+  subtitle?: string;
+  image?: string;
+}) => (
+  <GlassCard image={image}>
+    <div className="p-3 sm:p-5">
+      <div className="flex justify-between items-start mb-2">
+        <div className={`p-2 sm:p-3 rounded-xl ${color} bg-opacity-10`}>
+          <Icon className={`w-4 h-4 sm:w-6 sm:h-6 ${color.replace('bg-', 'text-')}`} />
+        </div>
+      </div>
+      <p className="text-white/40 text-[11px] sm:text-sm font-medium leading-tight">{title}</p>
+      <h3 className="text-lg sm:text-2xl font-bold text-white mt-0.5">{value}</h3>
+      {subtitle && <p className="text-[10px] sm:text-xs text-white/30 mt-0.5">{subtitle}</p>}
+    </div>
+  </GlassCard>
+);
+
+const AVAILABLE_MODELS = [
+  // === OpenAI — GPT-5.4 (Marzo 2026) ===
+  { id: 'gpt-5.4', label: 'GPT-5.4 Flagship (1M ctx)', tier: 'premium', type: 'text', provider: 'openai' },
+  { id: 'gpt-5.4-pro', label: 'GPT-5.4 Pro — Maximo razonamiento', tier: 'premium', type: 'text', provider: 'openai' },
+  { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini — Rapido y barato', tier: 'economy', type: 'text', provider: 'openai' },
+  { id: 'gpt-5.4-nano', label: 'GPT-5.4 Nano — Ultra economico', tier: 'economy', type: 'text', provider: 'openai' },
+  // === OpenAI — GPT-5.x ===
+  { id: 'gpt-5.3', label: 'GPT-5.3 Balanceado (400K ctx)', tier: 'standard', type: 'text', provider: 'openai' },
+  { id: 'gpt-5', label: 'GPT-5 Original (400K ctx)', tier: 'standard', type: 'text', provider: 'openai' },
+  { id: 'gpt-5-mini', label: 'GPT-5 Mini (400K ctx)', tier: 'economy', type: 'text', provider: 'openai' },
+  // === OpenAI — Legacy ===
+  { id: 'gpt-4o', label: 'GPT-4o Legacy (128K ctx)', tier: 'standard', type: 'text', provider: 'openai' },
+  { id: 'gpt-4o-mini', label: 'GPT-4o Mini Legacy (128K ctx)', tier: 'economy', type: 'text', provider: 'openai' },
+  // === OpenAI — Realtime (voice) ===
+  { id: 'gpt-4o-mini-realtime-preview', label: 'Realtime Mini — Voz economica', tier: 'economy', type: 'realtime', provider: 'openai' },
+  { id: 'gpt-4o-realtime-preview', label: 'Realtime Premium — Voz', tier: 'premium', type: 'realtime', provider: 'openai' },
+  // === DeepSeek ===
+  { id: 'deepseek-chat', label: 'DeepSeek V4 Chat — Muy barato, excelente', tier: 'economy', type: 'text', provider: 'deepseek' },
+  { id: 'deepseek-reasoner', label: 'DeepSeek V4 Reasoner — Razonamiento profundo', tier: 'standard', type: 'text', provider: 'deepseek' },
+];
+
+// Nova Voice only works with realtime models, others only with text models
+const VOICE_KEYS = new Set(['MODEL_NOVA_VOICE']);
+
+interface ModelAction {
+  key: string;
+  label: string;
+  description: string;
+  icon: any;
 }
+
+const MODEL_ACTIONS: ModelAction[] = [
+  { key: 'OPENAI_MODEL', label: 'Chat con pacientes', description: 'Agente principal que conversa con pacientes por WhatsApp/Instagram/Facebook', icon: MessageSquare },
+  { key: 'MODEL_INSIGHTS', label: 'Análisis diario', description: 'Genera insights y análisis de conversaciones cada 12 horas', icon: Brain },
+  { key: 'MODEL_NOVA_VOICE', label: 'Nova Voz', description: 'Asistente de voz Nova para el dashboard y ficha médica', icon: Mic },
+  { key: 'MODEL_PATIENT_MEMORY', label: 'Memoria de pacientes', description: 'Extrae y almacena recuerdos de las conversaciones con pacientes', icon: Sparkles },
+];
 
 export default function DashboardStatusView() {
-  const { t } = useTranslation();
-  const [stats, setStats] = useState<ExecutiveStats | null>(null);
-  const [performance, setPerformance] = useState<ProfessionalPerformance[]>([]);
+  const [data, setData] = useState<MetricsResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState(() => {
-    const today = new Date();
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    return {
-      from: firstDay.toISOString().split('T')[0],
-      to: lastDay.toISOString().split('T')[0],
-    };
-  });
+  const [error, setError] = useState<string | null>(null);
+  const [days, setDays] = useState(30);
+  const [modelConfig, setModelConfig] = useState<Record<string, string>>({});
+  const [modelSaving, setModelSaving] = useState<string | null>(null);
+  const [modelSaved, setModelSaved] = useState<string | null>(null);
+
+  const fetchMetrics = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.get<MetricsResponse>('/admin/dashboard/metrics', {
+        params: { days }
+      });
+      setData(res.data);
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || e?.message || 'Error al cargar métricas';
+      setError(String(msg));
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const params = new URLSearchParams({ from: dateRange.from, to: dateRange.to });
-        const [statsRes, perfRes] = await Promise.all([
-          api.get(`/admin/stats/executive?${params}`),
-          api.get(`/admin/stats/professionals/performance?${params}`),
-        ]);
-        setStats(statsRes.data);
-        setPerformance(perfRes.data);
-      } catch (error) {
-        console.error('Error loading executive dashboard:', error);
-      } finally {
-        setLoading(false);
+    fetchMetrics();
+  }, [days]);
+
+  // Sync model config from fetched data
+  useEffect(() => {
+    if (data?.current_config) {
+      const cfg: Record<string, string> = {};
+      for (const action of MODEL_ACTIONS) {
+        const isVoice = VOICE_KEYS.has(action.key);
+        const defaultModel = isVoice ? 'gpt-4o-mini-realtime-preview' : 'gpt-4o-mini';
+        cfg[action.key] = data.current_config[action.key] || defaultModel;
       }
-    };
+      setModelConfig(cfg);
+    }
+  }, [data?.current_config]);
 
-    fetchData();
-  }, [dateRange]);
+  const saveModelConfig = async (key: string, value: string) => {
+    setModelSaving(key);
+    setModelSaved(null);
+    try {
+      await api.post('/dashboard/api/config', { [key]: value });
+      setModelConfig(prev => ({ ...prev, [key]: value }));
+      setModelSaved(key);
+      setTimeout(() => setModelSaved(null), 2000);
+    } catch (e) {
+      console.error('Error saving model config:', e);
+    } finally {
+      setModelSaving(null);
+    }
+  };
 
-  const revenueTrend = stats ? getTrendPercent(stats.monthly_revenue, stats.previous_month_revenue) : 0;
-  const trendUp = revenueTrend >= 0;
-
-  if (loading) {
+  if (loading && !data) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500" />
+      <div className="h-screen flex flex-col">
+        <div className="p-6">
+          <PageHeader title="Dashboard de Tokens" subtitle="Cargando métricas del agente IA..." />
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <RefreshCw className="w-12 h-12 text-blue-500 animate-spin" />
+            <p className="text-white/40">Cargando...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
+  const isSimplified = data?.status === 'modules_not_available';
+  const tokenMetrics = data?.token_metrics;
+  const projections = data?.projections || {};
+  const dbStats = data?.db_stats || {};
+  const dailyUsage = data?.daily_usage || [];
+
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* HEADER */}
-      <header className="p-4 sm:p-6 shrink-0 bg-white/[0.01] border-b border-white/[0.04]">
+    <div className="h-screen flex flex-col overflow-hidden">
+      <div className="flex-shrink-0 p-4 sm:p-6 bg-white/[0.02] backdrop-blur-sm border-b border-white/[0.06]">
         <PageHeader
-          title={t('dashboard.executive_title') || 'Executive Dashboard'}
-          subtitle={t('dashboard.executive_subtitle') || 'High-level clinic performance overview'}
-          icon={<TrendingUp size={20} />}
+          title="Dashboard de Tokens y Métricas"
+          subtitle="Uso de IA, costos y estado del agente"
+          icon={<BarChart3 size={22} />}
           action={
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-semibold text-white/60 uppercase tracking-wider">
-                  {t('analytics.from_date') || 'From'}
-                </label>
-                <input
-                  type="date"
-                  value={dateRange.from}
-                  onChange={(e) => setDateRange((prev) => ({ ...prev, from: e.target.value }))}
-                  className="border border-white/[0.06] rounded-xl px-3 py-2 text-sm text-white bg-white/[0.04] focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-semibold text-white/60 uppercase tracking-wider">
-                  {t('analytics.to_date') || 'To'}
-                </label>
-                <input
-                  type="date"
-                  value={dateRange.to}
-                  onChange={(e) => setDateRange((prev) => ({ ...prev, to: e.target.value }))}
-                  className="border border-white/[0.06] rounded-xl px-3 py-2 text-sm text-white bg-white/[0.04] focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                />
-              </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={days}
+                onChange={(e) => setDays(Number(e.target.value))}
+                className="px-3 py-2 rounded-xl border border-white/[0.08] text-sm font-medium bg-white/[0.04] text-white focus:ring-2 focus:ring-medical-500"
+              >
+                <option value={7} className="bg-[#0d1117] text-white">Últimos 7 días</option>
+                <option value={30} className="bg-[#0d1117] text-white">Últimos 30 días</option>
+                <option value={90} className="bg-[#0d1117] text-white">Últimos 90 días</option>
+              </select>
+              <button
+                onClick={fetchMetrics}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-medical-600 hover:bg-medical-700 text-white text-sm font-medium disabled:opacity-50 transition-colors"
+              >
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                Actualizar
+              </button>
             </div>
           }
         />
-      </header>
+      </div>
 
-      {/* SCROLLABLE CONTENT */}
-      <main className="flex-1 min-h-0 overflow-y-auto p-4 lg:p-6 space-y-6 scroll-smooth">
-        {/* KPI CARDS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Monthly Revenue */}
-          <GlassCard className="border-l-4 border-l-emerald-500/40">
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 rounded-xl bg-emerald-500/10">
-                <DollarSign className="w-6 h-6 text-emerald-400" />
-              </div>
-              <span
-                className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full border ${
-                  trendUp
-                    ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                    : 'bg-red-500/10 text-red-400 border-red-500/20'
-                }`}
-              >
-                {trendUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                {Math.abs(revenueTrend)}%
-              </span>
+      <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+        {error && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3">
+            <AlertCircle className="w-6 h-6 text-red-400 shrink-0" />
+            <div>
+              <p className="font-medium text-red-400">No se pudieron cargar las métricas</p>
+              <p className="text-sm text-red-400/70">{error}</p>
             </div>
-            <p className="text-white/50 text-sm font-medium">
-              {t('dashboard.monthly_revenue') || 'Monthly Revenue'}
-            </p>
-            <h3 className="text-2xl font-bold text-white mt-1">
-              {formatCurrency(stats?.monthly_revenue ?? 0)}
-            </h3>
-            <p className="text-white/40 text-xs mt-1">
-              {t('dashboard.vs_previous_month') || 'vs previous month'}
-            </p>
-          </GlassCard>
-
-          {/* New Patients */}
-          <GlassCard className="border-l-4 border-l-blue-500/40">
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 rounded-xl bg-blue-500/10">
-                <Users className="w-6 h-6 text-blue-400" />
-              </div>
-            </div>
-            <p className="text-white/50 text-sm font-medium">
-              {t('dashboard.new_patients') || 'New Patients'}
-            </p>
-            <h3 className="text-2xl font-bold text-white mt-1">
-              {stats?.new_patients ?? 0}
-            </h3>
-            <p className="text-white/40 text-xs mt-1">
-              {t('dashboard.this_month') || 'This month'}
-            </p>
-          </GlassCard>
-
-          {/* Attendance Rate */}
-          <GlassCard className="border-l-4 border-l-amber-500/40">
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 rounded-xl bg-amber-500/10">
-                <CalendarCheck className="w-6 h-6 text-amber-400" />
-              </div>
-            </div>
-            <p className="text-white/50 text-sm font-medium">
-              {t('dashboard.attendance_rate') || 'Attendance Rate'}
-            </p>
-            <h3 className="text-2xl font-bold text-white mt-1">
-              {stats?.attendance_rate ?? 0}%
-            </h3>
-            <p className="text-white/40 text-xs mt-1">
-              {t('dashboard.completed_vs_scheduled') || 'Completed vs scheduled'}
-            </p>
-          </GlassCard>
-
-          {/* Active Professionals */}
-          <GlassCard className="border-l-4 border-l-purple-500/40">
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 rounded-xl bg-purple-500/10">
-                <UserCheck className="w-6 h-6 text-purple-400" />
-              </div>
-            </div>
-            <p className="text-white/50 text-sm font-medium">
-              {t('dashboard.active_professionals') || 'Active Professionals'}
-            </p>
-            <h3 className="text-2xl font-bold text-white mt-1">
-              {stats?.active_professionals ?? 0}
-            </h3>
-            <p className="text-white/40 text-xs mt-1">
-              {t('dashboard.currently_active') || 'Currently active'}
-            </p>
-          </GlassCard>
-        </div>
-
-        {/* CHARTS ROW */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Revenue Monthly Chart */}
-          <GlassCard>
-            <h3 className="text-lg font-semibold text-white mb-1">
-              {t('dashboard.revenue_trend') || 'Revenue Trend'}
-            </h3>
-            <p className="text-white/40 text-sm mb-6">
-              {t('dashboard.monthly_revenue_chart') || 'Monthly revenue overview'}
-            </p>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stats?.revenue_chart ?? []}>
-                  <defs>
-                    <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                  <XAxis
-                    dataKey="month"
-                    stroke="rgba(255,255,255,0.3)"
-                    tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    stroke="rgba(255,255,255,0.3)"
-                    tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-                  />
-                  <Tooltip
-                    contentStyle={darkTooltipStyle}
-                    formatter={(value: number) => [formatCurrency(value), 'Revenue']}
-                    labelStyle={{ color: 'rgba(255,255,255,0.7)' }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    fill="url(#revenueGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </GlassCard>
-
-          {/* Appointments by Professional Chart */}
-          <GlassCard>
-            <h3 className="text-lg font-semibold text-white mb-1">
-              {t('dashboard.appointments_by_professional') || 'Appointments by Professional'}
-            </h3>
-            <p className="text-white/40 text-sm mb-6">
-              {t('dashboard.professional_workload') || 'Workload distribution'}
-            </p>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={stats?.appointments_by_professional ?? []} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                  <XAxis
-                    type="number"
-                    stroke="rgba(255,255,255,0.3)"
-                    tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    stroke="rgba(255,255,255,0.3)"
-                    tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={120}
-                  />
-                  <Tooltip
-                    contentStyle={darkTooltipStyle}
-                    labelStyle={{ color: 'rgba(255,255,255,0.7)' }}
-                  />
-                  <Bar dataKey="appointments" fill="#6366f1" radius={[0, 6, 6, 0]} barSize={24} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </GlassCard>
-        </div>
-
-        {/* PERFORMANCE TABLE */}
-        <GlassCard>
-          <h3 className="text-lg font-semibold text-white mb-1">
-            {t('dashboard.professional_performance') || 'Professional Performance'}
-          </h3>
-          <p className="text-white/40 text-sm mb-6">
-            {t('dashboard.performance_breakdown') || 'Detailed breakdown by professional'}
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/[0.06]">
-                  <th className="text-left py-3 px-4 text-white/50 font-medium uppercase tracking-wider text-xs">
-                    {t('dashboard.professional_name') || 'Professional'}
-                  </th>
-                  <th className="text-right py-3 px-4 text-white/50 font-medium uppercase tracking-wider text-xs">
-                    {t('dashboard.completed_appointments') || 'Completed'}
-                  </th>
-                  <th className="text-right py-3 px-4 text-white/50 font-medium uppercase tracking-wider text-xs">
-                    {t('dashboard.cancellation_rate') || 'Cancellation Rate'}
-                  </th>
-                  <th className="text-right py-3 px-4 text-white/50 font-medium uppercase tracking-wider text-xs">
-                    {t('dashboard.generated_revenue') || 'Revenue'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {performance.map((prof) => (
-                  <tr
-                    key={prof.id}
-                    className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors"
-                  >
-                    <td className="py-3 px-4 text-white font-medium">{prof.name}</td>
-                    <td className="py-3 px-4 text-right text-white/70">{prof.completed_appointments}</td>
-                    <td className="py-3 px-4 text-right">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          prof.cancellation_rate > 20
-                            ? 'bg-red-500/10 text-red-400'
-                            : prof.cancellation_rate > 10
-                              ? 'bg-amber-500/10 text-amber-400'
-                              : 'bg-green-500/10 text-green-400'
-                        }`}
-                      >
-                        {prof.cancellation_rate.toFixed(1)}%
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right text-white/70 font-medium">
-                      {formatCurrency(prof.revenue)}
-                    </td>
-                  </tr>
-                ))}
-                {performance.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="py-8 text-center text-white/40">
-                      {t('dashboard.no_data') || 'No data available for the selected period'}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-              {performance.length > 0 && (
-                <tfoot>
-                  <tr className="border-t border-white/[0.08]">
-                    <td className="py-3 px-4 text-white font-bold">
-                      {t('dashboard.total') || 'Total'}
-                    </td>
-                    <td className="py-3 px-4 text-right text-white font-bold">
-                      {performance.reduce((sum, p) => sum + p.completed_appointments, 0)}
-                    </td>
-                    <td className="py-3 px-4 text-right text-white/50 text-xs">--</td>
-                    <td className="py-3 px-4 text-right text-white font-bold">
-                      {formatCurrency(performance.reduce((sum, p) => sum + p.revenue, 0))}
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
+            <button
+              onClick={fetchMetrics}
+              className="ml-auto px-3 py-1.5 text-sm font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-lg"
+            >
+              Reintentar
+            </button>
           </div>
-        </GlassCard>
+        )}
+
+        {isSimplified && (
+          <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3">
+            <AlertCircle className="w-6 h-6 text-amber-400 shrink-0" />
+            <p className="text-amber-400">{data?.message || 'Módulos del dashboard no disponibles. Métricas limitadas.'}</p>
+          </div>
+        )}
+
+        {data && !error && (
+          <div className="space-y-6">
+            {/* KPI Row */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <StatCard
+                title="Costo total (período)"
+                value={`$${(tokenMetrics?.totals?.total_cost_usd ?? 0).toFixed(2)}`}
+                icon={DollarSign}
+                color="bg-emerald-500"
+                subtitle={`${tokenMetrics?.totals?.total_tokens?.toLocaleString() ?? 0} tokens`}
+                image={CARD_IMAGES.revenue}
+              />
+              <StatCard
+                title="Tokens totales"
+                value={(tokenMetrics?.totals?.total_tokens ?? 0).toLocaleString()}
+                icon={Zap}
+                color="bg-blue-500"
+                subtitle={`${tokenMetrics?.totals?.total_conversations ?? 0} conversaciones`}
+                image={CARD_IMAGES.tokens}
+              />
+              <StatCard
+                title="Proyección mensual"
+                value={`$${(projections.projected_monthly_cost_usd ?? 0).toFixed(2)}`}
+                icon={TrendingUp}
+                color="bg-amber-500"
+                subtitle="Estimado según uso actual"
+                image={CARD_IMAGES.analytics}
+              />
+              <StatCard
+                title="BD: Pacientes / Turnos"
+                value={`${dbStats.total_patients ?? 0} / ${dbStats.total_appointments ?? 0}`}
+                icon={Database}
+                color="bg-slate-600"
+                subtitle={`${dbStats.total_conversations ?? 0} conversaciones`}
+                image={CARD_IMAGES.tech}
+              />
+            </div>
+
+            {/* Charts Row */}
+            {dailyUsage.length > 0 && (
+              <GlassCard image={CARD_IMAGES.analytics}>
+                <div className="p-6">
+                  <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <Activity size={20} className="text-medical-600" />
+                    Uso diario de tokens
+                  </h2>
+                  <div className="h-[260px]">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                      <BarChart data={dailyUsage} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(v) => { const d = new Date(v + 'T00:00:00'); return `${d.getDate()}/${d.getMonth()+1}`; }}
+                        />
+                        <YAxis
+                          tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
+                          tickLine={false}
+                          axisLine={false}
+                          width={45}
+                          tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v}
+                        />
+                        <Tooltip
+                          contentStyle={{ borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)', backgroundColor: '#0d1117', color: '#fff', fontSize: 13 }}
+                          labelFormatter={(v) => { const d = new Date(v + 'T00:00:00'); return d.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }); }}
+                          formatter={(value: number, name: string) => {
+                            if (name === 'Tokens') return [value.toLocaleString('es-AR'), 'Tokens'];
+                            return [value, name];
+                          }}
+                        />
+                        <Bar dataKey="total_tokens" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Tokens" barSize={20} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {/* Cost summary below chart */}
+                  {dailyUsage.length > 0 && (
+                    <div className="mt-3 flex items-center justify-between text-xs text-white/40 px-1">
+                      <span>Costo total periodo: <strong className="text-emerald-400">${dailyUsage.reduce((s, d) => s + (d.cost_usd || 0), 0).toFixed(4)}</strong></span>
+                      <span>Promedio diario: <strong className="text-blue-400">{Math.round(dailyUsage.reduce((s, d) => s + (d.total_tokens || 0), 0) / dailyUsage.length).toLocaleString('es-AR')} tokens</strong></span>
+                    </div>
+                  )}
+                </div>
+              </GlassCard>
+            )}
+
+            {/* Model Configuration */}
+            <GlassCard image={CARD_IMAGES.tech}>
+              <div className="p-6">
+              <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
+                <Settings size={20} className="text-medical-600" />
+                Configuración de modelos por acción
+              </h2>
+              <p className="text-sm text-white/40 mb-5">Seleccioná qué modelo usar para cada funcionalidad. Los cambios se aplican inmediatamente.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                {MODEL_ACTIONS.map((action) => {
+                  const ActionIcon = action.icon;
+                  const isVoice = VOICE_KEYS.has(action.key);
+                  const defaultModel = isVoice ? 'gpt-4o-mini-realtime-preview' : 'gpt-4o-mini';
+                  const currentModel = modelConfig[action.key] || defaultModel;
+                  const filteredModels = AVAILABLE_MODELS.filter(m => isVoice ? m.type === 'realtime' : m.type === 'text');
+                  return (
+                    <div key={action.key} className="border border-white/[0.06] rounded-xl p-4 hover:border-white/[0.12] transition-colors">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className={`p-2 rounded-lg shrink-0 ${isVoice ? 'bg-violet-500/10 text-violet-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                          <ActionIcon size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-semibold text-white">{action.label}</h3>
+                          <p className="text-xs text-white/30 mt-0.5">{action.description}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={currentModel}
+                          onChange={(e) => saveModelConfig(action.key, e.target.value)}
+                          disabled={modelSaving === action.key}
+                          className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium bg-white/[0.04] text-white outline-none disabled:opacity-50 ${isVoice ? 'border-violet-500/20 focus:ring-2 focus:ring-violet-500' : 'border-white/[0.08] focus:ring-2 focus:ring-blue-500'}`}
+                        >
+                          {filteredModels.map((m) => (
+                            <option key={m.id} value={m.id} className="bg-[#0d1117] text-white">{m.label}</option>
+                          ))}
+                        </select>
+                        {modelSaving === action.key && (
+                          <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                        )}
+                        {modelSaved === action.key && (
+                          <Check size={18} className="text-green-500 shrink-0" />
+                        )}
+                      </div>
+                      {isVoice && <p className="text-[10px] text-violet-400/70 mt-1.5">Solo modelos Realtime (audio bidireccional)</p>}
+                    </div>
+                  );
+                })}
+              </div>
+              </div>
+            </GlassCard>
+
+            {/* Config & Projections */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <GlassCard image={CARD_IMAGES.analytics}>
+                <div className="p-6">
+                  <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <Cpu size={20} className="text-medical-600" />
+                    Proyecciones y eficiencia
+                  </h2>
+                  <dl className="space-y-3 text-sm">
+                    {[
+                      ['Proyección anual', projections.projected_annual_cost_usd != null ? `$${projections.projected_annual_cost_usd.toFixed(2)}` : '—'],
+                      ['Coste/1000 tokens', projections.cost_per_1000_tokens != null ? `$${projections.cost_per_1000_tokens.toFixed(4)}` : '—'],
+                      ['Prom. tokens/conversación', projections.avg_tokens_per_conversation?.toLocaleString() ?? '—'],
+                      ['Score eficiencia', projections.efficiency_score != null ? `${projections.efficiency_score}/100` : '—']
+                    ].map(([label, val]) => (
+                      <div key={label} className="flex justify-between py-2 border-b border-white/[0.06] last:border-0">
+                        <dt className="text-white/60">{label}</dt>
+                        <dd className="font-mono font-medium text-white">{val}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              </GlassCard>
+
+              <GlassCard image={CARD_IMAGES.tech}>
+                <div className="p-6">
+                  <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <Database size={20} className="text-medical-600" />
+                    Estadísticas de base de datos
+                  </h2>
+                  <dl className="space-y-3 text-sm">
+                    {Object.entries(dbStats).map(([key, val]) => (
+                      <div key={key} className="flex justify-between py-2 border-b border-white/[0.06] last:border-0">
+                        <dt className="text-white/60 capitalize">
+                          {key.replace(/_/g, ' ')}
+                        </dt>
+                        <dd className="font-mono font-medium text-white">{typeof val === 'number' ? val.toLocaleString() : val}</dd>
+                      </div>
+                    ))}
+                    {Object.keys(dbStats).length === 0 && (
+                      <p className="text-white/30 italic">Sin datos de BD disponibles</p>
+                    )}
+                  </dl>
+                </div>
+              </GlassCard>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

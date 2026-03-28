@@ -17,7 +17,7 @@ export default function PageHeader({ title, subtitle, action, icon }: PageHeader
               {icon}
             </div>
           )}
-          <div className="min-w-0 flex-1 border-l-2 border-blue-500/40 pl-3 sm:pl-4">
+          <div className="min-w-0 flex-1 border-l-4 border-blue-500 pl-3 sm:pl-4">
             <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
               {title}
             </h1>

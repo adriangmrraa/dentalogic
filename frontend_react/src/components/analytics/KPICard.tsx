@@ -32,35 +32,25 @@ const KPICard: React.FC<KPICardProps> = ({ title, value, subtext, trend, icon, c
             case 'green': return 'bg-green-500/10 text-green-400';
             case 'purple': return 'bg-purple-500/10 text-purple-400';
             case 'orange': return 'bg-orange-500/10 text-orange-400';
-            default: return 'bg-white/[0.06] text-white/60';
-        }
-    };
-
-    const getBorderColor = () => {
-        switch (color) {
-            case 'blue': return 'border-l-blue-500/40';
-            case 'green': return 'border-l-green-500/40';
-            case 'purple': return 'border-l-purple-500/40';
-            case 'orange': return 'border-l-orange-500/40';
-            default: return 'border-l-white/20';
+            default: return 'bg-white/[0.04] text-white/60';
         }
     };
 
     return (
-        <div className={`bg-white/[0.03] border border-white/[0.06] border-l-4 ${getBorderColor()} rounded-2xl p-6 transition-all duration-300 hover:bg-white/[0.05] hover:border-white/[0.08] group`}>
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-5 border-l-4" style={{ borderLeftColor: color === 'blue' ? 'var(--medical-500)' : color === 'green' ? 'var(--success)' : color }}>
             <div className="flex justify-between items-start">
                 <div>
-                    <p className="text-sm font-medium text-white/50 mb-1">{title}</p>
+                    <p className="text-sm font-medium text-white/40 mb-1">{title}</p>
                     <h3 className="text-2xl font-bold text-white">{value}</h3>
                 </div>
-                <div className={`p-3 rounded-xl ${getColorClasses()} group-hover:scale-110 transition-transform`}>
+                <div className={`p-3 rounded-lg ${getColorClasses()}`}>
                     {getIcon()}
                 </div>
             </div>
             {subtext && (
                 <div className="mt-4 flex items-center text-sm">
-                    {trend === 'up' && <TrendingUp size={16} className="text-green-400 mr-1" />}
-                    {trend === 'down' && <TrendingDown size={16} className="text-red-400 mr-1" />}
+                    {trend === 'up' && <TrendingUp size={16} className="text-green-500 mr-1" />}
+                    {trend === 'down' && <TrendingDown size={16} className="text-red-500 mr-1" />}
                     <span className="text-white/40">{subtext}</span>
                 </div>
             )}

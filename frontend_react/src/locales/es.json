@@ -195,6 +195,8 @@
     "strategic_subtitle": "Visión de alto nivel del rendimiento profesional (CEO View)",
     "realtime_data": "Datos reales en tiempo real",
     "estimated_revenue": "Ingresos Estimados",
+    "pending_payments": "Pagos Pendientes",
+    "today_revenue": "Facturación Hoy",
     "total_period": "Total del periodo",
     "total_appointments": "Turnos Totales",
     "unique_patients": "{{count}} pacientes únicos",
@@ -322,6 +324,16 @@
     "edit_patient": "Editar Paciente",
     "dni_obra_social": "DNI / Obra Social",
     "health": "Salud",
+    "patient": "Paciente",
+    "contact": "Contacto",
+    "date_added": "Fecha de Alta",
+    "actions": "Acciones",
+    "next_appointment": "Próximo Turno",
+    "balance": "Balance",
+    "no_appointment": "Sin turno",
+    "no_patients_found": "No se encontraron pacientes",
+    "loading": "Cargando pacientes...",
+    "loaded_on": "Registrado el",
     "view_chart": "Ver Ficha",
     "phone_label": "Teléfono",
     "city_neighborhood": "Ciudad / Barrio",
@@ -1505,3 +1517,4 @@
     }
   }
 }
+

@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import api from '../api/axios';
-import { useAuth } from './AuthContext';
 
 import es from '../locales/es.json';
 import en from '../locales/en.json';
@@ -27,7 +26,7 @@ function getNested(obj: Record<string, unknown>, path: string): string | undefin
 interface LanguageContextType {
   language: UiLanguage;
   setLanguage: (lang: UiLanguage) => void;
-  t: (key: string) => string;
+  t: (key: string, data?: Record<string, any>) => string;
   isLoading: boolean;
 }
 
@@ -38,8 +37,9 @@ const STORAGE_KEY = 'ui_language';
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<UiLanguage>(() => {
     const stored = localStorage.getItem(STORAGE_KEY) as UiLanguage | null;
-    return stored === 'es' || stored === 'fr' ? stored : 'en';
+    return stored === 'en' || stored === 'fr' ? stored : 'es';
   });
+
   const [isLoading, setIsLoading] = useState(true);
 
   const setLanguage = useCallback((lang: UiLanguage) => {
@@ -48,8 +48,8 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem('JWT_TOKEN');
-    if (!token) {
+    const userProfile = localStorage.getItem('USER_PROFILE');
+    if (!userProfile) {
       setIsLoading(false);
       return;
     }
@@ -62,14 +62,23 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
           localStorage.setItem(STORAGE_KEY, lang);
         }
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.error("Error loading language settings:", err);
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
   const t = useCallback(
-    (key: string): string => {
-      const value = getNested(translations[language], key);
-      return value ?? key;
+    (key: string, data?: Record<string, any>): string => {
+      let value = getNested(translations[language], key);
+      if (!value) return key;
+
+      if (data) {
+        Object.entries(data).forEach(([k, v]) => {
+          value = (value as string).replace(new RegExp(`{{${k}}}`, 'g'), String(v));
+        });
+      }
+      return value as string;
     },
     [language]
   );
