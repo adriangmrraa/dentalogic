@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Shield, MessageCircle, LogIn, Sparkles, Calendar, BarChart3, Zap, ChevronDown } from 'lucide-react';
 import { useTranslation } from '../context/LanguageContext';
 import DynamicShowcase from '../components/public/DynamicShowcase';
+import ParticleBackground from '../components/public/ParticleBackground';
 import { useDemoTracking } from '../hooks/useDemoTracking';
 
 const DEMO_WHATSAPP = import.meta.env.VITE_DEMO_WHATSAPP || '5493435256815';
@@ -15,8 +16,11 @@ export default function LandingView() {
   const { trackEvent } = useDemoTracking();
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'radial-gradient(ellipse at top right, #0d1830, #06060e 60%)' }}>
-      <main className="flex-1 w-full pb-12 sm:pb-16 overflow-x-hidden">
+    <div className="min-h-screen flex flex-col relative" style={{ background: 'radial-gradient(ellipse at top right, #0d1830, #06060e 60%)' }}>
+      {/* Interactive Particle Background */}
+      <ParticleBackground particleCount={70} />
+
+      <main className="flex-1 w-full pb-12 sm:pb-16 overflow-x-hidden relative z-10">
         {/* Hero Section */}
         <section className="flex flex-col items-center justify-center min-h-[90vh] px-4 py-8 sm:p-6 md:p-8">
           <motion.div
