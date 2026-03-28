@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
@@ -32,6 +33,7 @@ export interface Appointment {
   patient_name?: string;
   patient_phone?: string;
   professional_name?: string;
+  appointment_name?: string;
 }
 
 export interface GoogleCalendarBlock {
@@ -63,38 +65,35 @@ export interface Patient {
 }
 
 // ==================== SOURCE COLORS ====================
-// Colors for appointment sources: AI (blue), Manual (green), GCalendar (gray)
+// Colors for appointment sources: AI/Ventas IA (blue), Manual (green), Nova (purple), GCalendar (gray)
 const SOURCE_COLORS: Record<string, { hex: string; label: string; bgClass: string; textClass: string }> = {
   ai: {
     hex: '#3b82f6',
-    label: 'AI',
-    bgClass: 'bg-blue-100',
-    textClass: 'text-blue-800'
+    label: 'Ventas IA',
+    bgClass: 'bg-blue-500/10',
+    textClass: 'text-blue-400'
+  },
+  nova: {
+    hex: '#a855f7',
+    label: 'Nova',
+    bgClass: 'bg-purple-500/10',
+    textClass: 'text-purple-400'
   },
   manual: {
     hex: '#22c55e',
     label: 'Manual',
-    bgClass: 'bg-green-100',
-    textClass: 'text-green-800'
+    bgClass: 'bg-green-500/10',
+    textClass: 'text-green-400'
   },
   gcalendar: {
     hex: '#6b7280',
     label: 'GCalendar',
-    bgClass: 'bg-white/[0.04]',
-    textClass: 'text-white'
+    bgClass: 'bg-white/[0.06]',
+    textClass: 'text-white/50'
   },
 };
 
-// Mapeo de IDs de appointment_statuses a colores hexadecimales
-// 1: scheduled, 2: confirmed, 3: in_progress, 4: completed, 5: cancelled, 6: no_show
-const STATUS_COLORS: Record<number, { hex: string; label: string }> = {
-  1: { hex: '#3b82f6', label: 'scheduled' },   // azul - Programado
-  2: { hex: '#22c55e', label: 'confirmed' },   // verde - Confirmado
-  3: { hex: '#eab308', label: 'in_progress' }, // amarillo - En progreso
-  4: { hex: '#6b7280', label: 'completed' },   // gris - Completado
-  5: { hex: '#ef4444', label: 'cancelled' },   // rojo - Cancelado
-  6: { hex: '#f97316', label: 'no_show' },     // naranja - No asistido
-};
+// STATUS_COLORS removed as it was unused
 
 
 
@@ -112,7 +111,7 @@ const getSourceLabel = (source: string | undefined, t?: (k: string) => string): 
   if (t) {
     if (!source) return t('agenda.source_ai');
     const key = 'agenda.source_' + source;
-    return (source === 'ai' || source === 'manual' || source === 'gcalendar') ? t(key) : source.toUpperCase();
+    return (source === 'ai' || source === 'nova' || source === 'manual' || source === 'gcalendar') ? t(key) : source.toUpperCase();
   }
   if (!source) return 'AI';
   return SOURCE_COLORS[source]?.label || source.toUpperCase();
@@ -124,6 +123,7 @@ const getSourceLabel = (source: string | undefined, t?: (k: string) => string): 
 export default function AgendaView() {
   const { user } = useAuth();
   const { t, language } = useTranslation();
+  const location = useLocation();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [googleBlocks, setGoogleBlocks] = useState<GoogleCalendarBlock[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
@@ -132,9 +132,23 @@ export default function AgendaView() {
   const [showModal, setShowModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Appointment | null>(null);
+  // Keep selectedEvent in sync when appointments reload (e.g., after PAYMENT_CONFIRMED socket event)
+  useEffect(() => {
+    if (selectedEvent && appointments.length > 0) {
+      const fresh = appointments.find((a: Appointment) => a.id === selectedEvent.id);
+      if (fresh && JSON.stringify(fresh) !== JSON.stringify(selectedEvent)) {
+        setSelectedEvent(fresh);
+      }
+    }
+  }, [appointments]);
   const [selectedProfessionalId, setSelectedProfessionalId] = useState<string>('all');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [currentView] = useState(window.innerWidth >= 1024 ? 'timeGridWeek' : (window.innerWidth >= 768 ? 'resourceTimeGridDay' : 'timeGridDay'));
+  const [currentView, setCurrentView] = useState(() => {
+    // Intentar recuperar vista guardada, sino usar responsive default
+    const savedView = localStorage.getItem('agendaView');
+    if (savedView) return savedView;
+    return window.innerWidth >= 1024 ? 'timeGridWeek' : (window.innerWidth >= 768 ? 'resourceTimeGridDay' : 'timeGridDay');
+  });
 
   // Mobile Detection
   useEffect(() => {
@@ -147,6 +161,16 @@ export default function AgendaView() {
   const socketRef = useRef<Socket | null>(null);
   const eventsRef = useRef<Appointment[]>([]);
   const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+  // Debounce para datesSet
+  const datesSetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guardián de rango: solo hace fetch si el rango de fechas, vista o filtro de profesional cambió realmente
+  const lastFetchedRangeRef = useRef<{ startISO: string; endISO: string; professionalId: string; viewType?: string } | null>(null);
+  // Ref estable a fetchData para usarlo en socket handlers sin re-suscribir en cada cambio
+  const fetchDataRef = useRef<typeof fetchData | null>(null);
+  // Guard para saltar el efecto de filtro en el primer render (el init ya hace el fetch)
+  const filterInitialRenderRef = useRef(true);
+  // Rango visible actual (para indicador de UI)
+  const [visibleRangeStr, setVisibleRangeStr] = useState<string>('');
 
   const [formData, setFormData] = useState({
     patient_id: '',
@@ -173,6 +197,8 @@ export default function AgendaView() {
 
 
 
+  // handleViewChange removed as it was unused
+
   // Mobile Detection only
   useEffect(() => {
     const handleResize = () => {
@@ -181,10 +207,15 @@ export default function AgendaView() {
         if (window.innerWidth < 768) {
           if (calendarApi.view.type !== 'listDay') {
             calendarApi.changeView('listDay');
+            setCurrentView('listDay');
+            localStorage.setItem('agendaView', 'listDay');
           }
         } else {
           if (calendarApi.view.type === 'listDay') {
-            calendarApi.changeView('timeGridWeek');
+            const defaultView = window.innerWidth >= 1024 ? 'timeGridWeek' : (window.innerWidth >= 768 ? 'resourceTimeGridDay' : 'timeGridDay');
+            calendarApi.changeView(defaultView);
+            setCurrentView(defaultView);
+            localStorage.setItem('agendaView', defaultView);
           }
         }
       }
@@ -211,7 +242,13 @@ export default function AgendaView() {
   }, []);
 
   // Fetch all data
-  const fetchData = useCallback(async (isBackground: boolean = false) => {
+  // explicitStart/explicitEnd: fechas pasadas directamente desde datesSet para evitar leer
+  // calendarRef en el momento incorrecto (puede tener la vista anterior).
+  const fetchData = useCallback(async (
+    isBackground: boolean = false,
+    explicitStart?: Date,
+    explicitEnd?: Date
+  ) => {
     try {
       if (!isBackground) setLoading(true);
       else setIsBackgroundSyncing(true);
@@ -219,19 +256,22 @@ export default function AgendaView() {
       // Fetch settings first if needed or concurrently
       fetchClinicSettings();
 
-      // Get current calendar date range
+      // Prioridad: fechas explícitas → calendarRef → fallback mobile
       let startDate: Date;
       let endDate: Date;
 
-      if (calendarRef.current) {
+      if (explicitStart && explicitEnd) {
+        startDate = explicitStart;
+        endDate = explicitEnd;
+      } else if (calendarRef.current) {
         const calendarApi = calendarRef.current.getApi();
         startDate = calendarApi.view.activeStart;
         endDate = calendarApi.view.activeEnd;
       } else {
-        // Fallback for mobile view where FullCalendar is unmounted
+        // Fallback: rango amplio cuando el calendario aún no está montado (p. ej. init)
         const baseDate = selectedDate || new Date();
-        startDate = startOfDay(subDays(baseDate, 7));
-        endDate = endOfDay(addDays(baseDate, 7));
+        startDate = startOfDay(subDays(baseDate, 60));
+        endDate = endOfDay(addDays(baseDate, 90));
       }
 
       const startDateStr = startDate.toISOString();
@@ -264,37 +304,8 @@ export default function AgendaView() {
       setAppointments(newAppointments);
       eventsRef.current = newAppointments;
       setGoogleBlocks(blocksRes || []);
-
-      // Force calendar refetch if calendar instance exists
-      if (calendarRef.current) {
-        const calendarApi = calendarRef.current.getApi();
-        calendarApi.removeAllEvents();
-
-        // Add appointment events
-        const appointmentEvents = newAppointments.map((apt: Appointment) => ({
-          id: apt.id,
-          title: `${apt.patient_name} - ${apt.appointment_type}`,
-          start: apt.appointment_datetime,
-          end: apt.end_datetime || undefined,
-          backgroundColor: getSourceColor(apt.source),
-          borderColor: getSourceColor(apt.source),
-          extendedProps: { ...apt, eventType: 'appointment' },
-        }));
-
-        // Add Google Calendar block events
-        const blockEvents = (blocksRes || []).map((block: GoogleCalendarBlock) => ({
-          id: block.id,
-          title: `🔒 ${block.title}`,
-          start: block.start_datetime,
-          end: block.end_datetime,
-          allDay: block.all_day || false,
-          backgroundColor: SOURCE_COLORS.gcalendar.hex,
-          borderColor: SOURCE_COLORS.gcalendar.hex,
-          extendedProps: { ...block, eventType: 'gcalendar_block' },
-        }));
-
-        calendarApi.addEventSource([...appointmentEvents, ...blockEvents]);
-      }
+      // Los eventos se pasan via prop `events={calendarEvents}` — no manipular el calendario directamente
+      // para evitar el loop datesSet → fetchData → re-render → datesSet
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -303,90 +314,71 @@ export default function AgendaView() {
     }
   }, [fetchGoogleBlocks, selectedProfessionalId, user?.role, user?.email]);
 
-  // Setup WebSocket connection and listeners
+  // Mantener ref estable para que los handlers de socket siempre llamen la versión más reciente
+  useEffect(() => {
+    fetchDataRef.current = fetchData;
+  }, [fetchData]);
+
+  // === EFECTO 1: Inicialización — corre UNA SOLA VEZ al montar ===
   useEffect(() => {
     const initializeAgenda = async () => {
-      // 1. First, run auto-sync if user has permissions
+      // Fire and forget calendar sync so it doesn't block the UI
       if (user?.role === 'ceo' || user?.role === 'secretary' || user?.role === 'professional') {
-        try {
-          await api.post('/admin/calendar/sync');
-          // Delay to ensure backend DB write completes
-          await new Promise(resolve => setTimeout(resolve, 800));
-        } catch (error) {
-          // Continue with data fetch even if sync fails
-        }
+        api.post('/admin/calendar/sync').catch(() => { /* Continúa silenciosamente */ });
       }
 
-      // 2. Now fetch all data (includes synced GCal blocks)
-      await fetchData();
+      // Fetch DB data immediately
+      await fetchDataRef.current?.();
     };
-
     initializeAgenda();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intencionalmente vacío: solo al montar
 
-    // Setup WebSocket connection
+  // === EFECTO 2: Socket.IO — corre UNA SOLA VEZ, sin depender de fetchData ===
+  useEffect(() => {
+    const jwtToken = localStorage.getItem('access_token');
+    const adminToken = localStorage.getItem('ADMIN_TOKEN');
     socketRef.current = io(BACKEND_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 5000,
+      reconnectionDelayMax: 15000,
+      auth: { token: jwtToken || '', adminToken: adminToken || '' },
     });
 
-    // Connection status handlers
-    socketRef.current.on('connect', () => {
-    });
-
-    socketRef.current.on('disconnect', () => {
-    });
-
-    socketRef.current.on('connect_error', () => {
-    });
-
-    // Listen for NEW_APPOINTMENT events - Real-time omnipresent sync
-    socketRef.current.on('NEW_APPOINTMENT', () => {
-
-      // Trigger complete re-fetch from sources (DB + GCal blocks)
-      fetchData(true);
-    });
-
-    // Listen for APPOINTMENT_UPDATED events - Real-time updates
-    socketRef.current.on('APPOINTMENT_UPDATED', () => {
-
-      // Trigger complete re-fetch for consistency
-      fetchData(true);
-    });
-
-    // Listen for APPOINTMENT_DELETED events
+    // fetchDataRef siempre apunta a la versión más reciente de fetchData (sin re-suscribir)
+    socketRef.current.on('NEW_APPOINTMENT', () => fetchDataRef.current?.(true));
+    socketRef.current.on('APPOINTMENT_UPDATED', () => fetchDataRef.current?.(true));
+    socketRef.current.on('PAYMENT_CONFIRMED', () => fetchDataRef.current?.(true));
     socketRef.current.on('APPOINTMENT_DELETED', (deletedAppointmentId: string) => {
-
       setAppointments(prevAppointments => {
         const updated = prevAppointments.filter(apt => apt.id !== deletedAppointmentId);
         eventsRef.current = updated;
         return updated;
       });
-
-
-      // Remove event from calendar
       if (calendarRef.current) {
         const calendarApi = calendarRef.current.getApi();
         const existingEvent = calendarApi.getEventById(deletedAppointmentId);
-        if (existingEvent) {
-          existingEvent.remove();
-        }
+        if (existingEvent) existingEvent.remove();
       }
     });
 
     return () => {
-      // Cleanup WebSocket connection
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
+      if (socketRef.current) socketRef.current.disconnect();
+      if (datesSetTimerRef.current) clearTimeout(datesSetTimerRef.current);
     };
-  }, [fetchData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intencionalmente vacío: socket se conecta una sola vez
 
   // FIX 2: Memoized filtered appointments and blocks
   const filteredAppointments = useMemo(() => {
-    if (!selectedProfessionalId || selectedProfessionalId === 'all') return appointments;
-    return appointments.filter((apt: Appointment) => apt.professional_id.toString() === selectedProfessionalId);
+    let list = appointments;
+    // Filtrar cancelados (Protocolo Platinum: no molestar visualmente)
+    list = list.filter((apt: Appointment) => apt.status !== 'cancelled');
+    
+    if (!selectedProfessionalId || selectedProfessionalId === 'all') return list;
+    return list.filter((apt: Appointment) => apt.professional_id?.toString() === selectedProfessionalId);
   }, [appointments, selectedProfessionalId]);
 
   const filteredBlocks = useMemo(() => {
@@ -404,10 +396,24 @@ export default function AgendaView() {
     }
   }, [user?.role, user?.email, professionals]);
 
-  // Refetch when professional filter changes (CEO/secretary change dropdown)
+  // === EFECTO 3: Cambio de filtro de profesional — invalida el guardián de rango y re-fetchea ===
   useEffect(() => {
-    fetchData();
-  }, [selectedProfessionalId]);
+    // Saltar el primer render: el init ya hace el fetch inicial
+    if (filterInitialRenderRef.current) {
+      filterInitialRenderRef.current = false;
+      return;
+    }
+    // Invalidar caché de rango para que datesSet no bloquee el siguiente fetch
+    lastFetchedRangeRef.current = null;
+    // Fetchear el rango actual del calendario con el nuevo filtro
+    if (calendarRef.current) {
+      const calApi = calendarRef.current.getApi();
+      fetchData(false, calApi.view.activeStart, calApi.view.activeEnd);
+    } else {
+      fetchData();
+    }
+    // fetchData está en deps porque aquí es una acción explícita del usuario (no loop)
+  }, [selectedProfessionalId, fetchData]);
 
   // FIX: Refetch on mobile when selectedDate changes to ensure data is available
   useEffect(() => {
@@ -415,6 +421,22 @@ export default function AgendaView() {
       fetchData(true); // Background fetch to avoid flickering
     }
   }, [selectedDate, isMobile]);
+
+  // Handle deep linking from notifications
+  useEffect(() => {
+    const state = location.state as { openAppointmentId?: string | number };
+    if (state?.openAppointmentId && appointments.length > 0) {
+      const aptId = state.openAppointmentId.toString();
+      const apt = appointments.find(a => a.id.toString() === aptId);
+      if (apt) {
+        setSelectedEvent(apt);
+        setSelectedDate(new Date(apt.appointment_datetime));
+        setShowModal(true);
+        // Limpiar el estado para evitar re-aperturas no deseadas
+        window.history.replaceState({}, document.title);
+      }
+    }
+  }, [location.state, appointments]);
 
   // Calendar events transformer
   const calendarEvents = [
@@ -426,7 +448,7 @@ export default function AgendaView() {
       backgroundColor: getSourceColor(apt.source),
       borderColor: getSourceColor(apt.source),
       extendedProps: { ...apt, eventType: 'appointment' },
-      resourceId: apt.professional_id.toString(),
+      resourceId: apt.professional_id?.toString() || '0',
     })),
     ...filteredBlocks.map((block) => ({
       id: block.id,
@@ -480,7 +502,7 @@ export default function AgendaView() {
   const handleEventClick = (info: any) => {
     // Check if it's a Google Calendar block
     if (info.event.extendedProps.eventType === 'gcalendar_block') {
-      alert(`Bloqueo de Google Calendar:\n\n${info.event.title}\n${new Date(info.event.start).toLocaleString()} - ${new Date(info.event.end).toLocaleString()}`);
+      alert(`${t('agenda.google_block')}:\n\n${info.event.title}\n${new Date(info.event.start).toLocaleString(language)} - ${new Date(info.event.end).toLocaleString(language)}`);
       return;
     }
 
@@ -490,19 +512,30 @@ export default function AgendaView() {
   };
 
   const handleSave = async (data: any) => {
+    // Capturar rango visible antes de operaciones async para refetch correcto
+    const cal = calendarRef.current?.getApi();
+    let rangeStart = cal?.view?.activeStart;
+    let rangeEnd = cal?.view?.activeEnd;
+
     try {
       if (selectedEvent) {
-        // Update
         await api.put(`/admin/appointments/${selectedEvent.id}`, data);
       } else {
-        // Create
         await api.post('/admin/appointments', {
           ...data,
           status: 'confirmed',
           source: 'manual',
         });
+        // Al crear, ampliar el rango de refetch para incluir la fecha del turno nuevo
+        // (si la vista actual no la muestra, p.ej. semana 14-20 y turno el 26)
+        const newDate = data.appointment_datetime ? new Date(data.appointment_datetime) : null;
+        if (newDate && rangeStart && rangeEnd) {
+          rangeStart = newDate < rangeStart ? startOfDay(newDate) : rangeStart;
+          rangeEnd = newDate > rangeEnd ? endOfDay(addDays(newDate, 1)) : rangeEnd;
+        }
       }
-      await fetchData();
+      // Refetch con rango explícito para que el turno nuevo aparezca de inmediato
+      await fetchData(false, rangeStart ?? undefined, rangeEnd ?? undefined);
       setShowModal(false);
     } catch (error: any) {
       throw error; // Propagate to form for error display
@@ -510,9 +543,10 @@ export default function AgendaView() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm(t('agenda.confirm_delete'))) return;
     try {
-      // Soft delete/cancel
-      await api.put(`/admin/appointments/${id}/status`, { status: 'cancelled' });
+      // Borrado físico (Protocolo Platinum: limpieza total de agenda)
+      await api.delete(`/admin/appointments/${id}`);
       await fetchData();
       setShowModal(false);
     } catch (error) {
@@ -527,19 +561,24 @@ export default function AgendaView() {
         {/* Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full lg:w-auto gap-4">
-            <div className="border-l-4 border-medical-500 pl-3 sm:pl-4 min-w-0">
+            <div className="border-l-4 border-blue-500 pl-3 sm:pl-4 min-w-0">
               <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{t('agenda.title')}</h1>
-              <p className="text-xs sm:text-sm text-white/60 mt-0.5">{t('agenda.subtitle')}</p>
+              <p className="text-xs sm:text-sm text-white/50 mt-0.5">{t('agenda.subtitle')}</p>
+              {visibleRangeStr && (
+                <p className="text-xs text-white/30 mt-1" title={t('agenda.range_hint')}>
+                  {filteredAppointments.length} {t('agenda.appointments_in_view')} • {visibleRangeStr}
+                </p>
+              )}
             </div>
 
             {/* Professional Filter (CEO/Secretary only) - Mobile Stacking */}
             {(user?.role === 'ceo' || user?.role === 'secretary') && (
-              <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl shadow-sm border border-white/[0.04] w-full sm:w-auto">
+              <div className="flex items-center gap-2 bg-white/[0.04] px-3 py-2 rounded-xl border border-white/[0.08] w-full sm:w-auto">
                 <Stethoscope size={16} className="text-blue-400 shrink-0" />
                 <select
                   value={selectedProfessionalId}
                   onChange={(e) => setSelectedProfessionalId(e.target.value)}
-                  className="bg-transparent border-none text-xs font-medium focus:ring-0 outline-none text-medical-900 cursor-pointer w-full"
+                  className="bg-transparent border-none text-xs font-medium focus:ring-0 outline-none text-white cursor-pointer w-full"
                 >
                   <option value="all">{t('agenda.all_professionals')}</option>
                   {professionals.map(p => (
@@ -555,18 +594,22 @@ export default function AgendaView() {
           {/* Connection Status & Controls */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full lg:w-auto">
             {/* Source Legend - Compact on Mobile */}
-            <div className="flex gap-2 sm:gap-3 bg-white px-3 py-1.5 rounded-full border border-gray-50">
+            <div className="flex gap-2 sm:gap-3 bg-white/[0.04] px-3 py-1.5 rounded-full border border-white/[0.06]">
               <div className="flex items-center gap-1">
                 <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
-                <span className="text-[10px] text-white/60">{t('agenda.source_ai')}</span>
+                <span className="text-[10px] text-white/50">{t('agenda.source_ai')}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2.5 h-2.5 rounded-full bg-purple-500"></div>
+                <span className="text-[10px] text-white/50">{t('agenda.source_nova')}</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                <span className="text-[10px] text-white/60">{t('agenda.source_manual')}</span>
+                <span className="text-[10px] text-white/50">{t('agenda.source_manual')}</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-2.5 h-2.5 rounded-full bg-gray-500"></div>
-                <span className="text-[10px] text-white/60">{t('agenda.source_gcalendar')}</span>
+                <span className="text-[10px] text-white/50">{t('agenda.source_gcalendar')}</span>
               </div>
             </div>
 
@@ -583,11 +626,12 @@ export default function AgendaView() {
 
           </div>
         </div>
+      </div>
 
-        {/* Mobile View or Desktop Calendar */}
-        {isMobile ? (
-          <div className="flex-1 min-h-0">
-            <MobileAgenda
+      {/* Mobile View or Desktop Calendar — OUTSIDE the flex-shrink-0 header */}
+      {isMobile ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <MobileAgenda
               appointments={filteredAppointments}
               googleBlocks={filteredBlocks}
               selectedDate={selectedDate || new Date()}
@@ -599,10 +643,10 @@ export default function AgendaView() {
               onEventClick={handleEventClick}
               professionals={professionals}
             />
-          </div>
-        ) : (
-          <div className="flex-1 min-h-0 px-4 lg:px-6 pb-4 lg:pb-6">
-            <div className="h-[calc(100vh-140px)] bg-white/60 backdrop-blur-lg md:backdrop-blur-2xl border border-white/40 shadow-2xl rounded-2xl md:rounded-3xl p-2 sm:p-4 overflow-y-auto">
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 px-4 lg:px-6 pb-4 lg:pb-6">
+            <div className="h-[calc(100vh-140px)] bg-white/[0.03] backdrop-blur-lg md:backdrop-blur-2xl border border-white/[0.06] shadow-2xl rounded-2xl md:rounded-3xl p-2 sm:p-4 overflow-y-auto">
               {/* Calendar */}
 
               {/* Custom FullCalendar Styles for Spacious TimeGrid */}
@@ -635,12 +679,12 @@ export default function AgendaView() {
           
           /* Opacar días pasados visualmente */
           .fc-day-past {
-            background-color: #f9fafb !important;
+            background-color: rgba(255,255,255,0.02) !important;
             opacity: 0.5 !important;
           }
-          
+
           .fc-timegrid-col.fc-day-past {
-            background-color: #f9fafb !important;
+            background-color: rgba(255,255,255,0.02) !important;
           }
           
           .fc-event-past {
@@ -693,16 +737,139 @@ export default function AgendaView() {
             70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
             100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
           }
+
+          /* ===== DARK MODE OVERRIDES FOR FULLCALENDAR ===== */
+          .fc {
+            --fc-border-color: rgba(255,255,255,0.06);
+            --fc-page-bg-color: transparent;
+            --fc-neutral-bg-color: rgba(255,255,255,0.04);
+            --fc-list-event-hover-bg-color: rgba(255,255,255,0.04);
+            --fc-today-bg-color: rgba(59,130,246,0.08);
+            --fc-highlight-color: rgba(59,130,246,0.12);
+            --fc-non-business-color: rgba(255,255,255,0.02);
+            --fc-bg-event-opacity: 0.15;
+            --fc-neutral-text-color: rgba(255,255,255,0.5);
+            --fc-event-text-color: #fff;
+            color: rgba(255,255,255,0.85);
+          }
+
+          /* Toolbar buttons */
+          .fc .fc-button-primary {
+            background-color: rgba(255,255,255,0.04) !important;
+            border-color: rgba(255,255,255,0.08) !important;
+            color: rgba(255,255,255,0.7) !important;
+          }
+          .fc .fc-button-primary:hover {
+            background-color: rgba(255,255,255,0.08) !important;
+            color: #fff !important;
+          }
+          .fc .fc-button-primary.fc-button-active,
+          .fc .fc-button-primary:not(:disabled).fc-button-active {
+            background-color: #fff !important;
+            color: #0a0e1a !important;
+            border-color: #fff !important;
+          }
+          .fc .fc-today-button {
+            background-color: rgba(255,255,255,0.04) !important;
+            border-color: rgba(255,255,255,0.08) !important;
+            color: rgba(255,255,255,0.7) !important;
+          }
+          .fc .fc-today-button:hover {
+            background-color: rgba(255,255,255,0.08) !important;
+            color: #fff !important;
+          }
+          .fc .fc-today-button:disabled {
+            opacity: 0.3 !important;
+          }
+
+          /* Toolbar title */
+          .fc .fc-toolbar-title {
+            color: #fff !important;
+          }
+
+          /* Column headers (day names) */
+          .fc .fc-col-header-cell {
+            background-color: rgba(255,255,255,0.04) !important;
+            border-color: rgba(255,255,255,0.06) !important;
+          }
+          .fc .fc-col-header-cell-cushion {
+            color: rgba(255,255,255,0.7) !important;
+          }
+
+          /* Time slot labels */
+          .fc .fc-timegrid-slot-label-cushion {
+            color: rgba(255,255,255,0.5) !important;
+          }
+
+          /* Day number in month view */
+          .fc .fc-daygrid-day-number {
+            color: rgba(255,255,255,0.7) !important;
+          }
+
+          /* List view */
+          .fc .fc-list-day-cushion {
+            background-color: rgba(255,255,255,0.04) !important;
+          }
+          .fc .fc-list-day-cushion a {
+            color: #fff !important;
+          }
+          .fc .fc-list-event td {
+            border-color: rgba(255,255,255,0.06) !important;
+          }
+          .fc .fc-list-event:hover td {
+            background-color: rgba(255,255,255,0.04) !important;
+          }
+          .fc .fc-list-event-title a {
+            color: rgba(255,255,255,0.85) !important;
+          }
+          .fc .fc-list-event-time {
+            color: rgba(255,255,255,0.5) !important;
+          }
+
+          /* Resource labels */
+          .fc .fc-resource-cell {
+            background-color: rgba(255,255,255,0.04) !important;
+            color: rgba(255,255,255,0.7) !important;
+          }
+
+          /* Scrollbar dark */
+          .fc ::-webkit-scrollbar {
+            width: 6px;
+          }
+          .fc ::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          .fc ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+          }
+
+          /* More link */
+          .fc .fc-daygrid-more-link {
+            color: rgba(255,255,255,0.6) !important;
+          }
+
+          /* Popover */
+          .fc .fc-popover {
+            background: #0d1117 !important;
+            border-color: rgba(255,255,255,0.06) !important;
+          }
+          .fc .fc-popover-header {
+            background: rgba(255,255,255,0.04) !important;
+            color: #fff !important;
+          }
         `}</style>
 
-              {loading && appointments.length === 0 ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="flex flex-col items-center gap-4">
-                    <RefreshCw className="w-12 h-12 text-blue-500 animate-spin" />
-                    <p className="text-white/50 font-medium">{t('common.loading')}</p>
+              {/* Siempre montar el calendario para que las flechas y la vista no reviertan al hacer fetch */}
+              <div className="relative h-full min-h-[400px]">
+                {loading && appointments.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-[#0d1117]/80 z-10 rounded-2xl">
+                    <div className="flex flex-col items-center gap-4">
+                      <RefreshCw className="w-12 h-12 text-blue-400 animate-spin" />
+                      <p className="text-white/50 font-medium">{t('common.loading')}</p>
+                    </div>
                   </div>
-                </div>
-              ) : (
+                )}
                 <FullCalendar
                   ref={calendarRef}
                   plugins={[dayGridPlugin, interactionPlugin, timeGridPlugin, resourceTimeGridPlugin, listPlugin]}
@@ -718,12 +885,38 @@ export default function AgendaView() {
                   slotDuration="00:15:00"
                   slotLabelInterval="01:00"
                   initialDate={new Date()}
+                  firstDay={1} // Lunes como primer día de semana (0=Dom, 1=Lun)
+                  locale={language}
+                  buttonText={{
+                    today: t('agenda.today'),
+                    month: t('agenda.month'),
+                    week: t('agenda.week'),
+                    day: t('agenda.day'),
+                    year: t('agenda.year'),
+                    three_years: t('agenda.three_years'),
+                    list: t('agenda.list')
+                  }}
+                  views={{
+                    listYear: {
+                      type: 'list',
+                      duration: { years: 1 },
+                      buttonText: t('agenda.year')
+                    },
+                    listThreeYears: {
+                      type: 'list',
+                      duration: { years: 3 },
+                      buttonText: t('agenda.three_years')
+                    }
+                  }}
+                  allDayText={t('agenda.all_day')}
                   headerToolbar={{
                     left: window.innerWidth < 768 ? 'prev,next' : 'prev,next today',
                     center: 'title',
                     right: window.innerWidth < 768
-                      ? 'timeGridDay,dayGridMonth'
-                      : (window.innerWidth < 1024 ? 'timeGridWeek,dayGridMonth' : 'resourceTimeGridDay,timeGridWeek,dayGridMonth'),
+                      ? 'timeGridDay,dayGridMonth,listYear'
+                      : (window.innerWidth < 1024 
+                          ? 'timeGridWeek,dayGridMonth,listYear,listThreeYears' 
+                          : 'resourceTimeGridDay,timeGridWeek,dayGridMonth,listYear,listThreeYears'),
                   }}
                   height="auto"
                   contentHeight="auto"
@@ -732,21 +925,47 @@ export default function AgendaView() {
                     return selectInfo.start >= now;
                   }}
                   events={calendarEvents}
-                  datesSet={() => fetchData()}
+                  datesSet={(dateInfo) => {
+                    // Actualizar estado de vista actual
+                    setCurrentView(dateInfo.view.type);
+                    localStorage.setItem('agendaView', dateInfo.view.type);
+                    // Mostrar rango visible (para que el usuario sepa dónde buscar)
+                    const fmt = (d: Date) => d.toLocaleDateString(language === 'es' ? 'es-AR' : language === 'fr' ? 'fr-FR' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+                    setVisibleRangeStr(`${fmt(dateInfo.start)} – ${fmt(dateInfo.end)}`);
+
+                    // Guardián de rango: solo fetchea si el usuario realmente navegó (cambio de vista
+                    // o flechas). FullCalendar dispara datesSet también en re-renders internos con
+                    // el mismo rango — este guard los ignora silenciosamente.
+                    if (datesSetTimerRef.current) clearTimeout(datesSetTimerRef.current);
+                    datesSetTimerRef.current = setTimeout(() => {
+                      const newStart = dateInfo.start.toISOString();
+                      const newEnd = dateInfo.end.toISOString();
+                      const last = lastFetchedRangeRef.current;
+                      const sameRange = last &&
+                        last.startISO === newStart &&
+                        last.endISO === newEnd &&
+                        last.professionalId === selectedProfessionalId &&
+                        last.viewType === dateInfo.view.type;
+                      if (sameRange) return; // Re-render interno — no hacer fetch
+                      lastFetchedRangeRef.current = {
+                        startISO: newStart,
+                        endISO: newEnd,
+                        professionalId: selectedProfessionalId,
+                        viewType: dateInfo.view.type,
+                      };
+                      fetchData(false, dateInfo.start, dateInfo.end);
+                    }, 200);
+                  }}
+                  viewDidMount={(viewInfo) => {
+                    // Sincronizar estado React con vista actual de FullCalendar
+                    setCurrentView(viewInfo.view.type);
+                    localStorage.setItem('agendaView', viewInfo.view.type);
+                  }}
                   dateClick={handleDateClick}
                   eventClick={handleEventClick}
                   slotEventOverlap={false}
                   slotMinTime="08:00:00"
                   slotMaxTime="20:00:00"
-                  locale={language}
-                  buttonText={{
-                    today: t('agenda.today'),
-                    month: t('agenda.month'),
-                    week: t('agenda.week'),
-                    day: t('agenda.day'),
-                    list: t('agenda.title')
-                  }}
-                  allDayText={t('agenda.all_day')}
                   eventContent={(eventInfo) => <AppointmentCard {...eventInfo} />}
                   eventDidMount={(info) => {
                     const { eventType, source, patient_phone, professional_name, notes } = info.event.extendedProps;
@@ -768,12 +987,12 @@ export default function AgendaView() {
                     }
                   }}
                 />
-              )}
+              </div>
             </div>
-          </div>
-        )}
+        </div>
+      )}
 
-        {/* Clinical Inspector Drawer */}
+      {/* Clinical Inspector Drawer */}
         <AppointmentForm
           isOpen={showModal}
           onClose={() => setShowModal(false)}
@@ -791,7 +1010,6 @@ export default function AgendaView() {
           onDelete={handleDelete}
           isEditing={!!selectedEvent}
         />
-      </div>
     </div>
   );
 }

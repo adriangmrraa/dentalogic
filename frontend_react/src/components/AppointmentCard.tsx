@@ -1,17 +1,20 @@
 import React from 'react';
 import { CheckCircle, Clock, AlertTriangle, CloudOff, User, HelpCircle } from 'lucide-react';
 import type { EventContentArg } from '@fullcalendar/core';
+import { useTranslation } from '../context/LanguageContext';
 
 interface ExtendedProps {
     eventType: 'appointment' | 'gcalendar_block';
-    source?: 'ai' | 'manual';
+    source?: 'ai' | 'nova' | 'manual';
     status?: string; // scheduled, confirmed, in_progress, completed, cancelled, no_show
     patient_name?: string;
     patient_phone?: string;
     professional_name?: string;
     appointment_type?: string;
+    appointment_name?: string;
     notes?: string;
     urgency_level?: string;
+    has_medical_alerts?: boolean;
 }
 
 // Status Visual Configuration
@@ -68,6 +71,7 @@ const STATUS_STYLES: Record<string, { bg: string; border: string; text: string; 
 };
 
 export const AppointmentCard: React.FC<EventContentArg> = (eventInfo) => {
+    const { t } = useTranslation();
     const props = eventInfo.event.extendedProps as ExtendedProps;
     const { eventType, status, appointment_type, professional_name, urgency_level } = props;
     const isGCal = eventType === 'gcalendar_block';
@@ -75,13 +79,13 @@ export const AppointmentCard: React.FC<EventContentArg> = (eventInfo) => {
     // --- GCal Block Rendering ---
     if (isGCal) {
         return (
-            <div className="flex flex-col h-full p-1.5 rounded-lg border-l-4 border-l-gray-400 bg-white/[0.02]/80 backdrop-blur-sm overflow-hidden shadow-sm hover:shadow-md transition-all duration-200"
-                style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.03) 10px, rgba(0,0,0,0.03) 20px)' }}>
-                <div className="flex items-center gap-1.5 text-white/50 font-semibold text-[10px] uppercase tracking-wider mb-1 opacity-70">
+            <div className="flex flex-col h-full p-1.5 rounded-lg border-l-4 border-l-white/20 bg-white/[0.04] backdrop-blur-sm overflow-hidden hover:bg-white/[0.06] transition-all duration-200"
+                style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.02) 10px, rgba(255,255,255,0.02) 20px)' }}>
+                <div className="flex items-center gap-1.5 text-white/40 font-semibold text-[10px] uppercase tracking-wider mb-1 opacity-70">
                     <CloudOff size={10} />
                     <span>GCalendar</span>
                 </div>
-                <div className="font-medium text-xs text-white/70 truncate leading-tight">
+                <div className="font-medium text-xs text-white/60 truncate leading-tight">
                     {eventInfo.event.title.replace('🔒 ', '')}
                 </div>
             </div>
@@ -103,26 +107,39 @@ export const AppointmentCard: React.FC<EventContentArg> = (eventInfo) => {
       transition-all duration-200 cursor-pointer overflow-hidden
       ${urgency_level === 'emergency' ? 'animate-pulse-soft' : ''}
     `}>
-            {/* Top: Time & Status Icon */}
+            {/* Top: Time & Status Icon + Payment Dot */}
             <div className="flex justify-between items-start mb-0.5">
                 <span className={`text-[10px] font-mono opacity-60 ${styles.text}`}>
                     {eventInfo.timeText}
                 </span>
-                <StatusIcon size={12} className={`opacity-80 ${styles.text}`} />
+                <div className="flex items-center gap-1">
+                    {/* Payment status dot */}
+                    {props.payment_status === 'paid' && <div className="w-2 h-2 rounded-full bg-emerald-400" title="Pagado" />}
+                    {props.payment_status === 'partial' && <div className="w-2 h-2 rounded-full bg-amber-400" title="Pago parcial" />}
+                    {props.payment_status === 'pending' && props.billing_amount > 0 && <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" title="Pago pendiente" />}
+                    <StatusIcon size={12} className={`opacity-80 ${styles.text}`} />
+                </div>
             </div>
 
             {/* Center: Patient Name */}
             <div className={`font-semibold text-xs truncate leading-snug mb-1 ${styles.text}`}>
-                {eventInfo.event.title.split(' - ')[0]}
+                {eventInfo.event.title?.split(' - ')[0] || t('agenda.no_name')}
             </div>
+
+            {/* Medical Alert */}
+            {props.has_medical_alerts && (
+              <div className="flex items-center gap-0.5 text-[8px] text-red-400 font-bold" title="Alerta médica">
+                <AlertTriangle size={8} /> ALERTA
+              </div>
+            )}
 
             {/* Bottom: Badge & Professional */}
             <div className="mt-auto flex flex-col gap-1">
 
                 {/* Treatment Badge */}
                 <div className="flex">
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-white/60 backdrop-blur-sm text-white/70 truncate max-w-full">
-                        {appointment_type || 'Consulta'}
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-white/[0.08] backdrop-blur-sm text-white/60 truncate max-w-full">
+                        {props.appointment_name || props.appointment_type || 'Consulta'}
                     </span>
                 </div>
 

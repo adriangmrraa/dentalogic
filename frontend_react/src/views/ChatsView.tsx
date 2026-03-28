@@ -1,13 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   MessageCircle, Send, Calendar, User, Activity,
   Pause, Play, AlertCircle, Clock, ChevronLeft,
-  Search, XCircle, Bell, Volume2, VolumeX
+  Search, XCircle, Bell, Volume2, VolumeX,
+  Instagram, Facebook, Lock, ChevronRight, Paperclip
 } from 'lucide-react';
 import api, { BACKEND_URL } from '../api/axios';
+import * as chatsApi from '../api/chats';
 import { useTranslation } from '../context/LanguageContext';
 import { io, Socket } from 'socket.io-client';
+import type { ChatSummaryItem, ChatApiMessage } from '../types/chat';
+import AdContextCard from '../components/AdContextCard';
+import { MessageContent } from '../components/chat/MessageMedia';
+import { useSmartScroll } from '../hooks/useSmartScroll';
+import AnamnesisPanel from '../components/AnamnesisPanel';
+import { useAuth } from '../context/AuthContext';
 
 // ============================================
 // INTERFACES
@@ -37,9 +45,10 @@ interface ChatSession {
 interface ChatMessage {
   id: number;
   from_number: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'human_supervisor';
   content: string;
   created_at: string;
+  attachments?: any[];
   is_derivhumano?: boolean;
 }
 
@@ -62,6 +71,15 @@ interface PatientContext {
   };
   treatment_plan?: any;
   diagnosis?: string;
+  // Meta Ads (Spec 10)
+  patient?: {
+    first_name?: string;
+    last_name?: string;
+    acquisition_source?: string;
+    meta_ad_headline?: string;
+    meta_ad_body?: string;
+    meta_ad_id?: string;
+  };
 }
 
 interface Toast {
@@ -75,6 +93,7 @@ interface Toast {
 
 export default function ChatsView() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   // Clínicas (CEO puede tener varias; secretary/professional una)
@@ -88,33 +107,64 @@ export default function ChatsView() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [newMessage, setNewMessage] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [messageOffset, setMessageOffset] = useState(0);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  // Chatwoot: lista unificada y selección
+  const [chatwootList, setChatwootList] = useState<ChatSummaryItem[]>([]);
+  const [channelFilter, setChannelFilter] = useState<'all' | 'whatsapp' | 'instagram' | 'facebook'>('all');
+  const [selectedChatwoot, setSelectedChatwoot] = useState<ChatSummaryItem | null>(null);
+  const [chatwootMessages, setChatwootMessages] = useState<ChatApiMessage[]>([]);
+  const [loadingChatwootMessages, setLoadingChatwootMessages] = useState(false);
+
   // Estados de UI
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showToast, setShowToast] = useState<Toast | null>(null);
-  const [highlightedSession, setHighlightedSession] = useState<string | null>(null);
   const [showMobileContext, setShowMobileContext] = useState(false);
+  /** Incrementa cuando save_patient_anamnesis guarda para refrescar AnamnesisPanel en tiempo real */
+  const [anamnesisRefreshKey, setAnamnesisRefreshKey] = useState(0);
+
+
 
   // Refs
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // const messagesEndRef = useRef<HTMLDivElement>(null); // Replaced by useSmartScroll
   const socketRef = useRef<Socket | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastSoundTimes = useRef<Record<string, number>>({});
+  /** Clave única del paciente actual para evitar mezcla de datos entre pacientes (encapsulación) */
+  const currentPatientKeyRef = useRef<string>('');
+  // Refs para mantener valores frescos en los handlers del socket sin reconectar
+  const selectedSessionRef = useRef(selectedSession);
+  selectedSessionRef.current = selectedSession;
+  const selectedChatwootRef = useRef(selectedChatwoot);
+  selectedChatwootRef.current = selectedChatwoot;
+  const channelFilterRef = useRef(channelFilter);
+  channelFilterRef.current = channelFilter;
+  const soundEnabledRef = useRef(soundEnabled);
+  soundEnabledRef.current = soundEnabled;
+  const selectedTenantIdRef = useRef(selectedTenantId);
+  selectedTenantIdRef.current = selectedTenantId;
+
+  // Scroll Inteligente
+  const scrollDependency = useMemo(() => [messages, chatwootMessages], [messages, chatwootMessages]);
+  const { containerRef, messagesEndRef, showScrollButton, scrollToBottom } = useSmartScroll(scrollDependency);
+
 
   // ============================================
   // WEBSOCKET - CONEXIÓN EN TIEMPO REAL
   // ============================================
 
   useEffect(() => {
-    // Conectar al WebSocket
+    // Conectar al WebSocket (una sola vez — los handlers leen refs para valores frescos)
     socketRef.current = io(BACKEND_URL);
 
     // Evento: Nueva derivación humana (derivhumano) — solo para la clínica seleccionada
     socketRef.current.on('HUMAN_HANDOFF', (data: { phone_number: string; reason: string; tenant_id?: number }) => {
-      if (data.tenant_id != null && selectedTenantId != null && data.tenant_id !== selectedTenantId) return;
+      if (data.tenant_id != null && selectedTenantIdRef.current != null && data.tenant_id !== selectedTenantIdRef.current) return;
       setSessions(prev => prev.map(s =>
         s.phone_number === data.phone_number
           ? {
@@ -126,10 +176,6 @@ export default function ChatsView() {
           : s
       ));
 
-      // Resaltar el chat en la lista
-      setHighlightedSession(data.phone_number);
-      setTimeout(() => setHighlightedSession(null), 5000);
-
       // Mostrar toast (idioma según selector)
       setShowToast({
         id: Date.now().toString(),
@@ -139,71 +185,82 @@ export default function ChatsView() {
       });
 
       // Reproducir sonido
-      if (soundEnabled) {
+      if (soundEnabledRef.current) {
         playNotificationSound();
       }
     });
 
-    // Evento: Nuevo mensaje en chat (tenant_id opcional; si viene, solo actualizar si es la clínica seleccionada)
-    socketRef.current.on('NEW_MESSAGE', (data: { phone_number: string; message: string; role: string; tenant_id?: number }) => {
-      if (data.tenant_id != null && selectedTenantId != null && data.tenant_id !== selectedTenantId) return;
-      setSessions(prev => {
-        const updatedSessions = prev.map(s =>
-          s.phone_number === data.phone_number
-            ? {
-              ...s,
-              last_message: data.message,
-              last_message_time: new Date().toISOString(),
-              unread_count: s.phone_number === selectedSession?.phone_number ? 0 : s.unread_count + 1,
-              is_window_open: data.role === 'user' ? true : s.is_window_open
-            }
-            : s
-        );
+    // Evento: Nuevo mensaje (Omnicanal) — Spec 14
+    socketRef.current.on('NEW_MESSAGE', (data: { phone_number: string; message: string; role: string; tenant_id: number; channel?: string }) => {
+      // 1. Validar clínica seleccionada
+      if (selectedTenantIdRef.current != null && data.tenant_id !== selectedTenantIdRef.current) return;
 
-        // Re-ordenar: último mensaje arriba
-        const sortedSessions = [...updatedSessions].sort((a, b) => {
-          const timeA = new Date(a.last_message_time || 0).getTime();
-          const timeB = new Date(b.last_message_time || 0).getTime();
-          return timeB - timeA;
-        });
+      console.log('📨 NEW_MESSAGE socket event:', data);
 
-        // Si la sesión seleccionada recibió un mensaje, actualizarla para refrescar la UI (banner/input)
-        if (data.phone_number === selectedSession?.phone_number) {
-          const current = sortedSessions.find(s => s.phone_number === data.phone_number);
-          if (current) {
-            setSelectedSession(current);
-          }
+      // Leer valores actuales desde refs (siempre frescos)
+      const currentSession = selectedSessionRef.current;
+      const currentChatwoot = selectedChatwootRef.current;
+      const currentChannelFilter = channelFilterRef.current;
+
+      // 2. Notificaciones sonoras inteligentes:
+      // - Solo si el sonido está activado
+      // - Solo si NO es el chat que el usuario tiene abierto actualmente
+      // - Solo al inicio de una ráfaga (ej: primer mensaje en 30 segundos)
+      const isActiveChat = (
+        (data.channel === 'whatsapp' && currentSession?.phone_number === data.phone_number) ||
+        (data.channel !== 'whatsapp' && currentChatwoot?.external_user_id === data.phone_number)
+      );
+
+      if (soundEnabledRef.current && !isActiveChat && data.role === 'user') {
+        const now = Date.now();
+        const lastTime = lastSoundTimes.current[data.phone_number] || 0;
+        if (now - lastTime > 30000) { // 30s de silencio entre sonidos por chat
+          playNotificationSound();
+          lastSoundTimes.current[data.phone_number] = now;
         }
+      }
 
-        return sortedSessions;
-      });
-
-      // Si es del chat seleccionado, agregar mensaje si no existe
-      if (data.phone_number === selectedSession?.phone_number) {
+      // 3. Si es el chat abierto (YCloud/WhatsApp), agregar mensaje localmente
+      if (data.channel === 'whatsapp' && currentSession?.phone_number === data.phone_number) {
         setMessages(prev => {
-          // Evitar duplicados (chequeo simple por contenido y timestamp reciente o id si viniera)
           const isDuplicate = prev.some(m =>
             m.role === data.role &&
             m.content === data.message &&
             new Date(m.created_at).getTime() > Date.now() - 5000
           );
-
           if (isDuplicate) return prev;
-
           return [...prev, {
-            id: Date.now(), // ID temporal
-            role: data.role as 'user' | 'assistant' | 'system',
+            id: Date.now(),
+            role: data.role as 'user' | 'assistant',
             content: data.message,
             created_at: new Date().toISOString(),
             from_number: data.phone_number
           }];
         });
       }
+
+      // 4. Si es el chat abierto (Chatwoot/FB/IG), refrescar mensajes desde API
+      if (data.channel !== 'whatsapp' && currentChatwoot?.external_user_id === data.phone_number) {
+        chatsApi.fetchChatMessages(currentChatwoot.id, { limit: 20 })
+          .then(list => setChatwootMessages(list))
+          .catch(err => console.error("Error refreshing chatwoot messages:", err));
+      }
+
+      // 5. Refrescar listas de chats siempre para ver vistas previas actualizadas
+      if (selectedTenantIdRef.current != null) {
+        fetchSessions(selectedTenantIdRef.current);
+      }
+      chatsApi.fetchChatsSummary({ limit: 50, channel: currentChannelFilter === 'all' ? undefined : currentChannelFilter })
+        .then(list => setChatwootList(list))
+        .catch(err => console.error("Error refreshing chatwoot summary:", err));
     });
 
     // Evento: Estado de override cambiado (por clínica: solo actualizar si es la clínica seleccionada)
-    socketRef.current.on('HUMAN_OVERRIDE_CHANGED', (data: { phone_number: string; enabled: boolean; until?: string; tenant_id?: number }) => {
-      if (data.tenant_id != null && selectedTenantId != null && data.tenant_id !== selectedTenantId) return;
+    socketRef.current.on('HUMAN_OVERRIDE_CHANGED', (data: { phone_number: string; conversation_id?: string; enabled: boolean; until?: string; tenant_id?: number }) => {
+      console.log("🔔 Socket Received: HUMAN_OVERRIDE_CHANGED", data);
+      if (data.tenant_id != null && selectedTenantIdRef.current != null && data.tenant_id !== selectedTenantIdRef.current) return;
+
+      // Update YCloud Sessions (Match by Phone)
       setSessions(prev => {
         const updated = prev.map(s =>
           s.phone_number === data.phone_number
@@ -216,13 +273,39 @@ export default function ChatsView() {
         );
 
         // Sincronizar selectedSession si es el actual
-        if (selectedSession?.phone_number === data.phone_number) {
+        if (selectedSessionRef.current?.phone_number === data.phone_number) {
           const current = updated.find(s => s.phone_number === data.phone_number);
           if (current) setSelectedSession(current);
         }
 
         return updated;
       });
+
+      // Update Chatwoot List & Selection (Match by ID if available, fallback to phone/external_id)
+      setChatwootList(prev => prev.map(c => {
+        const isMatch = data.conversation_id
+          ? c.id === data.conversation_id
+          : c.external_user_id === data.phone_number;
+
+        if (isMatch) {
+          console.log("✅ Match found in Chatwoot list (by ID/Phone), updating:", c.id);
+          return { ...c, is_locked: data.enabled };
+        }
+        return c;
+      }));
+
+      // Update Selected Chatwoot (Match by ID if available)
+      const currentChatwoot = selectedChatwootRef.current;
+      if (currentChatwoot) {
+        const isMatch = data.conversation_id
+          ? currentChatwoot.id === data.conversation_id
+          : currentChatwoot.external_user_id === data.phone_number;
+
+        if (isMatch) {
+          console.log("✅ Updating selectedChatwoot:", currentChatwoot.id);
+          setSelectedChatwoot(prev => prev ? { ...prev, is_locked: data.enabled } : null);
+        }
+      }
     });
 
     // Evento: Chat seleccionado actualizado (para sincronización)
@@ -233,7 +316,7 @@ export default function ChatsView() {
         );
 
         // Sincronizar selectedSession si es el actual
-        if (selectedSession?.phone_number === data.phone_number) {
+        if (selectedSessionRef.current?.phone_number === data.phone_number) {
           const current = updated.find(s => s.phone_number === data.phone_number);
           if (current) setSelectedSession(current);
         }
@@ -242,22 +325,35 @@ export default function ChatsView() {
       });
     });
 
-    // Evento: Paciente actualizado (urgencia, etc)
-    socketRef.current.on('PATIENT_UPDATED', (data: { phone_number: string; urgency_level: string }) => {
-      if (selectedSession?.phone_number === data.phone_number) {
-        fetchPatientContext(data.phone_number);
+    // Evento: Paciente actualizado (urgencia, anamnesis guardada, etc)
+    socketRef.current.on('PATIENT_UPDATED', (data: { phone_number: string; tenant_id?: number; urgency_level?: string; update_type?: string }) => {
+      const phoneMatches = (p: string) =>
+        p === data.phone_number ||
+        p?.replace(/\D/g, '') === data.phone_number?.replace(/\D/g, '');
+      const currentSession = selectedSessionRef.current;
+      const currentChatwoot = selectedChatwootRef.current;
+      const isSelected = currentSession && phoneMatches(currentSession.phone_number) ||
+        currentChatwoot && phoneMatches(currentChatwoot.external_user_id || '');
+
+      if (isSelected) {
+        fetchPatientContext(data.phone_number, data.tenant_id ?? currentSession?.tenant_id ?? currentChatwoot?.tenant_id);
+        if (data.update_type === 'anamnesis_saved') {
+          setAnamnesisRefreshKey(k => k + 1);
+        }
       }
 
-      setSessions(prev => prev.map(s =>
-        s.phone_number === data.phone_number
-          ? { ...s, urgency_level: data.urgency_level as any }
-          : s
-      ));
+      if (data.urgency_level) {
+        setSessions(prev => prev.map(s =>
+          s.phone_number === data.phone_number
+            ? { ...s, urgency_level: data.urgency_level as any }
+            : s
+        ));
+      }
     });
 
     // Evento: Nuevo turno agendado (refrescar contexto)
     socketRef.current.on('NEW_APPOINTMENT', (data: { phone_number: string }) => {
-      if (selectedSession?.phone_number === data.phone_number) {
+      if (selectedSessionRef.current?.phone_number === data.phone_number) {
         fetchPatientContext(data.phone_number);
       }
 
@@ -276,7 +372,8 @@ export default function ChatsView() {
         socketRef.current.disconnect();
       }
     };
-  }, [selectedSession, soundEnabled, selectedTenantId, t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t]);
 
   // ============================================
   // DATOS - CARGAR CLÍNICAS, SESIONES Y MENSAJES
@@ -295,16 +392,89 @@ export default function ChatsView() {
   }, [selectedTenantId, location.state?.selectPhone, navigate]);
 
   useEffect(() => {
+    const load = async () => {
+      try {
+        const channel = channelFilter === 'all' ? undefined : channelFilter;
+        const list = await chatsApi.fetchChatsSummary({ limit: 50, channel });
+        setChatwootList(list);
+      } catch {
+        setChatwootList([]);
+      }
+    };
+    load();
+    const interval = setInterval(load, 10000);
+    return () => clearInterval(interval);
+  }, [channelFilter]);
+
+  useEffect(() => {
     if (selectedSession) {
-      fetchMessages(selectedSession.phone_number, selectedSession.tenant_id);
-      fetchPatientContext(selectedSession.phone_number, selectedSession.tenant_id);
-      markAsRead(selectedSession.phone_number, selectedSession.tenant_id);
+      setSelectedChatwoot(null);
+      const patientKey = `whatsapp:${selectedSession.phone_number}:${selectedSession.tenant_id}`;
+      currentPatientKeyRef.current = patientKey;
+      setPatientContext(null);
+      setMessages([]);
+      const fetchForSession = async () => {
+        const keyAtStart = patientKey;
+        const [ctxRes, msgRes] = await Promise.all([
+          api.get(`/admin/patients/phone/${selectedSession.phone_number}/context`, {
+            params: selectedSession.tenant_id != null ? { tenant_id_override: selectedSession.tenant_id } : {}
+          }).catch(() => null),
+          api.get(`/admin/chat/messages/${selectedSession.phone_number}`, {
+            params: { tenant_id: selectedSession.tenant_id, limit: 50, offset: 0 }
+          }).catch(() => null)
+        ]);
+        if (currentPatientKeyRef.current !== keyAtStart) return;
+        if (ctxRes?.data) setPatientContext(ctxRes.data);
+        if (msgRes?.data) setMessages(msgRes.data);
+        setHasMoreMessages((msgRes?.data?.length ?? 0) === 50);
+        setMessageOffset(0);
+        markAsRead(selectedSession.phone_number, selectedSession.tenant_id);
+      };
+      fetchForSession();
     }
   }, [selectedSession]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (!selectedChatwoot) {
+      setChatwootMessages([]);
+      return;
+    }
+    setSelectedSession(null);
+    setPatientContext(null);
+
+    // Intentar cargar contexto clínico si hay teléfono en el contacto de Chatwoot
+    if (selectedChatwoot.external_user_id && selectedChatwoot.external_user_id.startsWith('+')) {
+      fetchPatientContext(selectedChatwoot.external_user_id);
+    } else if (selectedChatwoot.external_user_id && /^\d+$/.test(selectedChatwoot.external_user_id)) {
+      // Si es solo números sin +, normalizar
+      fetchPatientContext('+' + selectedChatwoot.external_user_id);
+    }
+
+    let isInitial = true;
+    const load = async () => {
+      if (isInitial) setLoadingChatwootMessages(true);
+      try {
+        const list = await chatsApi.fetchChatMessages(selectedChatwoot.id, { limit: 50 });
+        setChatwootMessages(list);
+      } catch {
+        if (isInitial) setChatwootMessages([]);
+      } finally {
+        if (isInitial) {
+          setLoadingChatwootMessages(false);
+          isInitial = false;
+        }
+      }
+    };
+    load();
+    const interval = setInterval(load, 40000); // Polling optimizado a 40s
+    markChatwootAsRead(selectedChatwoot.id);
+    return () => clearInterval(interval);
+  }, [selectedChatwoot]);
+
+  // useEffect(() => {
+  //   scrollToBottom();
+  // }, [messages, chatwootMessages]); // Handled by useSmartScroll
+
 
   // ============================================
   // FUNCIONES DE DATOS
@@ -393,28 +563,56 @@ export default function ChatsView() {
     }
   };
 
+  const markChatwootAsRead = async (conversationId: string) => {
+    try {
+      await chatsApi.markConversationRead(conversationId);
+      setChatwootList(prev => prev.map(item =>
+        item.id === conversationId ? { ...item, unread_count: 0 } : item
+      ));
+    } catch (error) {
+      console.error('Error marking chatwoot as read:', error);
+    }
+  };
+
   // ============================================
   // ACCIONES
   // ============================================
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !selectedSession) return;
+    if ((!newMessage.trim() && selectedFiles.length === 0) || !selectedSession) return;
 
     setSending(true);
     try {
+      // Upload media if any
+      const attachments = [];
+      if (selectedFiles.length > 0) {
+        for (const file of selectedFiles) {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('tenant_id', selectedSession.tenant_id.toString());
+          const uploadRes = await api.post('/admin/chat/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          attachments.push(uploadRes.data); // { type, url, file_name }
+        }
+      }
+
       await api.post('/admin/chat/send', {
         phone: selectedSession.phone_number,
         tenant_id: selectedSession.tenant_id,
         message: newMessage,
+        attachments: attachments
       });
       setNewMessage('');
+      setSelectedFiles([]);
       fetchMessages(selectedSession.phone_number, selectedSession.tenant_id);
 
       socketRef.current?.emit('MANUAL_MESSAGE', {
         phone: selectedSession.phone_number,
         tenant_id: selectedSession.tenant_id,
         message: newMessage,
+        attachments: attachments
       });
     } catch (error) {
       console.error('Error sending message:', error);
@@ -454,6 +652,76 @@ export default function ChatsView() {
     }
   };
 
+  // Spec: Parity for Chatwoot Manual Mode
+  const handleToggleChatwootLock = async () => {
+    if (!selectedChatwoot) return;
+
+    const activate = !selectedChatwoot.is_locked;
+
+    // 1. Optimistic Update (Immediate Feedback)
+    const updateFn = (c: ChatSummaryItem) => c.id === selectedChatwoot.id
+      ? { ...c, is_locked: activate }
+      : c;
+
+    setChatwootList(prev => prev.map(updateFn));
+    setSelectedChatwoot(prev => prev ? updateFn(prev) : null);
+
+    try {
+      // 2. API Call
+      console.log('🔒 Toggling Chatwoot Lock:', { id: selectedChatwoot.id, activate, tenant_id: selectedChatwoot.tenant_id });
+      await chatsApi.setHumanOverride(selectedChatwoot.id, activate);
+      console.log('✅ Chatwoot Lock API success');
+      // Socket event will confirm the state later, but UI is already updated.
+    } catch (error) {
+      console.error('❌ Error toggling Chatwoot lock:', error);
+      alert(`Error updating Manual Mode: ${JSON.stringify(error)}`); // Temporary alert for debugging
+      // Rollback on error
+      const rollbackFn = (c: ChatSummaryItem) => c.id === selectedChatwoot.id
+        ? { ...c, is_locked: !activate }
+        : c;
+      setChatwootList(prev => prev.map(rollbackFn));
+      setSelectedChatwoot(prev => prev ? rollbackFn(prev) : null);
+    }
+  };
+
+  const handleSendChatwootMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedChatwoot || (!newMessage.trim() && selectedFiles.length === 0)) return;
+    setSending(true);
+    try {
+      // 1. Upload media if any (reuse uploadChatMedia)
+      const attachments = [];
+      if (selectedFiles.length > 0 && selectedTenantId) {
+        for (const file of selectedFiles) {
+          const uploaded = await chatsApi.uploadChatMedia(file, selectedTenantId);
+          attachments.push(uploaded);
+        }
+      }
+
+      // 2. Send message with attachments
+      await chatsApi.sendChatMessage(selectedChatwoot.id, newMessage.trim(), attachments);
+
+      setNewMessage('');
+      setSelectedFiles([]); // Clear files
+
+      // 3. Refresh messages
+      const list = await chatsApi.fetchChatMessages(selectedChatwoot.id, { limit: 50 });
+      setChatwootMessages(list);
+    } catch (err: any) {
+      console.error('Error sending Chatwoot message:', err);
+      if (err.response?.status === 403) {
+        setShowToast({
+          id: Date.now().toString(),
+          type: 'error',
+          title: t('chats.meta_window_closed_title'),
+          message: t('chats.meta_window_closed_message'),
+        });
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleRemoveSilence = async () => {
     if (!selectedSession || !selectedSession.human_override_until) return;
 
@@ -481,29 +749,98 @@ export default function ChatsView() {
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+
 
   // ============================================
   // UTILIDADES
   // ============================================
+
+  const safeFormatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch { return ''; }
+  };
+
+  const safeFormatTime = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch { return ''; }
+  };
+
+  const formatTimeSummary = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return '';
+      const now = new Date();
+      const diff = now.getTime() - date.getTime();
+
+      if (diff < 60000) return t('chats.time_now');
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
+      if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
+      return date.toLocaleDateString();
+    } catch { return ''; }
+  };
 
   const filteredSessions = sessions.filter(session =>
     session.patient_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     session.phone_number.includes(searchTerm)
   );
 
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
+  const filteredChatwoot = chatwootList.filter(item =>
+    !searchTerm ||
+    (item.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.external_user_id || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-    if (diff < 60000) return 'Ahora';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
-    return date.toLocaleDateString();
-  };
+  type ListRow = { type: 'ycloud'; session: ChatSession } | { type: 'chatwoot'; item: ChatSummaryItem };
+  const mergedList: ListRow[] = [];
+  const seenKeys = new Set<string>();
+
+  // 1. Agregar YCloud primero (Siempre WhatsApp)
+  if (channelFilter === 'all' || channelFilter === 'whatsapp') {
+    filteredSessions.forEach(s => {
+      const key = `whatsapp:${s.phone_number}`;
+      if (!seenKeys.has(key)) {
+        mergedList.push({ type: 'ycloud', session: s });
+        seenKeys.add(key);
+      }
+    });
+  }
+
+  // 2. Agregar Chatwoot (Deduplicando por ID + Canal)
+  if (channelFilter === 'all' || channelFilter === 'whatsapp' || channelFilter === 'instagram' || channelFilter === 'facebook') {
+    // Spec 32: Priorizar chat con avatar
+    const sorted = [...filteredChatwoot].sort((a, b) => {
+      const aAv = !!(a.meta?.customer_avatar || a.avatar_url);
+      const bAv = !!(b.meta?.customer_avatar || b.avatar_url);
+      return aAv === bAv ? 0 : aAv ? -1 : 1;
+    });
+
+    sorted.forEach(item => {
+      const externalId = item.external_user_id || item.id;
+      const channel = item.channel || 'whatsapp';
+      const key = `${channel}:${externalId}`;
+
+      if (!seenKeys.has(key)) {
+        mergedList.push({ type: 'chatwoot', item });
+        seenKeys.add(key);
+      }
+    });
+  }
+
+  mergedList.sort((a, b) => {
+    const timeA = a.type === 'ycloud' ? (a.session.last_message_time || 0) : (a.item.last_message_at || 0);
+    const timeB = b.type === 'ycloud' ? (b.session.last_message_time || 0) : (b.item.last_message_at || 0);
+    return new Date(timeB).getTime() - new Date(timeA).getTime();
+  });
+
 
   const getStatusConfig = (session: ChatSession) => {
     if (session.status === 'human_handling' || session.status === 'silenced') {
@@ -527,12 +864,64 @@ export default function ChatsView() {
     return {
       badge: (
         <span className="flex items-center gap-1 text-xs text-green-600">
-          <Activity size={12} /> IA Activa
+          <Activity size={12} /> {t('chats.ia_active')}
         </span>
       ),
       avatarBg: 'bg-primary',
       cardBorder: '',
     };
+  };
+
+  const isWindowOpen = (lastUserMsgTime?: string | null) => {
+    if (!lastUserMsgTime) return false;
+    const lastDate = new Date(lastUserMsgTime).getTime();
+    const now = new Date().getTime();
+    return (now - lastDate) < 24 * 60 * 60 * 1000;
+  };
+
+  const getPlatformConfig = (channel: string) => {
+    switch (channel.toLowerCase()) {
+      case 'instagram':
+        return {
+          color: 'text-pink-600',
+          bgColor: 'bg-[#E1306C]',
+          hoverBg: 'hover:bg-pink-500/10',
+          selectedBg: 'bg-pink-500/10',
+          borderColor: 'border-pink-500',
+          icon: <Instagram size={12} className="text-white" />,
+          label: 'Instagram'
+        };
+      case 'facebook':
+        return {
+          color: 'text-blue-600',
+          bgColor: 'bg-[#1877F2]',
+          hoverBg: 'hover:bg-blue-500/10',
+          selectedBg: 'bg-blue-500/10',
+          borderColor: 'border-blue-500',
+          icon: <Facebook size={12} className="text-white" />,
+          label: 'Facebook'
+        };
+      case 'whatsapp':
+        return {
+          color: 'text-green-600',
+          bgColor: 'bg-[#25D366]',
+          hoverBg: 'hover:bg-green-500/10',
+          selectedBg: 'bg-green-500/10',
+          borderColor: 'border-green-500',
+          icon: <MessageCircle size={12} className="text-white" />,
+          label: 'WhatsApp'
+        };
+      default:
+        return {
+          color: 'text-white/60',
+          bgColor: 'bg-gray-600',
+          hoverBg: 'hover:bg-white/[0.04]',
+          selectedBg: 'bg-white/[0.04]',
+          borderColor: 'border-gray-500',
+          icon: <MessageCircle size={12} className="text-white" />,
+          label: channel
+        };
+    }
   };
 
 
@@ -541,7 +930,7 @@ export default function ChatsView() {
   // ============================================
 
   return (
-    <div className="h-full flex relative overflow-hidden bg-white">
+    <div className="h-full flex relative overflow-hidden bg-[#0a0e1a] max-w-full">
       {/* Audio para notificaciones */}
       <audio ref={audioRef} src="/notification.mp3" preload="auto" />
 
@@ -568,15 +957,15 @@ export default function ChatsView() {
 
       {/* Chat List */}
       <div className={`
-        ${selectedSession ? 'hidden lg:flex' : 'flex'} 
-        w-full lg:w-80 border-r bg-white flex-col
+        ${selectedSession || selectedChatwoot ? 'hidden lg:flex' : 'flex'}
+        w-full lg:w-80 border-r border-white/[0.06] bg-white/[0.02] flex-col
       `}>
-        <div className="p-4 border-b">
+        <div className="p-4 border-b border-white/[0.06]">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-lg font-bold">{t('chats.title')}</h2>
+            <h2 className="text-lg font-bold text-white">{t('chats.title')}</h2>
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
-              className="p-2 rounded-lg hover:bg-white/[0.04]"
+              className="p-2 rounded-lg hover:bg-white/[0.04] text-white/60"
               title={soundEnabled ? t('chats.mute_sound') : t('chats.enable_sound')}
             >
               {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
@@ -584,11 +973,11 @@ export default function ChatsView() {
           </div>
           {clinics.length > 1 && (
             <div className="mb-3">
-              <label className="block text-xs font-medium text-white/50 mb-1">{t('chats.clinic_label')}</label>
+              <label className="block text-xs font-medium text-white/40 mb-1">{t('chats.clinic_label')}</label>
               <select
                 value={selectedTenantId ?? ''}
                 onChange={(e) => setSelectedTenantId(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                className="w-full px-3 py-2 border border-white/[0.08] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white/[0.04] text-white"
               >
                 {clinics.map((c) => (
                   <option key={c.id} value={c.id}>{c.clinic_name}</option>
@@ -597,81 +986,139 @@ export default function ChatsView() {
             </div>
           )}
           {clinics.length === 1 && clinics[0] && (
-            <p className="text-xs text-white/50 mb-2">{clinics[0].clinic_name}</p>
+            <p className="text-xs text-white/40 mb-2">{clinics[0].clinic_name}</p>
           )}
+          <div className="mb-3">
+            <label className="block text-xs font-medium text-white/40 mb-1">{t('chats.channel_label')}</label>
+            <select
+              value={channelFilter}
+              onChange={(e) => setChannelFilter(e.target.value as 'all' | 'whatsapp' | 'instagram' | 'facebook')}
+              className="w-full px-3 py-2 border border-white/[0.08] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white/[0.04] text-white"
+            >
+              <option value="all">{t('chats.channel_all')}</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="instagram">Instagram</option>
+              <option value="facebook">Facebook</option>
+            </select>
+          </div>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={16} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" size={16} />
             <input
               type="text"
               placeholder={t('chats.search_placeholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full pl-9 pr-4 py-2 border border-white/[0.08] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white/[0.04] text-white placeholder-white/20"
             />
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="p-4 text-center text-white/50">{t('common.loading')}</div>
-          ) : filteredSessions.length === 0 ? (
-            <div className="p-4 text-center text-white/50">{t('chats.no_sessions')}</div>
+          {loading && mergedList.length === 0 ? (
+            <div className="p-4 text-center text-white/40">{t('common.loading')}</div>
+          ) : mergedList.length === 0 ? (
+            <div className="p-4 text-center text-white/40">{t('chats.no_sessions')}</div>
           ) : (
-            filteredSessions.map(session => {
-              const { avatarBg } = getStatusConfig(session);
-              const isHighlighted = highlightedSession === session.phone_number;
-              const isSelected = selectedSession?.phone_number === session.phone_number;
-
-              return (
-                <div
-                  key={session.phone_number}
-                  onClick={() => setSelectedSession(session)}
-                  className={`px-4 py-3 border-b cursor-pointer transition-all relative
-                    ${isSelected ? 'bg-medical-50' : 'hover:bg-white/[0.02] active:bg-white/[0.04]'}
-                    ${isHighlighted ? 'bg-orange-50 animate-pulse' : ''}
-                  `}
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Avatar with Status Ring */}
-                    <div className="relative shrink-0">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm ${avatarBg}`}>
-                        {(session.patient_name || session.phone_number).charAt(0)}
-                      </div>
-                      {session.status === 'human_handling' && (
-                        <div className="absolute -bottom-1 -right-1 bg-white p-0.5 rounded-full shadow-sm">
-                          <User size={12} className="text-orange-500 fill-orange-500" />
+            mergedList.map(row => {
+              if (row.type === 'ycloud') {
+                const session = row.session;
+                const { avatarBg } = getStatusConfig(session);
+                const platform = getPlatformConfig('whatsapp');
+                const isSelected = selectedSession?.phone_number === session.phone_number;
+                return (
+                  <div
+                    key={`ycloud-${session.phone_number}`}
+                    onClick={() => { setSelectedSession(session); setSelectedChatwoot(null); }}
+                    className={`px-4 py-3 border-b border-white/[0.06] cursor-pointer transition-all relative border-l-4
+                      ${isSelected ? `bg-white/[0.08] ${platform.borderColor}` : `hover:bg-white/[0.04] border-transparent`}
+                    `}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="relative shrink-0">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg ${avatarBg}`}>
+                          {(session.patient_name || session.phone_number).charAt(0)}
                         </div>
-                      )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-baseline mb-0.5">
-                        <span className={`font-semibold truncate ${isSelected ? 'text-medical-900' : 'text-white'}`}>
-                          {session.patient_name || session.phone_number}
-                        </span>
-                        <span className={`text-[11px] shrink-0 ml-2 ${session.unread_count > 0 ? 'text-blue-400 font-bold' : 'text-white/40'}`}>
-                          {formatTime(session.last_message_time)}
-                        </span>
+                        <div className={`absolute -bottom-1 -right-1 p-1 rounded-full border border-[#0a0e1a] ${platform.bgColor}`}>
+                          {session.is_window_open === false ? <Lock size={10} className="text-white" /> : platform.icon}
+                        </div>
                       </div>
-
-                      <div className="flex justify-between items-center">
-                        <p className={`text-sm truncate pr-4 ${session.unread_count > 0 ? 'text-white font-medium' : 'text-white/50'}`}>
-                          {session.last_message || t('chats.no_messages')}
-                        </p>
-                        {session.unread_count > 0 && (
-                          <span className="bg-blue-500/20 text-white text-[10px] font-bold min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center">
-                            {session.unread_count}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-baseline mb-0.5">
+                          <span className={`font-semibold truncate text-white`}>
+                            {session.patient_name || session.phone_number}
                           </span>
-                        )}
+                          <span className={`text-[10px] font-bold ${platform.color} shrink-0 ml-1`}>
+                            {platform.label}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <p className={`text-sm truncate pr-4 ${session.unread_count > 0 ? 'text-white font-medium' : 'text-white/40'}`}>
+                            {session.last_message || t('chats.no_messages')}
+                          </p>
+                          {session.unread_count > 0 && (
+                            <span className="bg-medical-600 text-white text-[10px] font-bold min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center">
+                              {session.unread_count}
+                            </span>
+                          )}
+                        </div>
+                        <span className={`text-[11px] ${session.unread_count > 0 ? 'text-medical-600 font-bold' : 'text-white/30'}`}>
+                          {formatTimeSummary(session.last_message_time)}
+                        </span>
                       </div>
                     </div>
                   </div>
-                  {/* Floating Urgency Indicator for Mobile */}
-                  <div className="absolute top-3 right-4 lg:hidden">
-                    {session.urgency_level === 'CRITICAL' && (
-                      <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                    )}
+                );
+              }
+              const item = row.item;
+              const isSelected = selectedChatwoot?.id === item.id;
+              const platform = getPlatformConfig(item.channel || 'chatwoot');
+              const avatarUrl = item.meta?.customer_avatar || item.avatar_url;
+              const windowOpen = isWindowOpen(item.last_user_message_at);
+
+              return (
+                <div
+                  key={`chatwoot-${item.id}`}
+                  onClick={() => { setSelectedChatwoot(item); setSelectedSession(null); }}
+                  className={`px-4 py-3 border-b border-white/[0.06] cursor-pointer transition-all relative border-l-4
+                    ${isSelected ? `bg-white/[0.08] ${platform.borderColor}` : `hover:bg-white/[0.04] border-transparent`}
+                  `}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="relative shrink-0">
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt={item.name} className="w-12 h-12 rounded-full object-cover" />
+                      ) : (
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg ${platform.bgColor}`}>
+                          {(item.name || item.external_user_id || '?').charAt(0)}
+                        </div>
+                      )}
+                      <div className={`absolute -bottom-1 -right-1 p-1 rounded-full border border-[#0a0e1a] ${platform.bgColor}`}>
+                        {!isWindowOpen(item.last_user_message_at) ? <Lock size={10} className="text-white" /> : platform.icon}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-baseline mb-0.5">
+                        <span className={`font-semibold truncate text-white`}>
+                          {item.name || item.external_user_id || 'Chatwoot'}
+                        </span>
+                        <span className={`text-[10px] font-bold ${platform.color} shrink-0 ml-1`}>
+                          {platform.label}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <p className={`text-sm truncate pr-4 ${item.unread_count > 0 ? 'text-white font-medium' : 'text-white/40'}`}>
+                          {item.last_message || t('chats.no_messages')}
+                        </p>
+                        {item.unread_count > 0 && (
+                          <span className={`${item.channel === 'whatsapp' ? 'bg-medical-600' : 'bg-purple-600'} text-white text-[10px] font-bold min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center`}>
+                            {item.unread_count}
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-[11px] ${item.unread_count > 0 ? (item.channel === 'whatsapp' ? 'text-medical-600 font-bold' : 'text-purple-600 font-bold') : 'text-white/30'}`}>
+                        {item.last_message_at ? formatTimeSummary(item.last_message_at) : ''}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -680,342 +1127,542 @@ export default function ChatsView() {
         </div>
       </div>
 
-      {/* Chat Detail */}
-      {selectedSession ? (
+      {/* Chat Detail: YCloud o Chatwoot */}
+      {selectedSession || selectedChatwoot ? (
         <>
-          <div className="flex-1 flex flex-col min-w-0 bg-white/[0.02] h-full min-h-0">
-            {/* Header + Messages + Input Container */}
-            <div className="flex-1 flex flex-col min-h-0 relative">
+          <div className="flex-1 flex flex-col min-w-0 bg-white/[0.02] h-full min-h-0 overflow-hidden">
+            <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden">
               {/* Header */}
-              <div className="p-4 border-b bg-white flex justify-between items-center">
+              <div className="p-4 border-b border-white/[0.06] bg-white/[0.03] flex justify-between items-center shrink-0 sticky top-0 z-10">
                 <div className="flex items-center gap-3 min-w-0">
                   <button
                     onClick={() => {
                       setSelectedSession(null);
+                      setSelectedChatwoot(null);
                       setShowMobileContext(false);
                     }}
-                    className="lg:hidden p-2 -ml-2 hover:bg-white/[0.04] rounded-full text-white/60 active:bg-gray-200 transition-colors"
+                    className="lg:hidden p-2 -ml-2 hover:bg-white/[0.04] rounded-full text-white/60 active:bg-white/[0.08] transition-colors"
                   >
                     <ChevronLeft size={24} />
                   </button>
-                  <div
-                    onClick={() => window.innerWidth < 1280 && setShowMobileContext(!showMobileContext)}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shrink-0 cursor-pointer ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
-                      ? 'bg-orange-500'
-                      : 'bg-blue-500/20'
-                      }`}
-                  >
-                    {(selectedSession.patient_name || selectedSession.phone_number).charAt(0)}
-                  </div>
-                  <div className="min-w-0 flex-1 cursor-pointer" onClick={() => window.innerWidth < 1280 && setShowMobileContext(!showMobileContext)}>
-                    <h3 className="font-bold text-white truncate leading-tight">
-                      {selectedSession.patient_name || t('chats.no_name')}
-                    </h3>
-                    <p className="text-xs text-white/50 truncate">{selectedSession.phone_number}</p>
-                  </div>
+                  {selectedSession ? (() => {
+                    const platform = getPlatformConfig('whatsapp');
+                    return (
+                      <>
+                        <div
+                          onClick={() => window.innerWidth < 1280 && setShowMobileContext(!showMobileContext)}
+                          className="relative shrink-0 cursor-pointer"
+                        >
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced' ? 'bg-orange-500' : 'bg-medical-600'}`}>
+                            {(selectedSession.patient_name || selectedSession.phone_number).charAt(0)}
+                          </div>
+                          <div className={`absolute -bottom-0.5 -right-0.5 p-0.5 rounded-full border border-[#0a0e1a] ${platform.bgColor}`}>
+                            {selectedSession.is_window_open === false ? <Lock size={10} className="text-white" /> : platform.icon}
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1 cursor-pointer" onClick={() => window.innerWidth < 1280 && setShowMobileContext(!showMobileContext)}>
+                          <h3 className="font-bold text-white truncate leading-tight flex items-center gap-2">
+                            {selectedSession.patient_name || t('chats.no_name')}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 ${platform.color} border border-green-500/20`}>WhatsApp</span>
+                          </h3>
+                          <p className="text-xs text-white/40 truncate">{selectedSession.phone_number}</p>
+                        </div>
+                      </>
+                    );
+                  })() : selectedChatwoot ? (() => {
+                    const platform = getPlatformConfig(selectedChatwoot.channel || 'chatwoot');
+                    const avatarUrl = selectedChatwoot.meta?.customer_avatar || selectedChatwoot.avatar_url;
+                    return (
+                      <>
+                        <div
+                          onClick={() => window.innerWidth < 1280 && setShowMobileContext(!showMobileContext)}
+                          className="relative shrink-0 cursor-pointer"
+                        >
+                          {avatarUrl ? (
+                            <img src={avatarUrl} alt={selectedChatwoot.name} className="w-10 h-10 rounded-full object-cover" />
+                          ) : (
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${platform.bgColor}`}>
+                              {(selectedChatwoot.name || selectedChatwoot.external_user_id || '?').charAt(0)}
+                            </div>
+                          )}
+                          <div className={`absolute -bottom-0.5 -right-0.5 p-0.5 rounded-full border border-[#0a0e1a] ${platform.bgColor}`}>
+                            {!isWindowOpen(selectedChatwoot.last_user_message_at) ? <Lock size={10} className="text-white" /> : platform.icon}
+                          </div>
+                        </div>
+                        <div
+                          onClick={() => window.innerWidth < 1280 && setShowMobileContext(!showMobileContext)}
+                          className="min-w-0 flex-1 cursor-pointer"
+                        >
+                          <h3 className="font-bold text-white truncate leading-tight flex items-center gap-2">
+                            {selectedChatwoot.name || selectedChatwoot.external_user_id || 'Chatwoot'}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${platform.selectedBg} ${platform.color} ${platform.borderColor}`}>
+                              {platform.label}
+                            </span>
+                          </h3>
+                          <p className="text-xs text-white/40 truncate">{
+                            // Hide short numeric IDs (Chatwoot contact IDs like "1", "2")
+                            // Show username/phone if meaningful, otherwise show channel name
+                            (() => {
+                              const extId = selectedChatwoot.external_user_id || '';
+                              if (/^\d{1,5}$/.test(extId)) return platform.label;
+                              return extId;
+                            })()
+                          }</p>
+                        </div>
+                      </>
+                    );
+                  })() : null}
                 </div>
 
-                {/* Header Actions */}
+                {/* Header Buttons */}
                 <div className="flex items-center gap-1 sm:gap-2">
-                  <button
-                    onClick={() => setShowMobileContext(!showMobileContext)}
-                    className="p-2 text-blue-400 hover:bg-medical-50 rounded-full lg:hidden transition-colors"
-                    title={t('chats.view_clinical_chart')}
-                  >
-                    <Activity size={20} />
-                  </button>
-
-                  <button
-                    onClick={handleToggleHumanMode}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm
+                  {(selectedSession || selectedChatwoot) && (
+                    <button
+                      onClick={() => setShowMobileContext(!showMobileContext)}
+                      className="p-2 text-medical-600 hover:bg-medical-50 rounded-full lg:hidden transition-colors"
+                      title={t('chats.view_clinical_chart')}
+                    >
+                      <Activity size={20} />
+                    </button>
+                  )}
+                  {selectedSession && (
+                    <button
+                      onClick={handleToggleHumanMode}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm
                       ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
-                        ? 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-200'
-                        : 'bg-orange-100 text-orange-700 hover:bg-orange-200 border border-orange-200'
-                      }`}
-                  >
-                    {selectedSession.status === 'human_handling' || selectedSession.status === 'silenced' ? (
-                      <><Play size={14} className="fill-current" /> <span className="hidden sm:inline">{t('chats.activate_ai')}</span></>
-                    ) : (
-                      <><Pause size={14} className="fill-current" /> <span className="hidden sm:inline">{t('chats.manual')}</span></>
-                    )}
-                  </button>
+                          ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20'
+                          : 'bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 border border-orange-500/20'
+                        }`}
+                    >
+                      {selectedSession.status === 'human_handling' || selectedSession.status === 'silenced' ? (
+                        <><Play size={14} className="fill-current" /> <span className="hidden sm:inline">{t('chats.activate_ai')}</span></>
+                      ) : (
+                        <><Pause size={14} className="fill-current" /> <span className="hidden sm:inline">{t('chats.manual')}</span></>
+                      )}
+                    </button>
+                  )}
+                  {selectedChatwoot && (
+                    <button
+                      onClick={handleToggleChatwootLock}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm
+                      ${selectedChatwoot.is_locked ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20' : 'bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 border border-orange-500/20'}`}
+                    >
+                      {selectedChatwoot.is_locked ? <><Play size={14} className="fill-current" /> <span className="hidden sm:inline">{t('chats.activate_ai')}</span></> : <><Pause size={14} className="fill-current" /> <span className="hidden sm:inline">{t('chats.manual')}</span></>}
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {/* Alert Banner para derivhumano */}
-              {selectedSession.last_derivhumano_at ? (
-                <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center gap-2">
-                  <AlertCircle size={16} className="text-orange-500" />
-                  <span className="text-sm text-orange-700">
-                    ⚠️ {t('chats.handoff_banner').replace('{{time}}', new Date(selectedSession.last_derivhumano_at).toLocaleTimeString())}
-                  </span>
-                  <button
-                    onClick={handleRemoveSilence}
-                    className="ml-auto text-xs text-orange-600 hover:underline"
-                  >
-                    {t('chats.remove_silence')}
-                  </button>
+              {/* Alert Banner para derivhumano (YCloud & Chatwoot) */}
+              {(selectedSession?.last_derivhumano_at || selectedChatwoot?.last_derivhumano_at) ? (
+                <div className="bg-orange-500/10 border-b border-orange-500/20 px-4 py-2 flex items-center gap-2">
+                  <AlertCircle size={16} className="text-orange-400" />
+                  <span className="text-sm text-orange-400 font-medium">{t('chats.attention_required_handoff')}</span>
                 </div>
-              ) : (selectedSession.status === 'silenced' || selectedSession.status === 'human_handling') && (
-                <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex items-center gap-2">
-                  <Pause size={16} className="text-blue-500" />
-                  <span className="text-sm text-blue-700">
-                    ✋ {t('chats.manual_mode_active')}
+              ) : null}
+
+              {/* Banner Warning: Window 24h Closed */}
+              {selectedSession && selectedSession.is_window_open === false && (
+                <div className="bg-white/[0.04] border-b border-white/[0.06] px-4 py-2 flex items-center justify-center gap-2">
+                  <Lock size={14} className="text-white/40" />
+                  <span className="text-xs text-white/60 font-medium">
+                    {t('chats.window_closed_warning')}
                   </span>
-                  <button
-                    onClick={handleToggleHumanMode}
-                    className="ml-auto text-xs text-blue-600 hover:underline"
-                  >
-                    {t('chats.activate_ai')}
-                  </button>
                 </div>
               )}
 
-              {/* Banner de Ventana de 24hs Cerrada */}
-              {selectedSession.is_window_open === false && (
-                <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 flex items-center gap-2">
-                  <Clock size={16} className="text-yellow-600" />
-                  <span className="text-sm text-yellow-700">
-                    ⏳ {t('chats.window_24h_closed')}
-                  </span>
-                </div>
-              )}
+              {/* Banner: Manual Mode Active */}
+              {((selectedSession && (selectedSession.status === 'silenced' || selectedSession.status === 'human_handling')) ||
+                (selectedChatwoot && selectedChatwoot.is_locked)) && (
+                  <div className="bg-blue-500/10 border-b border-blue-500/20 px-4 py-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Pause size={16} className="text-blue-400 fill-current" />
+                      <span className="text-sm text-blue-400 font-bold">✋ {t('chats.manual_mode_active_banner')}</span>
+                    </div>
+                    <button
+                      onClick={() => selectedSession ? handleToggleHumanMode() : handleToggleChatwootLock()}
+                      className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-3 py-1 rounded-full font-bold transition-colors"
+                    >
+                      {t('chats.activate_ai')}
+                    </button>
+                  </div>
+                )}
+
+              {/* Banner de Ventana de 24hs Cerrada (Omnicanal) */}
+              {((selectedSession && selectedSession.is_window_open === false) ||
+                (selectedChatwoot && !isWindowOpen(selectedChatwoot.last_user_message_at))) && (
+                  <div className="bg-yellow-500/10 border-b border-yellow-500/20 px-4 py-2 flex items-center gap-2">
+                    <Clock size={16} className="text-yellow-400" />
+                    <span className="text-sm text-yellow-400">
+                      ⏳ {t('chats.window_24h_closed')}
+                    </span>
+                    <button
+                      onClick={() => navigate('/templates')}
+                      className="ml-auto flex items-center gap-1 text-xs font-bold text-yellow-400 hover:bg-yellow-500/20 px-2 py-1 rounded border border-yellow-500/30 transition-colors"
+                    >
+                      {t('chats.meta_templates')} <ChevronRight size={14} />
+                    </button>
+                  </div>
+                )}
 
               {/* Messages Area */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-white/[0.02] flex flex-col min-h-0">
-                {hasMoreMessages && (
+              <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 bg-white/[0.02] flex flex-col min-h-0">
+                {selectedSession && hasMoreMessages && (
                   <button
                     onClick={handleLoadMore}
                     disabled={loadingMore}
-                    className="mx-auto py-2 px-4 text-xs text-blue-400 hover:text-medical-700 font-medium bg-white/[0.03] border border-white/[0.06] rounded-full shadow-sm border border-medical-100 mb-4 transition-all disabled:opacity-50 shrink-0"
+                    className="mx-auto py-2 px-4 text-xs text-medical-600 hover:text-medical-700 font-medium bg-white/[0.06] rounded-full border border-white/[0.08] mb-4 transition-all disabled:opacity-50 shrink-0"
                   >
                     {loadingMore ? t('common.loading') : t('chats.load_older_messages')}
                   </button>
                 )}
 
-                <div className="flex-1" /> {/* Spacer to push messages down if few */}
+                <div className="flex-1" />
 
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${message.role === 'user' ? 'justify-start' : 'justify-end'}`}
-                  >
+                {/* Spec 10: Ad Context Card */}
+                {selectedSession && patientContext?.patient?.acquisition_source &&
+                  patientContext.patient.acquisition_source !== 'ORGANIC' &&
+                  patientContext.patient.meta_ad_headline && (
+                    <AdContextCard
+                      headline={patientContext.patient.meta_ad_headline}
+                      body={patientContext.patient.meta_ad_body}
+                    />
+                  )}
+
+                {selectedSession && (() => {
+                  const platform = getPlatformConfig('whatsapp');
+                  return (messages || []).map((message) => (
                     <div
-                      className={`max-w-[70%] rounded-lg px-4 py-3 ${message.role === 'user'
-                        ? 'bg-white shadow-sm'
-                        : message.is_derivhumano
-                          ? 'bg-orange-100 border border-orange-300 shadow-sm text-white'
-                          : 'bg-blue-600 text-white shadow-sm'
-                        }`}
+                      key={message.id}
+                      className={`flex ${message.role === 'user' ? 'justify-start' : 'justify-end'}`}
                     >
-                      {message.is_derivhumano && (
-                        <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
-                          <User size={12} />
-                          <span className="font-medium">{t('chats.auto_handoff')}</span>
-                        </div>
-                      )}
-                      <p className="text-sm">{message.content}</p>
-                      <p className={`text-xs mt-1 ${message.role === 'user' ? 'text-white/40' : 'text-blue-200'
-                        }`}>
-                        {new Date(message.created_at).toLocaleTimeString()}
-                      </p>
+                      <div
+                        className={`max-w-[70%] rounded-lg px-4 py-3 break-words overflow-hidden ${message.role === 'user'
+                          ? 'bg-white/[0.06] border border-white/[0.08] text-white'
+                          : message.is_derivhumano
+                            ? 'bg-orange-500/10 border border-orange-500/20 text-orange-400'
+                            : `${platform.bgColor} text-white`
+                          }`}
+                      >
+                        {message.is_derivhumano && (
+                          <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
+                            <User size={12} />
+                            <span className="font-medium">{t('chats.auto_handoff')}</span>
+                          </div>
+                        )}
+                        <MessageContent message={message} />
+                        <p className={`text-xs mt-1 ${message.role === 'user' ? 'text-white/30' : 'opacity-70'}`}>
+                          {safeFormatTime(message.created_at)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ));
+                })()}
+
+                {selectedChatwoot && (() => {
+                  const platform = getPlatformConfig(selectedChatwoot.channel || 'chatwoot');
+                  if (loadingChatwootMessages) {
+                    return <div className="p-4 text-center text-white/40">{t('common.loading')}</div>;
+                  }
+
+                  const msgs = chatwootMessages || [];
+                  if (msgs.length === 0) {
+                    return (
+                      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-white/30">
+                        <MessageCircle size={48} className="mb-2 opacity-20" />
+                          <p className="text-sm font-medium">{t('chat_extra.no_messages_yet')}</p>
+                        <p className="text-xs opacity-70">{t('chat_extra.messages_appear_here')}</p>
+                      </div>
+                    );
+                  }
+
+                  return msgs.slice().reverse().map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}
+                    >
+                      <div className={`max-w-[70%] rounded-lg px-4 py-3 break-words overflow-hidden ${msg.role === 'user' ? 'bg-white/[0.06] border border-white/[0.08] text-white' : `${platform.bgColor} text-white`}`}>
+                        <MessageContent message={msg} />
+                        <p className={`text-xs mt-1 ${msg.role === 'user' ? 'text-white/30' : 'opacity-70'}`}>
+                          {msg.timestamp ? safeFormatTime(msg.timestamp) : ''}
+                        </p>
+                      </div>
+                    </div>
+                  ));
+                })()}
+
                 <div ref={messagesEndRef} />
               </div>
 
               {/* Input */}
-              <form onSubmit={handleSendMessage} className="p-4 border-t bg-white">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder={selectedSession.is_window_open === false ? "Ventana cerrada - Esperando paciente..." : "Escribe un mensaje..."}
-                    disabled={selectedSession.is_window_open === false}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage(e as any);
+              <form
+                onSubmit={selectedChatwoot ? handleSendChatwootMessage : handleSendMessage}
+                className="p-4 border-t border-white/[0.06] bg-white/[0.03] relative z-10 pb-safe"
+              >
+                <div className="flex flex-col flex-1 gap-2">
+                  {selectedFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pb-2">
+                      {selectedFiles.map((f, i) => (
+                        <div key={i} className="bg-medical-50 text-medical-700 px-2 py-1 rounded-md text-xs flex items-center gap-1 border border-medical-100">
+                          <span className="truncate max-w-[100px]">{f.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedFiles(prev => prev.filter((_, idx) => idx !== i))}
+                            className="hover:text-red-500"
+                          >
+                            <XCircle size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={(e) => setSelectedFiles(prev => [...prev, ...Array.from(e.target.files || [])])}
+                      className="hidden"
+                      multiple
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="p-2 text-white/30 hover:text-medical-400 hover:bg-white/[0.04] rounded-lg transition-colors"
+                      title={t('chats.attach_file')}
+                    >
+                      <Paperclip size={20} />
+                    </button>
+                    <input
+                      type="text"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      placeholder={
+                        (selectedSession && selectedSession.is_window_open === false) || (selectedChatwoot && !isWindowOpen(selectedChatwoot.last_user_message_at))
+                          ? t('chats.window_closed_placeholder')
+                          : t('chats.type_message_placeholder')
                       }
-                    }}
-                    className={`flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-medical-500 bg-white text-white ${selectedSession.is_window_open === false ? 'bg-white/[0.04] cursor-not-allowed opacity-75' : ''}`}
-                  />
-                  <button
-                    type="submit"
-                    disabled={sending || !newMessage.trim() || selectedSession.is_window_open === false}
-                    className="p-2 bg-blue-500/20 text-white rounded-lg hover:bg-blue-500/30 disabled:opacity-50 flex items-center justify-center transition-colors min-w-[44px]"
-                    title={selectedSession.is_window_open === false ? "Ventana de 24hs cerrada" : "Enviar mensaje"}
-                  >
-                    <Send size={20} />
-                  </button>
+                      disabled={!!((selectedSession && selectedSession.is_window_open === false) || (selectedChatwoot && !isWindowOpen(selectedChatwoot.last_user_message_at)))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          if (selectedChatwoot) handleSendChatwootMessage(e as any);
+                          else handleSendMessage(e as any);
+                        }
+                      }}
+                      className={`flex-1 px-4 py-2 border border-white/[0.08] rounded-lg focus:outline-none focus:ring-2 bg-white/[0.04] text-white placeholder-white/20
+                        ${selectedSession && selectedSession.is_window_open === false ? 'bg-white/[0.02] cursor-not-allowed opacity-75' : ''}
+                        ${selectedSession ? 'focus:ring-green-500' : selectedChatwoot?.channel === 'instagram' ? 'focus:ring-pink-500' : selectedChatwoot?.channel === 'facebook' ? 'focus:ring-blue-500' : 'focus:ring-medical-500'}
+                      `}
+                    />
+                    <button
+                      type="submit"
+                      disabled={
+                        sending ||
+                        (!newMessage.trim() && selectedFiles.length === 0) ||
+                        !!((selectedSession && selectedSession.is_window_open === false) || (selectedChatwoot && !isWindowOpen(selectedChatwoot.last_user_message_at)))
+                      }
+                      className={`p-2 text-white rounded-lg disabled:opacity-50 flex items-center justify-center transition-colors min-w-[44px]
+                        ${selectedSession ? 'bg-green-600 hover:bg-green-700' : selectedChatwoot?.channel === 'instagram' ? 'bg-pink-600 hover:bg-pink-700' : selectedChatwoot?.channel === 'facebook' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-medical-600 hover:bg-medical-700'}
+                      `}
+                      title={(selectedSession && selectedSession.is_window_open === false) || (selectedChatwoot && !isWindowOpen(selectedChatwoot.last_user_message_at)) ? t('chats.window_24h_closed_title') : t('chats.send_message_title')}
+                    >
+                      {sending ? (
+                        <Activity size={20} className="animate-spin" />
+                      ) : (
+                        <Send size={20} />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
           </div>
 
-          {/* Clinical Context Panel - WhatsApp Style Overlay on Mobile / Sidebar on Desktop */}
-          <div className={`
-            ${showMobileContext ? 'flex' : 'hidden'}
-            xl:flex flex-col
-            fixed inset-0 z-40 bg-white
-            xl:relative xl:z-0 xl:w-80 xl:border-l xl:inset-auto
-            animate-slide-in xl:animate-none
-          `}>
-            {/* Context Header (Mobile only) */}
-            <div className="p-4 border-b flex justify-between items-center xl:hidden">
-              <div className="flex items-center gap-2">
-                <User className="text-blue-400" size={20} />
-                <h3 className="font-bold">{t('chats.patient_profile_title')}</h3>
-              </div>
-              <button
-                onClick={() => setShowMobileContext(false)}
-                className="p-2 hover:bg-white/[0.04] rounded-full"
-              >
-                <ChevronLeft size={24} className="rotate-180" />
-              </button>
-            </div>
-
-            {/* Desktop Context Header */}
-            <div className="hidden xl:flex p-4 border-b items-center gap-2">
-              <Activity size={18} className="text-primary" />
-              <h3 className="font-medium">{t('chats.clinical_context')}</h3>
-            </div>
-
-            <div className="flex-1 overflow-y-auto">
-              {/* AI Status */}
-              <div className={`p-3 rounded-lg ${selectedSession.status === 'human_handling' || selectedSession.status === 'silenced'
-                ? 'bg-orange-50 border border-orange-200'
-                : 'bg-green-50 border border-green-200'
-                }`}>
-                <div className="flex items-center gap-2 mb-1">
-                  {selectedSession.status === 'human_handling' || selectedSession.status === 'silenced' ? (
-                    <User size={16} className="text-orange-600" />
-                  ) : (
-                    <Activity size={16} className="text-green-600" />
-                  )}
-                  <span className="font-medium text-sm">
-                    {t('chats.bot_status')}
-                  </span>
+          {/* Clinical Context Panel - Unificado (WhatsApp + Meta via Chatwoot) */}
+          {(selectedSession || selectedChatwoot) && (
+            <div className={`
+              ${showMobileContext ? 'flex' : 'hidden'}
+              xl:flex flex-col
+              fixed inset-0 z-40 bg-[#0d1117]
+              xl:relative xl:z-0 xl:w-80 xl:border-l xl:border-white/[0.06] xl:inset-auto
+              animate-slide-in xl:animate-none
+            `}>
+              {/* Context Header (Mobile only) */}
+              <div className="p-4 border-b border-white/[0.06] flex justify-between items-center xl:hidden">
+                <div className="flex items-center gap-2">
+                  <User className="text-medical-600" size={20} />
+                  <h3 className="font-bold text-white">{t('chats.patient_profile_title')}</h3>
                 </div>
-                <p className="text-sm text-white/60">
-                  {selectedSession.status === 'human_handling'
-                    ? 'Atendido por persona'
-                    : selectedSession.status === 'silenced'
-                      ? t('chats.silenced_24h')
-                      : t('chats.ia_active')}
-                </p>
-                {selectedSession.human_override_until && (
-                  <p className="text-xs text-white/50 mt-1">
-                    Hasta: {new Date(selectedSession.human_override_until).toLocaleString()}
-                  </p>
-                )}
+                <button
+                  onClick={() => setShowMobileContext(false)}
+                  className="p-2 hover:bg-white/[0.04] rounded-full text-white/60"
+                >
+                  <ChevronLeft size={24} className="rotate-180" />
+                </button>
               </div>
 
-              {/* Patient / Contact Info — Lead vs Paciente (solo con turno = ficha con historial) */}
-              {(() => {
-                const hasAppointments = !!(patientContext?.last_appointment || patientContext?.upcoming_appointment);
-                const apiPatient = (patientContext as { patient?: { first_name?: string; last_name?: string } })?.patient;
-                const nameFromApi = apiPatient ? [apiPatient.first_name, apiPatient.last_name].filter(Boolean).join(' ').trim() : '';
-                const displayName = (patientContext as any)?.patient_name || nameFromApi || selectedSession.patient_name || selectedSession.phone_number;
-                return (
-                  <>
-                    <div className={`p-3 rounded-lg ${hasAppointments ? 'bg-white/[0.02]' : 'bg-amber-50 border border-amber-200'}`}>
-                      {hasAppointments ? (
-                        <>
-                          <h4 className="text-xs font-medium text-white/50 mb-2">{t('chats.patient_label')}</h4>
-                          <p className="font-medium">{displayName}</p>
-                          <p className="text-sm text-white/50">{selectedSession.phone_number}</p>
-                        </>
-                      ) : (
-                        <>
-                          <h4 className="text-xs font-medium text-amber-700 mb-2">{t('chats.contact_no_appointments')}</h4>
-                          <p className="font-medium">{displayName}</p>
-                          <p className="text-sm text-white/50">{selectedSession.phone_number}</p>
-                          <p className="text-xs text-amber-700 mt-2">{t('chats.no_appointments_yet')}</p>
-                        </>
+              {/* Desktop Context Header */}
+              <div className="hidden xl:flex p-4 border-b border-white/[0.06] items-center gap-2">
+                <Activity size={18} className="text-primary" />
+                <h3 className="font-medium text-white">{t('chats.clinical_context')}</h3>
+              </div>
+
+              <div className="flex-1 overflow-y-auto">
+                {/* AI Status / Bot Status */}
+                {(() => {
+                  const isHuman = selectedSession
+                    ? (selectedSession.status === 'human_handling' || selectedSession.status === 'silenced')
+                    : selectedChatwoot?.is_locked;
+                  const overrideUntil = selectedSession?.human_override_until;
+
+                  return (
+                    <div className={`p-3 mx-3 mt-4 rounded-lg ${isHuman
+                      ? 'bg-orange-500/10 border border-orange-500/20'
+                      : 'bg-green-500/10 border border-green-500/20'
+                      }`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        {isHuman ? (
+                          <User size={16} className="text-orange-600" />
+                        ) : (
+                          <Activity size={16} className="text-green-600" />
+                        )}
+                        <span className="font-medium text-sm">
+                          {t('chats.bot_status')}
+                        </span>
+                      </div>
+                      <p className="text-sm text-white/60">
+                        {isHuman
+                          ? t('chats.status_human')
+                          : t('chats.ia_active')}
+                      </p>
+                      {overrideUntil && (
+                      <p className="text-xs text-white/40 mt-1">
+                          {t('common.until')}: {safeFormatTime(overrideUntil)}
+                        </p>
                       )}
                     </div>
+                  );
+                })()}
 
-                    {hasAppointments ? (
-                      <>
-                        {/* Last Appointment */}
-                        <div className="p-3 bg-white/[0.02] rounded-lg">
-                          <h4 className="text-xs font-medium text-white/50 mb-2 flex items-center gap-1">
-                            <Calendar size={12} /> {t('chats.last_appointment')}
-                          </h4>
-                          {patientContext?.last_appointment ? (
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium">{patientContext.last_appointment.type}</p>
-                              <div className="flex items-center gap-2 text-xs text-white/50">
-                                <span>{new Date(patientContext.last_appointment.date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                                {patientContext.last_appointment.duration_minutes && (
-                                  <span className="bg-gray-200 px-1.5 rounded-sm">{patientContext.last_appointment.duration_minutes} min</span>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-white/40">
-                                {t('chats.professional_label')}: {patientContext.last_appointment.professional_name}
-                              </p>
-                            </div>
-                          ) : (
-                            <p className="text-sm text-white/40">{t('chats.no_previous_appointments')}</p>
-                          )}
-                        </div>
+                {/* Patient / Contact Info — Lead vs Paciente */}
+                {(() => {
+                  const hasAppointments = !!(patientContext?.last_appointment || patientContext?.upcoming_appointment);
+                  const apiPatient = (patientContext as { patient?: { first_name?: string; last_name?: string } })?.patient;
+                  const nameFromApi = apiPatient ? [apiPatient.first_name, apiPatient.last_name].filter(Boolean).join(' ').trim() : '';
+                  const displayName = (patientContext as any)?.patient_name || nameFromApi || selectedSession?.patient_name || selectedChatwoot?.name || selectedSession?.phone_number || selectedChatwoot?.external_user_id;
+                  const displayPhone = selectedSession?.phone_number || selectedChatwoot?.external_user_id || '';
 
-                        {/* Upcoming Appointment */}
-                        <div className="p-3 bg-white/[0.02] rounded-lg">
-                          <h4 className="text-xs font-medium text-white/50 mb-2 flex items-center gap-1">
-                            <Clock size={12} /> {t('chats.upcoming_appointment')}
-                          </h4>
-                          {patientContext?.upcoming_appointment ? (
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium">{patientContext.upcoming_appointment.type}</p>
-                              <div className="flex items-center gap-2 text-xs text-primary font-medium">
-                                <span>{new Date(patientContext.upcoming_appointment.date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                                {patientContext.upcoming_appointment.duration_minutes && (
-                                  <span className="bg-medical-100 px-1.5 rounded-sm">{patientContext.upcoming_appointment.duration_minutes} min</span>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-white/40">
-                                {t('chats.professional_label')}: {patientContext.upcoming_appointment.professional_name}
-                              </p>
-                            </div>
-                          ) : (
-                            <p className="text-sm text-white/40">{t('chats.no_scheduled_appointments')}</p>
-                          )}
-                        </div>
-
-                        {/* Treatment Plan */}
-                        <div className="p-3 bg-white/[0.02] rounded-lg">
-                          <h4 className="text-xs font-medium text-white/50 mb-2">{t('chats.current_treatment')}</h4>
-                          {patientContext?.treatment_plan ? (
-                            <div className="text-sm bg-medical-50 p-2 rounded border border-medical-100 text-medical-800 italic">
-                              {typeof patientContext.treatment_plan === 'string'
-                                ? patientContext.treatment_plan
-                                : JSON.stringify(patientContext.treatment_plan, null, 2)}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-white/40 italic">{t('chats.no_treatment_plan')}</p>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="p-3 bg-white/[0.02] rounded-lg">
-                        <p className="text-sm text-white/50 italic">{t('chats.no_clinical_history')}</p>
+                  return (
+                    <div className="mt-4 space-y-4 px-3">
+                      <div className={`p-3 rounded-lg ${hasAppointments ? 'bg-white/[0.03] border border-white/[0.06]' : 'bg-amber-500/10 border border-amber-500/20'}`}>
+                        {hasAppointments ? (
+                          <>
+                            <h4 className="text-xs font-medium text-white/40 mb-2">{t('chats.patient_label')}</h4>
+                            <p className="font-medium text-white">{displayName}</p>
+                            <p className="text-sm text-white/40">{displayPhone}</p>
+                          </>
+                        ) : (
+                          <>
+                            <h4 className="text-xs font-medium text-amber-400 mb-2">{t('chats.contact_no_appointments')}</h4>
+                            <p className="font-medium text-white">{displayName}</p>
+                            <p className="text-sm text-white/40">{displayPhone}</p>
+                            <p className="text-xs text-amber-400 mt-2">{t('chats.no_appointments_yet')}</p>
+                          </>
+                        )}
                       </div>
-                    )}
-                  </>
-                );
-              })()}
+
+                      {hasAppointments ? (
+                        <>
+                          {/* Last Appointment */}
+                          <div className="p-3 bg-white/[0.03] border border-white/[0.06] rounded-lg">
+                            <h4 className="text-xs font-medium text-white/40 mb-2 flex items-center gap-1">
+                              <Calendar size={12} /> {t('chats.last_appointment')}
+                            </h4>
+                            {patientContext?.last_appointment ? (
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-white">{patientContext.last_appointment.type}</p>
+                                <div className="flex items-center gap-2 text-xs text-white/40">
+                                  <span>{safeFormatDate(patientContext.last_appointment.date)} {safeFormatTime(patientContext.last_appointment.date)}</span>
+                                  {patientContext.last_appointment.duration_minutes && (
+                                    <span className="bg-white/[0.08] px-1.5 rounded-sm">{patientContext.last_appointment.duration_minutes} min</span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-white/30">
+                                  {t('chats.professional_label')}: {patientContext.last_appointment.professional_name}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-white/30">{t('chats.no_previous_appointments')}</p>
+                            )}
+                          </div>
+
+                          {/* Upcoming Appointment */}
+                          <div className="p-3 bg-white/[0.03] border border-white/[0.06] rounded-lg">
+                            <h4 className="text-xs font-medium text-white/40 mb-2 flex items-center gap-1">
+                              <Clock size={12} /> {t('chats.upcoming_appointment')}
+                            </h4>
+                            {patientContext?.upcoming_appointment ? (
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-white">{patientContext.upcoming_appointment.type}</p>
+                                <div className="flex items-center gap-2 text-xs text-primary font-medium">
+                                  <span>{safeFormatDate(patientContext.upcoming_appointment.date)} {safeFormatTime(patientContext.upcoming_appointment.date)}</span>
+                                  {patientContext.upcoming_appointment.duration_minutes && (
+                                    <span className="bg-medical-100 px-1.5 rounded-sm">{patientContext.upcoming_appointment.duration_minutes} min</span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-white/30">
+                                  {t('chats.professional_label')}: {patientContext.upcoming_appointment.professional_name}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-white/30">{t('chats.no_scheduled_appointments')}</p>
+                            )}
+                          </div>
+
+                          {/* Treatment Plan */}
+                          <div className="p-3 bg-white/[0.03] border border-white/[0.06] rounded-lg">
+                            <h4 className="text-xs font-medium text-white/40 mb-2">{t('chats.current_treatment')}</h4>
+                            {patientContext?.treatment_plan ? (
+                              <div className="text-sm bg-medical-50 p-2 rounded border border-medical-100 text-medical-800 italic">
+                                {typeof patientContext.treatment_plan === 'string'
+                                  ? patientContext.treatment_plan
+                                  : JSON.stringify(patientContext.treatment_plan, null, 2)}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-white/30 italic">{t('chats.no_treatment_plan')}</p>
+                            )}
+                          </div>
+
+                          {/* Anamnesis (Spec 2026-03-11) */}
+                          <div className="p-3 bg-white/[0.03] border border-white/[0.06] rounded-lg">
+                            <h4 className="text-xs font-medium text-white/40 mb-2 flex items-center gap-1">
+                              <span>🦷</span> {t('chats.anamnesis')}
+                            </h4>
+                            <AnamnesisPanel
+                              phone={selectedSession?.phone_number || selectedChatwoot?.external_user_id}
+                              userRole={(user as any)?.role}
+                              compact={true}
+                              refreshKey={anamnesisRefreshKey}
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="p-3 bg-white/[0.03] border border-white/[0.06] rounded-lg">
+                          <p className="text-sm text-white/40 italic">{t('chats.no_clinical_history')}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
-          </div>
+          )}
         </>
       ) : (
         <div className="hidden lg:flex flex-1 items-center justify-center bg-white/[0.02] flex-col gap-4">
-          <MessageCircle size={64} className="opacity-20" />
-          <p className="text-lg font-medium text-white/40">{t('chats.select_conversation')}</p>
-          <p className="text-sm text-white/40">{t('chats.to_start_chatting')}</p>
+          <MessageCircle size={64} className="opacity-20 text-white/20" />
+          <p className="text-lg font-medium text-white/30">{t('chats.select_conversation')}</p>
+          <p className="text-sm text-white/30">{t('chats.to_start_chatting')}</p>
         </div>
       )}
 
