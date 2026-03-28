@@ -360,6 +360,40 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_chat_messages_tenant_id ON chat_messages(tenant_id);
             CREATE INDEX IF NOT EXISTS idx_chat_messages_tenant_from_created ON chat_messages(tenant_id, from_number, created_at DESC);
             """,
+            # Parche 16: Tablas de tracking de leads demo (SuperAdmin + Bridge CRM VENTAS)
+            """
+            CREATE TABLE IF NOT EXISTS demo_leads (
+                id SERIAL PRIMARY KEY,
+                phone_number VARCHAR(50) UNIQUE NOT NULL,
+                name VARCHAR(255),
+                email VARCHAR(255),
+                status VARCHAR(20) DEFAULT 'new',
+                source VARCHAR(50) DEFAULT 'demo',
+                whatsapp_messages INTEGER DEFAULT 0,
+                demo_appointments INTEGER DEFAULT 0,
+                pages_visited JSONB DEFAULT '[]',
+                first_seen_at TIMESTAMPTZ DEFAULT NOW(),
+                last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+                source_ad VARCHAR(255),
+                engagement_score NUMERIC(5,2) DEFAULT 0,
+                auth_token TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_demo_leads_phone ON demo_leads(phone_number);
+            CREATE INDEX IF NOT EXISTS idx_demo_leads_status ON demo_leads(status);
+            CREATE INDEX IF NOT EXISTS idx_demo_leads_score ON demo_leads(engagement_score DESC);
+
+            CREATE TABLE IF NOT EXISTS demo_events (
+                id SERIAL PRIMARY KEY,
+                lead_id INTEGER NOT NULL REFERENCES demo_leads(id) ON DELETE CASCADE,
+                event_type VARCHAR(50) NOT NULL,
+                event_data JSONB DEFAULT '{}',
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_demo_events_lead ON demo_events(lead_id);
+            CREATE INDEX IF NOT EXISTS idx_demo_events_type ON demo_events(event_type);
+            """,
         ]
 
         async with self.pool.acquire() as conn:
