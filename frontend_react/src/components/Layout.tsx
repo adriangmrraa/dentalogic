@@ -204,7 +204,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }: LayoutProps) => {
 
   return (
     <div className="flex h-screen bg-[#06060e] relative overflow-hidden">
-      <ParticleBackground particleCount={20} className="opacity-20" />
+      <ParticleBackground particleCount={20} className="opacity-20 pointer-events-none" />
       {/* Mobile Backdrop */}
       {isMobileMenuOpen && (
         <div
