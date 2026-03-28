@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Shield, MessageCircle, LogIn, Sparkles, Calendar, BarChart3, Zap, ChevronDown, CheckCircle, Users, Clock, Star, ArrowRight, Stethoscope } from 'lucide-react';
 import { useTranslation } from '../context/LanguageContext';
 import ParticleBackground from '../components/public/ParticleBackground';
+import ConversionPopups from '../components/public/ConversionPopups';
 import { useDemoTracking } from '../hooks/useDemoTracking';
 
 const DEMO_WHATSAPP = import.meta.env.VITE_DEMO_WHATSAPP || '5493435256815';
@@ -29,6 +30,7 @@ export default function LandingView() {
   return (
     <div className="min-h-screen flex flex-col relative" style={{ background: 'radial-gradient(ellipse at top right, #0d1830, #06060e 60%)' }}>
       <ParticleBackground particleCount={80} />
+      <ConversionPopups />
 
       <main className="flex-1 w-full overflow-x-hidden relative z-10">
 
