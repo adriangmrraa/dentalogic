@@ -21,11 +21,12 @@ export default function MetaTokenBanner() {
                     setStatus(data);
                 }
             } catch (error) {
-                // Silently fail - endpoint may not exist yet
+                console.error("Error checking Meta token status:", error);
             }
         };
 
         checkToken();
+        // Check once an hour
         const interval = setInterval(checkToken, 3600000);
         return () => clearInterval(interval);
     }, [user]);
@@ -44,8 +45,8 @@ export default function MetaTokenBanner() {
                 <AlertTriangle size={20} className="animate-pulse" />
                 <p className="text-sm font-bold">
                     {isExpired
-                        ? "Tu conexion con Meta Ads ha expirado. Reconecta ahora para no perder datos."
-                        : `Tu conexion con Meta Ads expira en ${status.days_left} dias. Reconecta para evitar interrupciones.`
+                        ? "⚠️ Tu conexión con Meta Ads ha expirado. Reconecta ahora para no perder datos."
+                        : `⚠️ Tu conexión con Meta Ads expira en ${status.days_left} días. Reconecta para evitar interrupciones.`
                     }
                 </p>
             </div>

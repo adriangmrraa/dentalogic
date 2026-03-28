@@ -118,9 +118,16 @@ export default function AppointmentForm({
                     .then(res => {
                         const apt = res.data;
                         setFullAppointment(apt);
-                        // If billing_amount is 0/null, try to auto-fill from treatment base_price
-                        let amount = apt.billing_amount != null && apt.billing_amount > 0 ? String(apt.billing_amount) : '';
-                        if (!amount && apt.appointment_type && treatmentTypes.length > 0) {
+                        // billing_amount = treatment base_price (the actual cost of the procedure)
+                        // The seña (deposit) is shown separately in the receipt section
+                        let amount = '';
+                        // First priority: if billing_amount was manually set and is different from seña, use it
+                        if (apt.billing_amount != null && apt.billing_amount > 0) {
+                            amount = String(apt.billing_amount);
+                        }
+                        // Always try to use treatment base_price as the billing amount
+                        // (overrides seña amount that may have been auto-set during booking)
+                        if (apt.appointment_type && treatmentTypes.length > 0) {
                             const tt = treatmentTypes.find((t: any) => t.code === apt.appointment_type);
                             if (tt?.base_price && tt.base_price > 0) {
                                 amount = String(tt.base_price);
@@ -128,7 +135,7 @@ export default function AppointmentForm({
                         }
                         setBillingData({
                             billing_amount: amount,
-                            billing_installments: apt.billing_installments != null ? String(apt.billing_installments) : '',
+                            billing_installments: apt.billing_installments != null ? String(apt.billing_installments) : '1',
                             billing_notes: apt.billing_notes || '',
                             payment_status: apt.payment_status || 'pending',
                         });
@@ -152,20 +159,6 @@ export default function AppointmentForm({
             }
         }
     }, [isOpen, initialData, professionals, isEditing]);
-
-    // Auto-fill billing from base_price when treatmentTypes load after appointment data
-    useEffect(() => {
-        if (!fullAppointment || !treatmentTypes.length) return;
-        setBillingData(prev => {
-            // Only auto-fill if amount is still empty and appointment has a type
-            if (prev.billing_amount || !fullAppointment.appointment_type) return prev;
-            const tt = treatmentTypes.find((t: any) => t.code === fullAppointment.appointment_type);
-            if (tt?.base_price && tt.base_price > 0) {
-                return { ...prev, billing_amount: String(tt.base_price) };
-            }
-            return prev;
-        });
-    }, [treatmentTypes, fullAppointment]);
 
     // Cambio de estado del turno (event-driven → dispara feedback si es 'completed')
     const handleStatusChange = async (newStatus: string) => {
@@ -226,7 +219,7 @@ export default function AppointmentForm({
         socketRef.current.on('PATIENT_UPDATED', (payload: { patient_id?: number; phone?: string }) => {
             const currentPatientId = formData.patient_id ? parseInt(formData.patient_id) : null;
             const patientObj = patients.find(p => p.id.toString() === formData.patient_id);
-
+            
             if (
                 (payload.patient_id && payload.patient_id === currentPatientId) ||
                 (payload.phone && patientObj?.phone_number === payload.phone)
@@ -274,17 +267,17 @@ export default function AppointmentForm({
 
     const handleFollowup = () => {
         if (!formData.patient_id) return;
-
+        
         // Calcular fecha + 6 meses
         const baseDate = formData.appointment_datetime ? new Date(formData.appointment_datetime) : new Date();
         const futureDate = addMonths(baseDate, 6);
-
+        
         setFormData(prev => ({
             ...prev,
             appointment_datetime: toLocalDatetimeInput(futureDate),
             notes: (t('agenda.followup_notes_prefix') || '') + prev.notes
         }));
-
+        
         // Forzar tab general para ver el cambio
         setActiveTab('general');
         setError(null);
@@ -367,7 +360,7 @@ export default function AppointmentForm({
                         </div>
                         <p className="text-xs text-slate-500">{t('agenda.clinical_inspector')}</p>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-white/[0.06] rounded-full text-white/30 hover:text-white/60 transition-colors">
+                    <button onClick={onClose} aria-label="Cerrar" className="p-2 hover:bg-white/[0.06] rounded-full text-white/30 hover:text-white/60 transition-colors">
                         <X size={20} />
                     </button>
                 </div>
@@ -619,7 +612,11 @@ export default function AppointmentForm({
                                             const isVerified = parsed.status === 'verified';
                                             const filePath = parsed.receipt_file_path || '';
                                             const apiBase = import.meta.env.VITE_API_URL || '';
-                                            const imgSrc = filePath ? (filePath.startsWith('http') ? filePath : `${apiBase}${filePath.startsWith('/') ? '' : '/'}${filePath}`) : '';
+                                            const docId = parsed.receipt_doc_id;
+                                            const patientId = (initialData as any)?.patient_id || fullAppointment?.patient_id;
+                                            const imgSrc = docId && patientId
+                                                ? `${apiBase}/admin/patients/${patientId}/documents/${docId}/proxy`
+                                                : filePath ? (filePath.startsWith('http') ? filePath : `${apiBase}${filePath.startsWith('/') ? '' : '/'}${filePath}`) : '';
                                             return (
                                                 <div className={`rounded-xl border p-4 space-y-3 mt-4 ${isVerified ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
                                                     <div className="flex items-center justify-between">

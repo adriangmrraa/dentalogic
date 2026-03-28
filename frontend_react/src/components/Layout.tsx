@@ -9,8 +9,8 @@ import { X, Wifi, WifiOff, Bell, UserPlus, Calendar, AlertTriangle, HelpCircle }
 import MetaTokenBanner from './MetaTokenBanner';
 import { NovaWidget } from './NovaWidget';
 import OnboardingGuide from './OnboardingGuide';
-import ParticleBackground from './public/ParticleBackground';
 import PageTips from './PageTips';
+import ParticleBackground from './public/ParticleBackground';
 
 interface LayoutProps {
   children: ReactNode;
@@ -95,11 +95,11 @@ export const Layout: React.FC<LayoutProps> = ({ children }: LayoutProps) => {
     // Listener
     // Listener
     // --- NOTIFICATION HANDLERS ---
-
+    
     const showNotification = (notif: typeof notification) => {
       if (!notif) return;
       setNotification(notif);
-
+      
       // Auto-ocultar a los 10 segundos (Requerimiento Spec v7.6)
       setTimeout(() => {
         setNotification((prev: any) => (prev?.id === notif?.id ? null : prev));
@@ -204,7 +204,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }: LayoutProps) => {
 
   return (
     <div className="flex h-screen bg-[#06060e] relative overflow-hidden">
-      {/* Subtle ambient particles across all pages */}
       <ParticleBackground particleCount={20} className="opacity-20" />
       {/* Mobile Backdrop */}
       {isMobileMenuOpen && (
@@ -343,26 +342,26 @@ export const Layout: React.FC<LayoutProps> = ({ children }: LayoutProps) => {
         >
           {/* Glassmorphic Background with Gradient Border */}
           <div className={`relative p-[1px] rounded-2xl shadow-2xl transition-transform duration-300 hover:scale-[1.02] active:scale-[0.98]
-            ${notification.type === 'urgency' ? 'bg-gradient-to-r from-red-500 via-rose-500 to-red-600' :
-              (notification.type === 'appointment' || notification.type === 'new_patient') ? 'bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600' :
+            ${notification.type === 'urgency' ? 'bg-gradient-to-r from-red-500 via-rose-500 to-red-600' : 
+              (notification.type === 'appointment' || notification.type === 'new_patient') ? 'bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600' : 
               'bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600'}`}>
-
+            
             <div className="bg-white/95 backdrop-blur-xl rounded-[15px] p-4 flex items-start gap-4">
               {/* Animated Icon Container */}
               <div className={`relative flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center shadow-inner overflow-hidden
-                ${notification.type === 'urgency' ? 'bg-red-50 text-red-600' :
-                  (notification.type === 'appointment' || notification.type === 'new_patient') ? 'bg-emerald-50 text-emerald-600' :
+                ${notification.type === 'urgency' ? 'bg-red-50 text-red-600' : 
+                  (notification.type === 'appointment' || notification.type === 'new_patient') ? 'bg-emerald-50 text-emerald-600' : 
                   'bg-blue-50 text-blue-600'}`}>
-
+                
                 {/* Background Glow Implementation */}
                 <div className={`absolute inset-0 opacity-20 animate-pulse
-                  ${notification.type === 'urgency' ? 'bg-red-400' :
-                    (notification.type === 'appointment' || notification.type === 'new_patient') ? 'bg-emerald-400' :
+                  ${notification.type === 'urgency' ? 'bg-red-400' : 
+                    (notification.type === 'appointment' || notification.type === 'new_patient') ? 'bg-emerald-400' : 
                     'bg-blue-400'}`} />
 
-                {notification.type === 'urgency' ? <AlertTriangle className="h-6 w-6 relative z-10 animate-bounce" /> :
-                 notification.type === 'appointment' ? <Calendar className="h-6 w-6 relative z-10" /> :
-                 notification.type === 'new_patient' ? <UserPlus className="h-6 w-6 relative z-10" /> :
+                {notification.type === 'urgency' ? <AlertTriangle className="h-6 w-6 relative z-10 animate-bounce" /> : 
+                 notification.type === 'appointment' ? <Calendar className="h-6 w-6 relative z-10" /> : 
+                 notification.type === 'new_patient' ? <UserPlus className="h-6 w-6 relative z-10" /> : 
                  <Bell className="h-6 w-6 relative z-10" />}
               </div>
 
@@ -370,12 +369,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }: LayoutProps) => {
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start">
                   <span className={`text-[10px] font-black uppercase tracking-[0.15em] mb-1 block
-                    ${notification.type === 'urgency' ? 'text-red-500' :
-                      (notification.type === 'appointment' || notification.type === 'new_patient') ? 'text-emerald-600' :
+                    ${notification.type === 'urgency' ? 'text-red-500' : 
+                      (notification.type === 'appointment' || notification.type === 'new_patient') ? 'text-emerald-600' : 
                       'text-blue-600'}`}>
-                    {notification.type === 'urgency' ? 'Urgent Alert' :
-                     notification.type === 'appointment' ? 'New Booking' :
-                     notification.type === 'new_patient' ? 'New Patient' :
+                    {notification.type === 'urgency' ? 'Urgent Alert' : 
+                     notification.type === 'appointment' ? 'New Booking' : 
+                     notification.type === 'new_patient' ? 'New Patient' : 
                      'Notification'}
                   </span>
                   <button
@@ -385,11 +384,11 @@ export const Layout: React.FC<LayoutProps> = ({ children }: LayoutProps) => {
                     <X size={14} />
                   </button>
                 </div>
-
+                
                 <h3 className="text-sm font-bold text-slate-900 truncate">
                   {notification.name || notification.phone}
                 </h3>
-
+                
                 <p className="mt-1 text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed opacity-80">
                   {notification.reason}
                 </p>
@@ -397,8 +396,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }: LayoutProps) => {
                 {/* Interactive Indicator */}
                 <div className="mt-3 flex items-center gap-1.5">
                   <div className={`h-1 w-1 rounded-full animate-ping
-                    ${notification.type === 'urgency' ? 'bg-red-500' :
-                      (notification.type === 'appointment' || notification.type === 'new_patient') ? 'bg-emerald-500' :
+                    ${notification.type === 'urgency' ? 'bg-red-500' : 
+                      (notification.type === 'appointment' || notification.type === 'new_patient') ? 'bg-emerald-500' : 
                       'bg-blue-500'}`} />
                   <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-tighter group-hover:text-slate-600 transition-colors">
                     Click para gestionar

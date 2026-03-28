@@ -1,106 +1,83 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { getEnv } from '../utils/env';
 
 declare global {
-  interface Window {
-    FB: any;
-    fbAsyncInit: () => void;
-  }
-}
-
-interface UseFacebookSdkReturn {
-  isLoaded: boolean;
-  isLoading: boolean;
-  error: string | null;
-  login: () => Promise<any>;
-  getLoginStatus: () => Promise<any>;
-}
-
-export function useFacebookSdk(appId: string): UseFacebookSdkReturn {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!appId) return;
-    if (window.FB) {
-      setIsLoaded(true);
-      return;
+    interface Window {
+        FB: any;
+        fbAsyncInit: () => void;
     }
-
-    setIsLoading(true);
-
-    window.fbAsyncInit = () => {
-      window.FB.init({
-        appId,
-        cookie: true,
-        xfbml: true,
-        version: 'v18.0',
-      });
-      setIsLoaded(true);
-      setIsLoading(false);
-    };
-
-    // Load SDK script
-    const script = document.createElement('script');
-    script.id = 'facebook-jssdk';
-    script.src = 'https://connect.facebook.net/en_US/sdk.js';
-    script.async = true;
-    script.defer = true;
-
-    script.onerror = () => {
-      setError('Failed to load Facebook SDK');
-      setIsLoading(false);
-    };
-
-    // Timeout fallback
-    const timeout = setTimeout(() => {
-      if (!isLoaded) {
-        setError('Facebook SDK loading timeout');
-        setIsLoading(false);
-      }
-    }, 10000);
-
-    document.body.appendChild(script);
-
-    return () => {
-      clearTimeout(timeout);
-    };
-  }, [appId]);
-
-  const login = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!window.FB) {
-        reject(new Error('Facebook SDK not loaded'));
-        return;
-      }
-      window.FB.login(
-        (response: any) => {
-          if (response.authResponse) {
-            resolve(response.authResponse);
-          } else {
-            reject(new Error('Facebook login cancelled'));
-          }
-        },
-        {
-          scope: 'pages_show_list,pages_manage_metadata,pages_messaging,instagram_basic,instagram_manage_messages,leads_retrieval',
-        }
-      );
-    });
-  }, []);
-
-  const getLoginStatus = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!window.FB) {
-        reject(new Error('Facebook SDK not loaded'));
-        return;
-      }
-      window.FB.getLoginStatus((response: any) => {
-        resolve(response);
-      });
-    });
-  }, []);
-
-  return { isLoaded, isLoading, error, login, getLoginStatus };
 }
 
-export default useFacebookSdk;
+export const useFacebookSdk = () => {
+    const [isReady, setIsReady] = useState(false);
+
+    useEffect(() => {
+        // Use runtime injection (Docker/EasyPanel) with Vite build-time fallback
+        const appId = getEnv('VITE_FACEBOOK_APP_ID');
+        if (!appId) {
+            console.error("[Meta SDK] VITE_FACEBOOK_APP_ID missing (checked window.__ENV__ and import.meta.env)");
+            return;
+        }
+
+        console.log("[Meta SDK] App ID found, loading SDK...");
+
+        const initParams = {
+            appId,
+            cookie: true,
+            xfbml: true,
+            version: 'v22.0'
+        };
+
+        // If already loaded, force init
+        if (window.FB) {
+            try {
+                window.FB.init(initParams);
+                setIsReady(true);
+            } catch (err) {
+                console.error("[Meta SDK] Force Init Failed:", err);
+                setIsReady(true);
+            }
+            return;
+        }
+
+        // Define the official callback
+        window.fbAsyncInit = function () {
+            try {
+                window.FB.init(initParams);
+            } catch (err) {
+                console.error("[Meta SDK] Async Init Failed:", err);
+            } finally {
+                setIsReady(true);
+            }
+        };
+
+        // Load the script
+        const scriptId = 'facebook-jssdk';
+        if (document.getElementById(scriptId)) return;
+
+        // Timeout fallback (3s) — unblock UI even if SDK fails
+        const timeoutId = setTimeout(() => {
+            console.warn("[Meta SDK] 3s Timeout. Forcing ready.");
+            setIsReady(true);
+        }, 3000);
+
+        const js = document.createElement('script');
+        js.id = scriptId;
+        js.src = "https://connect.facebook.net/es_LA/sdk.js";
+        js.onerror = () => {
+            console.error("[Meta SDK] Script load failed (ad blocker?)");
+            setIsReady(true);
+        };
+
+        const fjs = document.getElementsByTagName('script')[0];
+        if (fjs && fjs.parentNode) {
+            fjs.parentNode.insertBefore(js, fjs);
+        } else {
+            document.head.appendChild(js);
+        }
+
+        return () => clearTimeout(timeoutId);
+    }, []);
+
+    return isReady;
+};

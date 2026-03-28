@@ -1,45 +1,61 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 
-interface UseSmartScrollReturn {
-  scrollDirection: 'up' | 'down' | null;
-  isScrolled: boolean;
-  scrollY: number;
-  isAtBottom: boolean;
-}
+/**
+ * Hook para manejar el scroll inteligente en listas de chat.
+ * Solo hace scroll-to-bottom si:
+ * 1. El usuario ya estaba al final antes de recibir nuevos mensajes.
+ * 2. Es la carga inicial.
+ * 3. Se fuerza manualmente (ej: al enviar mensaje).
+ */
+export const useSmartScroll = <T extends any[]>(messages: T) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [isAtBottom, setIsAtBottom] = useState(true);
+    const [showScrollButton, setShowScrollButton] = useState(false);
 
-export function useSmartScroll(threshold: number = 50): UseSmartScrollReturn {
-  const [scrollDirection, setScrollDirection] = useState<'up' | 'down' | null>(null);
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [scrollY, setScrollY] = useState(0);
-  const [isAtBottom, setIsAtBottom] = useState(false);
-  const lastScrollY = useRef(0);
+    // Umbral de tolerancia en pixeles para considerar que está "al final"
+    const BOTTOM_THRESHOLD = 100;
 
-  const handleScroll = useCallback(() => {
-    const currentScrollY = window.scrollY;
+    const checkScrollPosition = useCallback(() => {
+        if (!containerRef.current) return;
 
-    setScrollY(currentScrollY);
-    setIsScrolled(currentScrollY > threshold);
+        const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+        const scrollBottom = scrollHeight - scrollTop - clientHeight;
 
-    if (currentScrollY > lastScrollY.current) {
-      setScrollDirection('down');
-    } else if (currentScrollY < lastScrollY.current) {
-      setScrollDirection('up');
-    }
+        const atBottom = scrollBottom < BOTTOM_THRESHOLD;
+        setIsAtBottom(atBottom);
+        setShowScrollButton(!atBottom);
+    }, []);
 
-    lastScrollY.current = currentScrollY;
+    // Listener de scroll
+    useEffect(() => {
+        const container = containerRef.current;
+        if (container) {
+            container.addEventListener('scroll', checkScrollPosition);
+            // Chequeo inicial
+            checkScrollPosition();
+        }
+        return () => {
+            container?.removeEventListener('scroll', checkScrollPosition);
+        };
+    }, [checkScrollPosition]);
 
-    // Check if at bottom
-    const windowHeight = window.innerHeight;
-    const documentHeight = document.documentElement.scrollHeight;
-    setIsAtBottom(currentScrollY + windowHeight >= documentHeight - 50);
-  }, [threshold]);
+    // Efecto para auto-scroll cuando llegan mensajes
+    useEffect(() => {
+        if (isAtBottom) {
+            scrollToBottom();
+        }
+    }, [messages, isAtBottom]);
 
-  useEffect(() => {
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [handleScroll]);
+    const scrollToBottom = (smooth = true) => {
+        messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+    };
 
-  return { scrollDirection, isScrolled, scrollY, isAtBottom };
-}
-
-export default useSmartScroll;
+    return {
+        containerRef,
+        messagesEndRef,
+        showScrollButton,
+        scrollToBottom,
+        isAtBottom
+    };
+};

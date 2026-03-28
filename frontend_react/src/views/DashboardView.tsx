@@ -266,7 +266,7 @@ export default function DashboardView() {
             value={`$${(stats as any)?.estimated_revenue?.toLocaleString() || 0}`}
             icon={TrendingUp}
             color="bg-amber-500"
-            trend={(stats as any)?.estimated_revenue_trend}
+            trend="+15%"
             image={CARD_IMAGES.revenue}
           />
           <KPICard

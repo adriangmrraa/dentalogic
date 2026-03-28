@@ -15,19 +15,19 @@
   --medical-500: #0066cc;
   --medical-400: #0073e6;
   --medical-300: #3385ff;
-
+  
   /* Clean Whites & Grays */
   --white-50: #ffffff;
   --white-100: #f8f9fa;
   --white-200: #f4f7f6;
   --white-300: #e9ecef;
-
+  
   /* Semantic Colors */
   --success: #28a745;
   --warning: #ffc107;
   --danger: #dc3545;
   --info: #17a2b8;
-
+  
   /* Shadows */
   --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
   --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);

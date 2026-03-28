@@ -394,7 +394,10 @@ export default function PatientsView() {
       <GlassCard image={CARD_IMAGES.patients} hoverScale={false}>
       <div className="overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-white/50">{t('patients.loading')}</div>
+          <div className="p-8 flex flex-col items-center justify-center gap-3 text-white/50">
+            <div className="w-8 h-8 border-2 border-white/20 border-t-blue-400 rounded-full animate-spin" />
+            <span className="text-sm">{t('patients.loading')}</span>
+          </div>
         ) : filteredPatients.length === 0 ? (
           <div className="p-8 text-center text-white/50">
             {t('patients.no_patients_found')}
@@ -415,10 +418,10 @@ export default function PatientsView() {
                       {t('patients.dni_obra_social')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">
-                      Próximo turno
+                      {t('patients.next_appointment')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">
-                      Balance
+                      {t('patients.balance')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider">
                       {t('patients.date_added')}
