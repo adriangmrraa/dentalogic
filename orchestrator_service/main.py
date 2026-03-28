@@ -35,6 +35,7 @@ from admin_routes import router as admin_router
 from auth_routes import router as auth_router
 from demo_tracking_routes import router as demo_tracking_router
 from bridge_routes import router as bridge_router
+from demo_tracking_service import demo_tracking_service
 from email_service import email_service
 
 # --- CONFIGURACIÓN ---
@@ -1442,6 +1443,18 @@ async def chat_endpoint(req: ChatRequest):
     correlation_id = str(uuid.uuid4())
     # Log visible en cualquier nivel (WARNING) para diagnosticar si las peticiones llegan al orchestrator
     logger.warning(f"📩 CHAT received from={getattr(req, 'from_number', None) or getattr(req, 'phone', None)} to={getattr(req, 'to_number', None)} msg_preview={(req.final_message or '')[:60]!r}")
+
+    # Track WhatsApp message as demo lead (every person who talks is a sales lead)
+    try:
+        from_phone = getattr(req, 'from_number', None) or getattr(req, 'phone', None) or req.final_phone
+        if from_phone:
+            await demo_tracking_service.track_whatsapp_message(
+                phone_number=from_phone,
+                name=getattr(req, 'customer_name', None),
+                channel=getattr(req, 'provider', 'whatsapp') or 'whatsapp'
+            )
+    except Exception as track_err:
+        logger.debug(f"Demo tracking skip: {track_err}")
 
     current_customer_phone.set(req.final_phone)
     # 0. RESOLUCIÓN DINÁMICA DE TENANT (Soberanía Nexus v7.6)
