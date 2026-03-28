@@ -20,6 +20,7 @@ import LeadDetailView from './views/LeadDetailView';
 import DashboardStatusView from './views/DashboardStatusView';
 import PrivacyTermsView from './views/PrivacyTermsView';
 import AnamnesisPublicView from './views/AnamnesisPublicView';
+import SuperAdminDashboard from './views/SuperAdminDashboard';
 import { AuthProvider } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -92,6 +93,11 @@ function App() {
                     <Route path="leads/:id" element={
                       <ProtectedRoute allowedRoles={['ceo']}>
                         <LeadDetailView />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="superadmin" element={
+                      <ProtectedRoute allowedRoles={['superadmin']}>
+                        <SuperAdminDashboard />
                       </ProtectedRoute>
                     } />
 

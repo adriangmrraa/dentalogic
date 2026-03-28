@@ -45,6 +45,7 @@ const CARD_IMAGES: Record<string, string> = {
   leads: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400&q=60',
   templates: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=400&q=60',
   settings: 'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=400&q=60',
+  superadmin: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&q=60',
 };
 
 export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMobile }) => {
@@ -105,6 +106,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, onCloseMo
     { id: 'leads', labelKey: 'nav.leads' as const, icon: <Users size={17} />, path: '/leads', roles: ['ceo'], hint: 'Leads de formularios de Meta con estado y seguimiento' },
     { id: 'templates', labelKey: 'nav.hsm' as const, icon: <Layout size={17} />, path: '/templates', roles: ['ceo'], hint: 'Plantillas HSM de WhatsApp y reglas de automatización' },
     { id: 'settings', labelKey: 'nav.settings' as const, icon: <Settings size={17} />, path: '/configuracion', roles: ['ceo'], hint: 'Configuración general, integraciones y credenciales' },
+    { id: 'superadmin', labelKey: 'nav.superadmin' as const, icon: <ShieldCheck size={17} />, path: '/superadmin', roles: ['superadmin'], hint: 'Panel exclusivo del creador de Dentalogic' },
   ];
 
   const filteredItems = menuItems.filter(item => user && item.roles.includes(user.role));

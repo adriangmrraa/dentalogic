@@ -216,4 +216,51 @@ export const MessageMedia: React.FC<MessageMediaProps> = ({ media, onView }) => 
   }
 };
 
+export const Linkify = ({ text }: { text: string }) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+
+    return (
+        <>
+            {parts.map((part, i) => (
+                urlRegex.test(part) ? (
+                    <a
+                        key={i}
+                        href={part}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-500 hover:underline inline-flex items-center gap-1"
+                        style={{ wordBreak: 'break-all' }}
+                    >
+                        {part}
+                    </a>
+                ) : part
+            ))}
+        </>
+    );
+};
+
+export const MessageContent = ({ message }: { message: any }) => {
+    if (!message) return null;
+    const content = typeof message.content === 'string' ? message.content : '';
+    const attachments = message.attachments || message.content_attributes || [];
+
+    return (
+        <div className="flex flex-col gap-1 text-sm">
+            {content && (
+                <div className="whitespace-pre-wrap">
+                    <Linkify text={content} />
+                </div>
+            )}
+            {attachments.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                    {attachments.map((att: any, idx: number) => (
+                        <MessageMedia key={idx} media={att} />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 export default MessageMedia;
