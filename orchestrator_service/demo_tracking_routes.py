@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import logging
 from demo_tracking_service import demo_tracking_service
-from auth_service import auth_service
+from admin_routes import verify_admin_token
 
 router = APIRouter()
 logger = logging.getLogger("demo_tracking_routes")
@@ -46,14 +46,13 @@ async def track_demo_event(req: EventRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Endpoints SuperAdmin
-async def superadmin_required(current_user=Depends(auth_service.get_current_user)):
-    user_dict = dict(current_user) if current_user else {}
-    if user_dict.get("role") != "superadmin":
+async def superadmin_required(user_data=Depends(verify_admin_token)):
+    if user_data.role not in ['superadmin', 'ceo']:
         raise HTTPException(status_code=403, detail="SuperAdmin access required")
-    return current_user
+    return user_data
 
 @router.get("/superadmin/leads")
-async def get_demo_leads(current_user=Depends(superadmin_required)):
+async def get_demo_leads(user_data=Depends(superadmin_required)):
     leads = await demo_tracking_service.get_all_leads()
     # Convert dates to isoformat for JSON serialization
     for lead in leads:
@@ -65,7 +64,7 @@ async def get_demo_leads(current_user=Depends(superadmin_required)):
     return {"leads": leads}
 
 @router.get("/superadmin/leads/{lead_id}/events")
-async def get_lead_timeline(lead_id: int, current_user=Depends(superadmin_required)):
+async def get_lead_timeline(lead_id: int, user_data=Depends(superadmin_required)):
     events = await demo_tracking_service.get_lead_events(lead_id)
     for event in events:
         if event.get('created_at'): event['created_at'] = event['created_at'].isoformat()
