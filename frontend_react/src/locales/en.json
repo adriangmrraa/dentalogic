@@ -49,7 +49,10 @@
     "min_short": "m",
     "until": "Until",
     "notification_appointment_manual": "Appointment booked successfully",
-    "notification_appointment_ai": "New appointment booked by AI"
+    "notification_appointment_ai": "New appointment booked by AI",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "understood": "Got it"
   },
   "config": {
     "title": "Settings",
@@ -1421,7 +1424,11 @@
     "demo_enter_button": "Enter the demo"
   },
   "demo": {
-    "whatsapp_message": "Hello, I'd like to inquire about appointments."
+    "whatsapp_message": "Hello, I'd like to inquire about appointments.",
+    "modal_title": "Demo Mode",
+    "modal_description": "The {{feature}} integration is available in the full version of the platform. When you subscribe, we configure all real connections with your channels.",
+    "modal_cta_text": "Want to learn more? Contact our sales team.",
+    "contact_team": "Contact team"
   },
   "legal": {
     "center_title": "{appName} Legal Center",

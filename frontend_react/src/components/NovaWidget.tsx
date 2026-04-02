@@ -363,6 +363,26 @@ export const NovaWidget: React.FC = () => {
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim()) return;
+
+    // Demo mode: mock responses without WebSocket
+    if (import.meta.env.VITE_DEMO_MODE === 'true') {
+      const userMsg: ChatMessage = { id: msgId(), role: 'user', text: text.trim(), timestamp: Date.now() };
+      setMessages(prev => [...prev, userMsg]);
+      setInputText('');
+      setIsThinking(true);
+
+      import('../mocks/nova.mock').then(({ getNovaChatResponseMock }) => {
+        setTimeout(() => {
+          const response = getNovaChatResponseMock(text.trim());
+          setMessages(prev => [...prev, {
+            id: msgId(), role: 'assistant', text: response, timestamp: Date.now(),
+          }]);
+          setIsThinking(false);
+        }, 600 + Math.random() * 400);
+      });
+      return;
+    }
+
     const userMsg: ChatMessage = { id: msgId(), role: 'user', text: text.trim(), timestamp: Date.now() };
     setMessages(prev => [...prev, userMsg]);
     setInputText('');
@@ -600,6 +620,7 @@ export const NovaWidget: React.FC = () => {
 
   // Auto-start voice when widget opens, cleanup on close
   useEffect(() => {
+    if (import.meta.env.VITE_DEMO_MODE === 'true') return; // Skip voice in demo
     if (isOpen && !voiceActive) {
       const t = setTimeout(() => startVoice(), 500);
       return () => clearTimeout(t);
@@ -810,13 +831,16 @@ export const NovaWidget: React.FC = () => {
       {/* Input bar */}
       <div className="p-3 border-t border-white/5 flex items-center gap-2 flex-shrink-0">
         <button
-          onClick={toggleVoice}
+          onClick={import.meta.env.VITE_DEMO_MODE === 'true' ? undefined : toggleVoice}
+          disabled={import.meta.env.VITE_DEMO_MODE === 'true'}
           className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
-            voiceActive
-              ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-              : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+            import.meta.env.VITE_DEMO_MODE === 'true'
+              ? 'bg-white/5 text-slate-600 cursor-not-allowed'
+              : voiceActive
+                ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
           }`}
-          title={voiceActive ? 'Detener voz' : 'Activar voz'}
+          title={import.meta.env.VITE_DEMO_MODE === 'true' ? 'Voz no disponible en la demo' : voiceActive ? 'Detener voz' : 'Activar voz'}
         >
           {voiceActive ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
         </button>

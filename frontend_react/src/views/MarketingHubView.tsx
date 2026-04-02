@@ -10,6 +10,7 @@ import { getCurrentTenantId } from '../api/axios';
 import { useSearchParams } from 'react-router-dom';
 import GoogleAdsApi from '../api/google_ads';
 import GlassCard, { CARD_IMAGES } from '../components/GlassCard';
+import DemoConnectModal from '../components/DemoConnectModal';
 
 type Platform = 'meta' | 'google' | 'combined';
 type TimeRange = 'last_30d' | 'last_90d' | 'this_year' | 'lifetime' | 'all';
@@ -39,6 +40,8 @@ export default function MarketingHubView() {
     const [activeTab, setActiveTab] = useState<'campaigns' | 'ads'>('campaigns');
     const [deploymentConfig, setDeploymentConfig] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [demoModalOpen, setDemoModalOpen] = useState(false);
+    const [demoFeatureName, setDemoFeatureName] = useState('');
 
     useEffect(() => {
         loadAllStats();
@@ -150,6 +153,11 @@ export default function MarketingHubView() {
     };
 
     const handleConnectMeta = async () => {
+        if (import.meta.env.VITE_DEMO_MODE === 'true') {
+            setDemoFeatureName('Meta Ads');
+            setDemoModalOpen(true);
+            return;
+        }
         try {
             const tenantId = getCurrentTenantId();
             const { data } = await api.get(`/admin/marketing/meta-auth/url?state=tenant_${tenantId}`);
@@ -163,6 +171,11 @@ export default function MarketingHubView() {
     };
 
     const handleConnectGoogle = async () => {
+        if (import.meta.env.VITE_DEMO_MODE === 'true') {
+            setDemoFeatureName('Google Ads');
+            setDemoModalOpen(true);
+            return;
+        }
         try {
             const tenantId = getCurrentTenantId();
             const { data } = await api.get(`/admin/auth/google/ads/url?state=tenant_${tenantId}_ads`);
@@ -712,6 +725,12 @@ export default function MarketingHubView() {
                         loadGoogleStats();
                         loadCombinedStats();
                     }}
+                />
+
+                <DemoConnectModal
+                    isOpen={demoModalOpen}
+                    onClose={() => setDemoModalOpen(false)}
+                    featureName={demoFeatureName}
                 />
             </div>
             </div>

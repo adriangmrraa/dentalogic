@@ -51,7 +51,10 @@
     "min_short": "m",
     "until": "Hasta",
     "notification_appointment_manual": "Turno agendado correctamente",
-    "notification_appointment_ai": "Nuevo agendamiento realizado por la IA"
+    "notification_appointment_ai": "Nuevo agendamiento realizado por la IA",
+    "refresh": "Actualizar",
+    "retry": "Reintentar",
+    "understood": "Entendido"
   },
   "config": {
     "title": "Configuración",
@@ -1246,7 +1249,11 @@
     "demo_enter_button": "Entrar a la demo"
   },
   "demo": {
-    "whatsapp_message": "Hola, quisiera consultar por turnos."
+    "whatsapp_message": "Hola, quisiera consultar por turnos.",
+    "modal_title": "Modo Demostración",
+    "modal_description": "La integración con {{feature}} está disponible en la versión completa de la plataforma. Al contratar el servicio, configuramos todas las conexiones reales con tus canales.",
+    "modal_cta_text": "¿Querés conocer más? Contactá a nuestro equipo comercial.",
+    "contact_team": "Contactar equipo"
   },
   "legal": {
     "center_title": "Centro Legal de {appName}",

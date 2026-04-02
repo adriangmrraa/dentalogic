@@ -47,7 +47,10 @@
     "min_short": "m",
     "until": "Jusqu'à",
     "notification_appointment_manual": "Rendez-vous enregistré correctement",
-    "notification_appointment_ai": "Nouveau rendez-vous pris par l'IA"
+    "notification_appointment_ai": "Nouveau rendez-vous pris par l'IA",
+    "refresh": "Actualiser",
+    "retry": "Réessayer",
+    "understood": "Compris"
   },
   "config": {
     "title": "Paramètres",
@@ -1046,7 +1049,11 @@
     "demo_enter_button": "Entrer dans la démo"
   },
   "demo": {
-    "whatsapp_message": "Bonjour, j'aimerais des informations sur les rendez-vous."
+    "whatsapp_message": "Bonjour, j'aimerais des informations sur les rendez-vous.",
+    "modal_title": "Mode Démonstration",
+    "modal_description": "L'intégration avec {{feature}} est disponible dans la version complète de la plateforme. Lors de la souscription, nous configurons toutes les connexions réelles avec vos canaux.",
+    "modal_cta_text": "Vous voulez en savoir plus ? Contactez notre équipe commerciale.",
+    "contact_team": "Contacter l'équipe"
   },
   "legal": {
     "center_title": "Centre juridique de {appName}",

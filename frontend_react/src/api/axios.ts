@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios';
 import { getEnv } from '../utils/env';
+import { getMockForPath } from '../mocks/index';
 
 const API_URL = getEnv('VITE_API_URL') || 'http://localhost:3000';
 export const BACKEND_URL = API_URL;
@@ -218,6 +219,40 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// ============================================
+// DEMO MODE: Mock Response Interceptor
+// ============================================
+
+if (import.meta.env.VITE_DEMO_MODE === 'true') {
+  api.interceptors.response.use(
+    (response) => response, // pass through successful responses
+    (error) => {
+      const url = error.config?.url || '';
+      const params = Object.fromEntries(new URLSearchParams(error.config?.params || ''));
+      const mockData = getMockForPath(url, params);
+
+      if (mockData !== null) {
+        console.log(`[Demo Mock] ${error.config?.method?.toUpperCase()} ${url}`);
+        return Promise.resolve({ data: mockData, status: 200, statusText: 'OK (Demo)', headers: {}, config: error.config });
+      }
+
+      // Also handle PUT/POST that 404
+      if (error.response?.status === 404 || !error.response) {
+        if (url.includes('/leads/') && url.includes('/status')) {
+          console.log(`[Demo Mock] ${error.config?.method?.toUpperCase()} ${url}`);
+          return Promise.resolve({ data: { success: true, message: 'Demo mode' }, status: 200, statusText: 'OK (Demo)', headers: {}, config: error.config });
+        }
+        if (url.includes('/dashboard/api/config')) {
+          console.log(`[Demo Mock] ${error.config?.method?.toUpperCase()} ${url}`);
+          return Promise.resolve({ data: { success: true }, status: 200, statusText: 'OK (Demo)', headers: {}, config: error.config });
+        }
+      }
+
+      return Promise.reject(error);
+    }
+  );
+}
 
 // ============================================
 // API HELPERS
