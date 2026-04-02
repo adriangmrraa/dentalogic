@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Edit, Trash2, X, FileText, Brain, Calendar, User, Clock, Stethoscope, Mail, Phone, Upload, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
-import api from '../api/axios';
+import api, { setTenantId } from '../api/axios';
 import { useTranslation } from '../context/LanguageContext';
 import PageHeader from '../components/PageHeader';
 import GlassCard, { CARD_IMAGES } from '../components/GlassCard';
@@ -21,6 +21,8 @@ interface Patient {
   health_conditions?: string[];
   next_appointment_date?: string;
   pending_balance?: number;
+  has_appointments?: boolean;
+  last_treatment?: string;
 }
 
 interface TreatmentType {
@@ -37,6 +39,11 @@ interface Professional {
   last_name?: string;
   specialty?: string;
   is_active: boolean;
+}
+
+interface ClinicOption {
+  id: number;
+  clinic_name: string;
 }
 
 export default function PatientsView() {
@@ -84,16 +91,28 @@ export default function PatientsView() {
   const [importResult, setImportResult] = useState<any>(null);
   const [duplicateAction, setDuplicateAction] = useState<'skip' | 'update'>('skip');
   const [dragOver, setDragOver] = useState(false);
+  const [clinics, setClinics] = useState<ClinicOption[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState<number | null>(null);
+  const [appointmentFilter, setAppointmentFilter] = useState<'all' | 'with' | 'without'>('all');
+  const [treatmentFilter, setTreatmentFilter] = useState<string>('all');
 
-  // Fetch patients on mount
+  // Fetch clinics + patients on mount
   useEffect(() => {
-    fetchPatients();
+    api.get<ClinicOption[]>('/admin/chat/tenants').then((res) => {
+      setClinics(res.data);
+      if (res.data.length >= 1) setSelectedTenantId(res.data[0].id);
+    });
     fetchResources();
   }, []);
 
-  // Filter patients when search term changes
+  // Refetch patients when tenant changes
   useEffect(() => {
-    const filtered = patients.filter((patient) => {
+    if (selectedTenantId != null) fetchPatients();
+  }, [selectedTenantId]);
+
+  // Filter patients when search term or filter controls change
+  useEffect(() => {
+    let filtered = patients.filter((patient) => {
       const searchLower = searchTerm.toLowerCase();
       // Safe check for nulls
       const fname = patient.first_name || '';
@@ -110,8 +129,19 @@ export default function PatientsView() {
         email.toLowerCase().includes(searchLower)
       );
     });
+
+    if (appointmentFilter === 'with') {
+      filtered = filtered.filter(p => p.has_appointments);
+    } else if (appointmentFilter === 'without') {
+      filtered = filtered.filter(p => !p.has_appointments);
+    }
+
+    if (treatmentFilter !== 'all') {
+      filtered = filtered.filter(p => p.last_treatment === treatmentFilter);
+    }
+
     setFilteredPatients(filtered);
-  }, [searchTerm, patients]);
+  }, [searchTerm, patients, appointmentFilter, treatmentFilter]);
 
   const fetchPatients = async () => {
     try {
@@ -304,7 +334,7 @@ export default function PatientsView() {
       const formData = new FormData();
       formData.append('file', importFile);
       const res = await api.post('/admin/patients/import/preview', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        timeout: 120000,
       });
       setImportPreview(res.data);
       setImportStep('preview');
@@ -358,6 +388,64 @@ export default function PatientsView() {
           </div>
         }
       />
+
+      {/* Clinic filter (CEO multi-tenant) */}
+      {clinics.length > 1 && (
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-white/40 mb-1">{t('chats.clinic_label')}</label>
+          <select
+            value={selectedTenantId ?? ''}
+            onChange={(e) => { const id = Number(e.target.value); setTenantId(String(id)); setSelectedTenantId(id); }}
+            className="w-full sm:w-64 px-3 py-2 border border-white/[0.08] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white/[0.04] text-white"
+          >
+            {clinics.map((c) => (
+              <option key={c.id} value={c.id}>{c.clinic_name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        {/* Appointment filter chips */}
+        <div className="flex rounded-lg overflow-hidden border border-white/[0.08]">
+          <button
+            onClick={() => setAppointmentFilter('all')}
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${appointmentFilter === 'all' ? 'bg-white/[0.12] text-white' : 'bg-white/[0.02] text-white/40 hover:text-white/60'}`}
+          >
+            Todos
+          </button>
+          <button
+            onClick={() => setAppointmentFilter('with')}
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${appointmentFilter === 'with' ? 'bg-green-500/20 text-green-400' : 'bg-white/[0.02] text-white/40 hover:text-white/60'}`}
+          >
+            Con turno
+          </button>
+          <button
+            onClick={() => setAppointmentFilter('without')}
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${appointmentFilter === 'without' ? 'bg-orange-500/20 text-orange-400' : 'bg-white/[0.02] text-white/40 hover:text-white/60'}`}
+          >
+            Sin turno
+          </button>
+        </div>
+
+        {/* Treatment filter */}
+        <select
+          value={treatmentFilter}
+          onChange={(e) => setTreatmentFilter(e.target.value)}
+          className="px-3 py-1.5 text-xs border border-white/[0.08] rounded-lg bg-white/[0.04] text-white"
+        >
+          <option value="all">Todos los tratamientos</option>
+          {Array.from(new Set(patients.filter(p => p.last_treatment).map(p => p.last_treatment!))).sort().map(t => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+
+        {/* Patient count */}
+        <span className="text-xs text-white/30 ml-auto">
+          {filteredPatients.length} pacientes
+        </span>
+      </div>
 
       {/* Search */}
       <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -448,6 +536,11 @@ export default function PatientsView() {
                                 <Brain size={16} className="text-purple-500" />
                               )}
                             </div>
+                            {patient.last_treatment && (
+                              <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400">
+                                {patient.last_treatment}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -530,6 +623,11 @@ export default function PatientsView() {
                           )}
                         </div>
                         <p className="text-xs text-white/50 truncate">DNI: {patient.dni || '-'}</p>
+                        {patient.last_treatment && (
+                          <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 truncate max-w-full">
+                            {patient.last_treatment}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
@@ -578,7 +676,7 @@ export default function PatientsView() {
       </div>
       </GlassCard>
 
-      {/* Modal: estilo slide-over como Agenda (Inspector Clínico) */}
+      {/* Modal: estilo slide-over como Agenda (Inspector Clinico) */}
       {showModal && (
         <div key={`patient-modal-${editingPatient?.id ?? 'new'}`} className="fixed inset-0 z-[60]">
           <div
@@ -862,8 +960,8 @@ export default function PatientsView() {
                           </tr>
                         </thead>
                         <tbody className="text-white/50">
-                          <tr className="border-b border-white/[0.04]"><td className="py-1.5 pr-3 font-semibold text-white">nombre</td><td className="pr-3 text-red-400 font-bold">{t('common.yes')}</td><td>María</td></tr>
-                          <tr className="border-b border-white/[0.04]"><td className="py-1.5 pr-3">apellido</td><td className="pr-3">{t('common.no')}</td><td>López</td></tr>
+                          <tr className="border-b border-white/[0.04]"><td className="py-1.5 pr-3 font-semibold text-white">nombre</td><td className="pr-3 text-red-400 font-bold">{t('common.yes')}</td><td>Maria</td></tr>
+                          <tr className="border-b border-white/[0.04]"><td className="py-1.5 pr-3">apellido</td><td className="pr-3">{t('common.no')}</td><td>Lopez</td></tr>
                           <tr className="border-b border-white/[0.04]"><td className="py-1.5 pr-3">telefono</td><td className="pr-3">{t('common.no')}</td><td>+5491155551234</td></tr>
                           <tr className="border-b border-white/[0.04]"><td className="py-1.5 pr-3">dni</td><td className="pr-3">{t('common.no')}</td><td>35789456</td></tr>
                           <tr className="border-b border-white/[0.04]"><td className="py-1.5 pr-3">email</td><td className="pr-3">{t('common.no')}</td><td>maria@mail.com</td></tr>
@@ -910,7 +1008,7 @@ export default function PatientsView() {
                           <div key={i} className="text-xs text-amber-300 flex gap-2">
                             <span className="font-mono text-amber-400/70">#{d.row}</span>
                             <span>{d.csv_name} ({d.csv_phone})</span>
-                            <span className="text-amber-400/50">→</span>
+                            <span className="text-amber-400/50">-&gt;</span>
                             <span>{d.existing_name}</span>
                           </div>
                         ))}

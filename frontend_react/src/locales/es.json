@@ -21,7 +21,8 @@
     "app_name": "Dentalogic",
     "credentials": "Credenciales",
     "status_connected": "Conectado",
-    "status_reconnecting": "Reconectando..."
+    "status_reconnecting": "Reconectando...",
+    "roi": "ROI Dashboard"
   },
   "common": {
     "save": "Guardar",
@@ -44,6 +45,7 @@
     "since": "Desde",
     "verifying_session": "Verificando sesión...",
     "copied": "Copiado",
+    "copyAnamnesisLink": "Copiar link de anamnesis",
     "new": "Nuevo",
     "minutes_short": "min",
     "min_short": "m",
@@ -149,7 +151,15 @@
     "have_account": "¿Ya tienes cuenta? Ingresa aquí",
     "request_access_link": "¿No tienes acceso? Solicitalo ahora",
     "placeholder_optional": "Opcional",
-    "placeholder_calendar": "Opcional. Configurable después en perfil."
+    "placeholder_calendar": "Opcional. Configurable después en perfil.",
+    "tooltip_email": "Usa tu email profesional. Será tu usuario de acceso.",
+    "tooltip_password": "Mínimo 8 caracteres. Usa letras y números.",
+    "tooltip_role": "Profesional: acceso a agenda y pacientes. Secretaria: gestión de turnos. CEO: acceso total.",
+    "tooltip_clinic": "Selecciona la clínica donde trabajas. El CEO te debe aprobar.",
+    "tooltip_specialty": "Tu área de expertise. Aparecerá en tu perfil público.",
+    "tooltip_phone": "Para que la clínica pueda contactarte.",
+    "tooltip_registration_id": "Número de matrícula profesional. Opcional.",
+    "tooltip_google_calendar": "ID de tu calendario. Se configura después desde el panel."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -593,7 +603,9 @@
     "bank_alias": "Alias",
     "bank_holder_name": "Titular de la cuenta",
     "derivation_email_label": "Email de derivación humana",
-    "derivation_email_help": "Email donde se enviarán las derivaciones cuando la IA necesite intervención humana."
+    "derivation_email_help": "Email donde se enviarán las derivaciones cuando la IA necesite intervención humana.",
+    "country_code": "País de la clínica",
+    "country_code_help": "Se usa para detectar automáticamente los feriados nacionales. El agente de IA no agendará turnos en días feriados."
   },
   "treatments": {
     "title": "Tratamientos",
@@ -657,7 +669,103 @@
     "tip_migration": "Tip: Revisa la migración 006_treatment_config.sql",
     "assigned_professionals": "Profesionales Asignados",
     "all_if_none": "Si no se selecciona ninguno, todos pueden realizarlo",
-    "all_professionals": "Todos los profesionales"
+    "all_professionals": "Todos los profesionales",
+    "instructions": {
+      "configureButton": "Configurar Instrucciones",
+      "editButton": "Editar Instrucciones",
+      "configured": "Instrucciones configuradas",
+      "notConfigured": "Sin instrucciones configuradas",
+      "explanation": "El asistente de IA enviará estas instrucciones al paciente automáticamente después de agendar un turno. Es importante completarlas correctamente.",
+      "modalTitle": "Instrucciones del Tratamiento",
+      "pre": {
+        "title": "Instrucciones Pre-tratamiento",
+        "helper": "El asistente enviará esto junto con la confirmación del turno.",
+        "placeholder": "Ej: No ingerir alimentos 8 horas antes..."
+      },
+      "post": {
+        "title": "Instrucciones Post-tratamiento",
+        "addButton": "Agregar instrucción",
+        "timing": {
+          "immediate": "Inmediato",
+          "24h": "A las 24 horas",
+          "48h": "A las 48 horas",
+          "72h": "A las 72 horas",
+          "1w": "A la semana",
+          "stitch_removal": "Retiro de puntos",
+          "custom": "Personalizado"
+        },
+        "days": "días",
+        "bookFollowup": "Sugerir agendar turno de control",
+        "contentPlaceholder": "Escribí las instrucciones para este momento..."
+      },
+      "followup": {
+        "title": "Mensajes de Seguimiento Automático",
+        "inDevelopment": "Los mensajes de seguimiento se enviarán automáticamente después del turno. Esta funcionalidad está en desarrollo.",
+        "addButton": "Agregar mensaje de seguimiento",
+        "hoursAfter": "horas después",
+        "variables": "Variables disponibles: {patient_name}, {treatment_name}, {appointment_date}, {professional_name}",
+        "messagePlaceholder": "Hola {patient_name}, ¿cómo te sentís después de tu {treatment_name}?"
+      },
+      "save": "Guardar instrucciones",
+      "cancel": "Cancelar"
+    }
+  },
+  "settings": {
+    "insurance": {
+      "title": "Obras Sociales",
+      "addButton": "Agregar Obra Social",
+      "emptyState": "Todavía no configuraste ninguna obra social. Agregá las que aceptás para que el asistente pueda responder automáticamente.",
+      "deleteConfirm": "¿Eliminar {name} del catálogo?",
+      "status": {
+        "accepted": "Aceptada",
+        "restricted": "Con restricciones",
+        "external_derivation": "Derivación externa",
+        "rejected": "No aceptada"
+      },
+      "fields": {
+        "providerName": "Nombre de la obra social",
+        "status": "Estado",
+        "restrictions": "Restricciones",
+        "externalTarget": "Derivar a",
+        "requiresCopay": "Requiere coseguro",
+        "copayNotes": "Detalle del coseguro",
+        "aiTemplate": "Respuesta personalizada del asistente",
+        "aiTemplatePlaceholder": "Dejá vacío para usar la respuesta por defecto"
+      },
+      "errors": {
+        "nameRequired": "El nombre es obligatorio",
+        "restrictionsRequired": "Las restricciones son obligatorias para este estado",
+        "externalTargetRequired": "El destino de derivación es obligatorio",
+        "duplicateName": "Ya existe una obra social con ese nombre"
+      }
+    },
+    "derivation": {
+      "title": "Derivación",
+      "addButton": "Agregar Regla",
+      "explainer": "Las reglas de derivación determinan a qué profesional se asigna cada paciente según el tipo de tratamiento. Se evalúan en orden de prioridad.",
+      "emptyState": "No hay reglas de derivación configuradas. El asistente asignará turnos sin filtro de profesional.",
+      "maxRulesWarning": "Máximo 20 reglas por clínica.",
+      "conflictWarning": "Esta regla puede solaparse con '{name}'. La de menor número se aplicará primero.",
+      "condition": {
+        "new_patient": "Paciente nuevo",
+        "existing_patient": "Paciente existente",
+        "any": "Cualquier paciente"
+      },
+      "target": {
+        "specific_professional": "Profesional específico",
+        "priority_professional": "Profesional prioritario",
+        "team": "Equipo (sin filtro)"
+      },
+      "fields": {
+        "ruleName": "Nombre de la regla",
+        "patientCondition": "Condición del paciente",
+        "categories": "Categorías de tratamiento",
+        "categoriesHelper": "Ej: cirugia, implantes, limpieza. Usá * para todas.",
+        "targetType": "Derivar a",
+        "professional": "Profesional",
+        "description": "Descripción (opcional)"
+      }
+    }
   },
   "profile": {
     "title": "Mi Perfil",
@@ -840,7 +948,8 @@
     "sign_medical_alta": "Firmar Alta Médica",
     "general_fallback": "General",
     "view_schedules": "Ver Horarios",
-    "edit_profile": "Editar Perfil"
+    "edit_profile": "Editar Perfil",
+    "priorityProfessional": "Profesional Prioritario"
   },
   "layout": {
     "app_title": "Dentalogic",
@@ -1133,7 +1242,11 @@
   },
   "login_extra": {
     "demo_ready": "Cuenta demo lista. Un clic y entrás a la plataforma.",
-    "sign_in_link": "Iniciar sesión con mi cuenta"
+    "sign_in_link": "Iniciar sesión con mi cuenta",
+    "demo_enter_button": "Entrar a la demo"
+  },
+  "demo": {
+    "whatsapp_message": "Hola, quisiera consultar por turnos."
   },
   "legal": {
     "center_title": "Centro Legal de {appName}",
@@ -1179,49 +1292,17 @@
   "landing": {
     "platform_label": "Plataforma para clínicas dentales",
     "headline": "Agenda, pacientes e IA en una sola app",
-    "subheadline": "Probá la plataforma en un clic. Sin tarjeta. Acceso inmediato a la demo.",
-    "cta_try_app": "Probar app",
-    "cta_disclaimer": "Te logueamos automáticamente en la cuenta demo (sin exponer credenciales)",
-    "cta_whatsapp": "Probar Agente WhatsApp IA",
-    "cta_login": "Iniciar sesión con mi cuenta",
+    "subheadline": "Prueba la plataforma a un click. Sin tarjeta. Acceso inmediato a la demo.",
+    "cta_try_app": "Probar la app",
+    "cta_disclaimer": "Te logueamos en automático por detrás directo a la cuenta demo (sin exponer claves en los pantallazos)",
     "demo_title": "Qué incluye la demo",
-    "demo_credentials_title": "Credenciales de prueba",
-    "credentials_password": "Contraseña:",
-    "feature_agenda": "Agenda por sede y profesional, sincronizable con Google Calendar.",
-    "feature_ai": "Agente IA por WhatsApp: turnos, triaje y derivación a humano.",
-    "feature_analytics": "Analíticas para CEO y profesionales.",
-    "stat_professionals": "Profesionales",
-    "stat_patients": "Pacientes",
-    "stat_uptime": "Uptime",
-    "features_title": "Todo lo que tu clínica necesita",
-    "features_subtitle": "Una plataforma completa que transforma la gestión de tu clínica dental",
-    "feat_agenda": "Agenda inteligente",
-    "feat_agenda_desc": "Gestión de turnos por profesional y sede. Sincronización con Google Calendar. Recordatorios automáticos por WhatsApp.",
-    "feat_ai": "Agente IA 24/7",
-    "feat_ai_desc": "Atención automática por WhatsApp. Agenda turnos, responde dudas, detecta urgencias y cobra señas. Todo sin intervención humana.",
-    "feat_analytics": "Analítica avanzada",
-    "feat_analytics_desc": "Dashboard con KPIs en tiempo real. Ingresos, tasa de asistencia, rendimiento por profesional y ROI de campañas.",
-    "feat_odontogram": "Odontograma digital",
-    "feat_odontogram_desc": "Registro clínico visual con 10 estados por pieza dental. Animaciones y colores por patología. Guardado automático.",
-    "feat_patients": "Ficha de pacientes",
-    "feat_patients_desc": "Historia clínica completa, anamnesis digital que el paciente llena desde su celular, galería de documentos y radiografías.",
-    "feat_marketing": "Marketing Hub",
-    "feat_marketing_desc": "ROI real de Meta Ads y Google Ads. Atribución de pacientes por campaña. Inversión vs ingresos en un solo lugar.",
-    "how_title": "Cómo funciona",
-    "step1_title": "Probá la demo",
-    "step1_desc": "Un clic y entrás a la plataforma completa. Sin registrarte, sin tarjeta.",
-    "step2_title": "Hablá con la IA",
-    "step2_desc": "Escribile al agente por WhatsApp. Mirá cómo agenda un turno automáticamente.",
-    "step3_title": "Ve la magia",
-    "step3_desc": "La notificación aparece en tiempo real. El turno se refleja en la agenda. Todo automático.",
-    "testimonial_text": "Desde que implementamos Dentalogic, la atención automática por WhatsApp nos triplicó los turnos agendados fuera de horario.",
-    "testimonial_author": "Dra. Martínez",
-    "testimonial_role": "Directora, Clínica Dental Premium",
-    "final_cta_title": "Transformá tu clínica hoy",
-    "final_cta_desc": "Unite a las clínicas que ya gestionan todo con inteligencia artificial",
-    "showcase_title": "La clínica del futuro, hoy",
-    "showcase_subtitle": "Descubrí por qué Dentalogic es la plataforma preferida por clínicas líderes.",
-    "footer": "Inteligencia artificial para clínicas dentales."
+    "feature_agenda": "Agenda por clínica y profesional. Sincronizable con calendarios Google.",
+    "feature_ai": "Agente de IA telefónico (WhatsApp) que responde, agenda, triagea y deriva a humano.",
+    "feature_analytics": "Analytics para CEOs y analytics para profesionales.",
+    "demo_credentials_title": "Credenciales de Demo",
+    "cta_whatsapp": "Probar WhatsApp IA Agent",
+    "cta_login": "Login con mi cuenta",
+    "credentials_password": "Password:"
   },
   "leads": {
     "status_new": "Nuevo",
@@ -1575,6 +1656,123 @@
     "specific_fears": "Miedos específicos",
     "completed": "Completado",
     "not_completed": "Sin completar"
+  },
+  "roi": {
+    "title": "ROI Dashboard",
+    "total_spend": "Inversión Total",
+    "total_revenue": "Ingresos Totales",
+    "total_leads": "Leads",
+    "conversions": "Conversiones",
+    "conversion_rate": "Tasa de Conversión",
+    "cost_per_lead": "Costo por Lead",
+    "cost_per_conversion": "Costo por Conversión",
+    "attribution_mix": "Mix de Atribución",
+    "trend": "Tendencia",
+    "top_campaigns": "Campañas Top",
+    "first_touch": "First Touch",
+    "last_touch": "Last Touch",
+    "conversion": "Conversión",
+    "organic": "Orgánico",
+    "campaign": "Campaña",
+    "patients": "Pacientes",
+    "real_data_badge": "Datos reales",
+    "estimated_data_badge": "Datos estimados",
+    "no_data": "Sin datos para este período",
+    "period_last_7d": "7 días",
+    "period_last_30d": "30 días",
+    "period_last_90d": "90 días",
+    "period_this_year": "Este año"
+  },
+  "liquidation": {
+    "tab_rendimiento": "Rendimiento",
+    "tab_liquidacion": "Liquidación",
+    "total_billed": "Total Facturado",
+    "total_paid": "Total Cobrado",
+    "total_pending": "Total Pendiente",
+    "total_appointments": "Total Turnos",
+    "total_patients": "Pacientes",
+    "filter_all": "Todos",
+    "filter_pending": "Pendiente",
+    "filter_partial": "Parcial",
+    "filter_paid": "Pagado",
+    "sessions": "sesiones",
+    "session": "sesión",
+    "no_clinical_notes": "Sin notas clínicas",
+    "export_csv": "Exportar CSV",
+    "no_data": "No hay datos de liquidación para el período seleccionado",
+    "treatment_no_type": "Sin tipo asignado",
+    "billing_notes": "Notas de facturación",
+    "clinical_notes": "Notas clínicas",
+    "appointments": "turnos",
+    "patients": "pacientes",
+    "billed": "facturado",
+    "paid": "cobrado",
+    "collected": "cobrado",
+    "pending": "pendiente",
+    "status_paid": "Pagado",
+    "status_partial": "Parcial",
+    "status_pending": "Pendiente",
+    "toggle_notes": "Ver notas clínicas",
+    "empty_state": "No hay datos de liquidación para el período seleccionado"
+  },
+  "errorBoundary": {
+    "title": "Algo salió mal",
+    "description": "Ocurrió un error inesperado. Podés intentar de nuevo o contactar al soporte si el problema persiste.",
+    "retry": "Reintentar"
+  },
+  "digitalRecords": {
+    "tab": "Ficha Digital",
+    "title": "Fichas Digitales",
+    "empty": "No hay fichas generadas para este paciente",
+    "generate": "Generar Ficha",
+    "generating": "Generando ficha digital...",
+    "selectTemplate": "Seleccionar tipo de documento",
+    "clinical_report": "Informe Clínico",
+    "clinical_report_desc": "Resumen clínico completo con odontograma, historial y recomendaciones",
+    "post_surgery": "Informe Post-Quirúrgico",
+    "post_surgery_desc": "Informe de seguimiento post-operatorio con evolución y próximo turno",
+    "odontogram_art": "Evaluación Odontológica",
+    "odontogram_art_desc": "Ficha con odontograma visual para ART u obras sociales",
+    "authorization_request": "Solicitud de Autorización",
+    "authorization_request_desc": "Solicitud formal de autorización para tratamientos",
+    "downloadPdf": "Descargar PDF",
+    "sendEmail": "Enviar por Email",
+    "sendEmailTitle": "Enviar Ficha por Email",
+    "emailPlaceholder": "correo@ejemplo.com",
+    "sending": "Enviando...",
+    "sent": "Enviado",
+    "sentTo": "Enviado a",
+    "delete": "Eliminar",
+    "deleteConfirm": "¿Eliminar esta ficha digital?",
+    "view": "Ver",
+    "back": "Volver",
+    "draft": "Borrador",
+    "final": "Final",
+    "editSection": "Regenerar sección",
+    "warnings": "Advertencias de generación",
+    "warningHallucination": "Se detectaron posibles inconsistencias. Revise los datos marcados.",
+    "generated": "Ficha generada exitosamente",
+    "emailSent": "Ficha enviada exitosamente",
+    "error": "Error al generar la ficha"
+  },
+  "holidays": {
+    "title": "Feriado",
+    "workingDay": "Día laboral",
+    "closure": "Clínica cerrada",
+    "specialHours": "Horario especial",
+    "startTime": "Desde",
+    "endTime": "Hasta",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "invalidTimeRange": "El horario de inicio debe ser anterior al de fin",
+    "toggleSuccess": "Configuración actualizada",
+    "customHours": "Horario personalizado",
+    "nationalHoliday": "Feriado nacional",
+    "customHoliday": "Feriado personalizado",
+    "recurring": "Recurrente",
+    "workingDayDescription": "La clínica atiende este día con horario especial",
+    "override_open": "Horario especial",
+    "type": "Tipo"
   }
 }
 

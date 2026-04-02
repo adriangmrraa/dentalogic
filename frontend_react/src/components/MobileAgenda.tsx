@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import DateStrip from './DateStrip';
-import type { Appointment, Professional, GoogleCalendarBlock } from '../views/AgendaView';
-import { Clock, User, Phone, Lock, CalendarDays, CalendarRange, List, ListOrdered } from 'lucide-react';
+import type { Appointment, Professional, GoogleCalendarBlock, Holiday } from '../views/AgendaView';
+import { Clock, User, Phone, Lock, CalendarDays, CalendarRange, List, ListOrdered, Plus, PartyPopper } from 'lucide-react';
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isWithinInterval, isSameDay, isAfter, addYears } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useTranslation } from '../context/LanguageContext';
+import HolidayDetailModal from './HolidayDetailModal';
 
 type ViewMode = 'day' | 'week' | 'month' | 'list';
 
@@ -14,7 +15,10 @@ interface MobileAgendaProps {
     selectedDate: Date;
     onDateChange: (date: Date) => void;
     onEventClick: (event: any) => void;
+    onNewAppointment: (date: Date) => void;
     professionals: Professional[];
+    holidays?: Holiday[];
+    onHolidaySave?: () => void;
 }
 
 export default function MobileAgenda({
@@ -23,11 +27,15 @@ export default function MobileAgenda({
     selectedDate,
     onDateChange,
     onEventClick,
-    professionals
+    onNewAppointment,
+    professionals,
+    holidays = [],
+    onHolidaySave,
 }: MobileAgendaProps) {
     const { t } = useTranslation();
     const [viewMode, setViewMode] = useState<ViewMode>('day');
     const todayRef = useRef<HTMLDivElement>(null);
+    const [holidayModal, setHolidayModal] = useState<Holiday | null>(null);
 
     useEffect(() => {
         if (viewMode === 'list' && todayRef.current) {
@@ -119,6 +127,13 @@ export default function MobileAgenda({
         });
         return counts;
     }, [allEvents]);
+
+    // Holidays lookup by date
+    const holidaysByDate = useMemo(() => {
+        const map: Record<string, Holiday> = {};
+        holidays.forEach(h => { map[h.date] = h; });
+        return map;
+    }, [holidays]);
 
     // List view: all future events from now, grouped by date, up to 3 years
     const listEvents = useMemo(() => {
@@ -283,14 +298,35 @@ export default function MobileAgenda({
             <div className="flex-1 overflow-y-auto p-4 pb-24 space-y-3 min-h-0">
                 {/* ===== DAY VIEW ===== */}
                 {viewMode === 'day' && (
-                    filteredEvents.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-48 text-white/20">
-                            <Clock size={48} className="mb-2 opacity-30" />
-                            <p className="text-sm text-white/40">{t('agenda.no_appointments_today')}</p>
-                        </div>
-                    ) : (
-                        filteredEvents.map((evt: any) => renderEventCard(evt))
-                    )
+                    <>
+                        {/* Holiday banner */}
+                        {holidaysByDate[format(selectedDate, 'yyyy-MM-dd')] && (
+                            <button
+                                onClick={() => setHolidayModal(holidaysByDate[format(selectedDate, 'yyyy-MM-dd')])}
+                                className="w-full flex items-center gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 mb-3 active:scale-[0.98] transition-all"
+                            >
+                                <div className="w-9 h-9 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
+                                    <PartyPopper size={18} className="text-red-400" />
+                                </div>
+                                <div className="text-left">
+                                    <span className="text-sm font-semibold text-red-400 block">
+                                        {holidaysByDate[format(selectedDate, 'yyyy-MM-dd')].name}
+                                    </span>
+                                    <span className="text-xs text-red-400/60">
+                                        {holidaysByDate[format(selectedDate, 'yyyy-MM-dd')].holiday_type === 'closure' ? 'Clínica cerrada' : 'Horario especial'}
+                                    </span>
+                                </div>
+                            </button>
+                        )}
+                        {filteredEvents.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-48 text-white/20">
+                                <Clock size={48} className="mb-2 opacity-30" />
+                                <p className="text-sm text-white/40">{t('agenda.no_appointments_today')}</p>
+                            </div>
+                        ) : (
+                            filteredEvents.map((evt: any) => renderEventCard(evt))
+                        )}
+                    </>
                 )}
 
                 {/* ===== WEEK VIEW ===== */}
@@ -312,6 +348,11 @@ export default function MobileAgenda({
                                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/[0.06] text-white/40 font-semibold">
                                             {events.length}
                                         </span>
+                                        {holidaysByDate[dateKey] && (
+                                            <button onClick={() => setHolidayModal(holidaysByDate[dateKey])} className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400 font-semibold">
+                                                🎉 {holidaysByDate[dateKey].name}
+                                            </button>
+                                        )}
                                         <div className="flex-1 h-px bg-white/[0.06]" />
                                     </div>
                                     <div className="space-y-2 mb-4">
@@ -337,6 +378,7 @@ export default function MobileAgenda({
                             {monthDays.map(day => {
                                 const dateKey = format(day, 'yyyy-MM-dd');
                                 const count = eventCountByDay[dateKey] || 0;
+                                const holiday = holidaysByDate[dateKey];
                                 const isSelected = isSameDay(day, selectedDate);
                                 const isToday = isSameDay(day, new Date());
                                 return (
@@ -347,17 +389,16 @@ export default function MobileAgenda({
                                             setViewMode('day');
                                         }}
                                         className={`relative flex flex-col items-center py-2 rounded-lg transition-all duration-200 active:scale-90
-                                            ${isSelected ? 'bg-blue-600 text-white' : isToday ? 'bg-blue-500/10 text-blue-400' : 'text-white/50 hover:bg-white/[0.06]'}
+                                            ${isSelected ? 'bg-blue-600 text-white' : isToday ? 'bg-blue-500/10 text-blue-400' : holiday ? 'bg-red-500/10 text-red-400' : 'text-white/50 hover:bg-white/[0.06]'}
                                         `}
                                     >
                                         <span className="text-sm font-semibold">{day.getDate()}</span>
-                                        {count > 0 && (
-                                            <div className="flex gap-0.5 mt-0.5">
-                                                {Array.from({ length: Math.min(count, 3) }).map((_, i) => (
-                                                    <div key={i} className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white/70' : 'bg-blue-400/60'}`} />
-                                                ))}
-                                            </div>
-                                        )}
+                                        <div className="flex gap-0.5 mt-0.5">
+                                            {holiday && <div className={`w-1 h-1 rounded-full ${isSelected ? 'bg-red-300' : 'bg-red-400'}`} />}
+                                            {count > 0 && Array.from({ length: Math.min(count, holiday ? 2 : 3) }).map((_, i) => (
+                                                <div key={i} className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white/70' : 'bg-blue-400/60'}`} />
+                                            ))}
+                                        </div>
                                     </button>
                                 );
                             })}
@@ -467,6 +508,22 @@ export default function MobileAgenda({
 
                 <div className="h-12" />
             </div>
+
+            {/* Holiday Detail Modal */}
+            <HolidayDetailModal
+                holiday={holidayModal}
+                isOpen={!!holidayModal}
+                onClose={() => setHolidayModal(null)}
+                onSaved={() => { setHolidayModal(null); onHolidaySave?.(); }}
+            />
+
+            {/* FAB — New Appointment */}
+            <button
+                onClick={() => onNewAppointment(selectedDate)}
+                className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-500 active:scale-90 shadow-lg shadow-blue-600/30 flex items-center justify-center transition-all duration-200"
+            >
+                <Plus size={24} className="text-white" />
+            </button>
         </div>
     );
 }

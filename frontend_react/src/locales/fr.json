@@ -17,7 +17,8 @@
     "close_menu": "Fermer le menu",
     "expand": "Développer",
     "collapse": "Réduire",
-    "app_name": "Dentalogic"
+    "app_name": "Dentalogic",
+    "roi": "Tableau de bord ROI"
   },
   "common": {
     "save": "Enregistrer",
@@ -40,6 +41,7 @@
     "since": "Depuis",
     "verifying_session": "Vérification de la session...",
     "copied": "Copié",
+    "copyAnamnesisLink": "Copier le lien d'anamnèse",
     "new": "Nouveau",
     "minutes_short": "min",
     "min_short": "m",
@@ -145,7 +147,15 @@
     "have_account": "Déjà un compte ? Connectez-vous ici",
     "request_access_link": "Pas d'accès ? Demandez-le",
     "placeholder_optional": "Optionnel",
-    "placeholder_calendar": "Optionnel. Configurable plus tard dans le profil."
+    "placeholder_calendar": "Optionnel. Configurable plus tard dans le profil.",
+    "tooltip_email": "Utilisez votre email professionnel. Ce sera votre identifiant.",
+    "tooltip_password": "Minimum 8 caractères. Utilisez des lettres et des chiffres.",
+    "tooltip_role": "Professionnel: accès à l'agenda et aux patients. Secrétaire: gestion des rendez-vous. CEO: accès total.",
+    "tooltip_clinic": "Sélectionnez la clinique où vous travaillez. Le CEO doit vous approuver.",
+    "tooltip_specialty": "Votre domaine d'expertise. Apparaîtra sur votre profil public.",
+    "tooltip_phone": "Pour que la clinique puisse vous contacter.",
+    "tooltip_registration_id": "Numéro de licence professionnelle. Facultatif.",
+    "tooltip_google_calendar": "ID de votre calendrier. Configuré plus tard depuis le panneau."
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -575,7 +585,9 @@
     "bank_alias": "Alias",
     "bank_holder_name": "Titulaire du compte",
     "derivation_email_label": "Email de transfert humain",
-    "derivation_email_help": "Email pour les notifications de transfert quand l'IA nécessite une intervention humaine."
+    "derivation_email_help": "Email pour les notifications de transfert quand l'IA nécessite une intervention humaine.",
+    "country_code": "Pays de la clinique",
+    "country_code_help": "Utilisé pour détecter automatiquement les jours fériés nationaux. L'agent IA ne prendra pas de rendez-vous les jours fériés."
   },
   "treatments": {
     "title": "Traitements",
@@ -638,7 +650,103 @@
     "tip_migration": "Astuce : Vérifiez la migration 006_treatment_config.sql",
     "assigned_professionals": "Professionnels Assign\u00e9s",
     "all_if_none": "Si aucun n'est s\u00e9lectionn\u00e9, tous peuvent le r\u00e9aliser",
-    "all_professionals": "Tous les professionnels"
+    "all_professionals": "Tous les professionnels",
+    "instructions": {
+      "configureButton": "Configurer les Instructions",
+      "editButton": "Modifier les Instructions",
+      "configured": "Instructions configurées",
+      "notConfigured": "Aucune instruction configurée",
+      "explanation": "L'assistant IA enverra automatiquement ces instructions au patient après la prise de rendez-vous. Il est important de les compléter correctement.",
+      "modalTitle": "Instructions du Traitement",
+      "pre": {
+        "title": "Instructions Pré-traitement",
+        "helper": "L'assistant enverra ceci avec la confirmation du rendez-vous.",
+        "placeholder": "Ex : Ne pas manger pendant 8 heures avant..."
+      },
+      "post": {
+        "title": "Instructions Post-traitement",
+        "addButton": "Ajouter une instruction",
+        "timing": {
+          "immediate": "Immédiat",
+          "24h": "Après 24 heures",
+          "48h": "Après 48 heures",
+          "72h": "Après 72 heures",
+          "1w": "Après 1 semaine",
+          "stitch_removal": "Retrait des points",
+          "custom": "Personnalisé"
+        },
+        "days": "jours",
+        "bookFollowup": "Suggérer de planifier un rendez-vous de suivi",
+        "contentPlaceholder": "Rédigez les instructions pour ce moment..."
+      },
+      "followup": {
+        "title": "Messages de Suivi Automatique",
+        "inDevelopment": "Les messages de suivi seront envoyés automatiquement après le rendez-vous. Cette fonctionnalité est en cours de développement.",
+        "addButton": "Ajouter un message de suivi",
+        "hoursAfter": "heures après",
+        "variables": "Variables disponibles : {patient_name}, {treatment_name}, {appointment_date}, {professional_name}",
+        "messagePlaceholder": "Bonjour {patient_name}, comment vous sentez-vous après votre {treatment_name} ?"
+      },
+      "save": "Enregistrer les instructions",
+      "cancel": "Annuler"
+    }
+  },
+  "settings": {
+    "insurance": {
+      "title": "Mutuelles et Assurances",
+      "addButton": "Ajouter une Assurance",
+      "emptyState": "Vous n'avez encore configuré aucune assurance. Ajoutez celles que vous acceptez pour que l'assistant puisse répondre automatiquement.",
+      "deleteConfirm": "Supprimer {name} du catalogue ?",
+      "status": {
+        "accepted": "Acceptée",
+        "restricted": "Avec restrictions",
+        "external_derivation": "Orientation externe",
+        "rejected": "Non acceptée"
+      },
+      "fields": {
+        "providerName": "Nom de l'assurance",
+        "status": "Statut",
+        "restrictions": "Restrictions",
+        "externalTarget": "Orienter vers",
+        "requiresCopay": "Nécessite une participation",
+        "copayNotes": "Détails de la participation",
+        "aiTemplate": "Réponse personnalisée de l'assistant",
+        "aiTemplatePlaceholder": "Laisser vide pour utiliser la réponse par défaut"
+      },
+      "errors": {
+        "nameRequired": "Le nom est obligatoire",
+        "restrictionsRequired": "Les restrictions sont obligatoires pour ce statut",
+        "externalTargetRequired": "La destination d'orientation est obligatoire",
+        "duplicateName": "Une assurance avec ce nom existe déjà"
+      }
+    },
+    "derivation": {
+      "title": "Orientation",
+      "addButton": "Ajouter une Règle",
+      "explainer": "Les règles d'orientation déterminent quel professionnel est assigné à chaque patient selon le type de traitement. Elles sont évaluées par ordre de priorité.",
+      "emptyState": "Aucune règle d'orientation configurée. L'assistant assignera les rendez-vous sans filtre de professionnel.",
+      "maxRulesWarning": "Maximum 20 règles par clinique.",
+      "conflictWarning": "Cette règle peut se chevaucher avec '{name}'. Celle avec le numéro le plus bas s'appliquera en premier.",
+      "condition": {
+        "new_patient": "Nouveau patient",
+        "existing_patient": "Patient existant",
+        "any": "N'importe quel patient"
+      },
+      "target": {
+        "specific_professional": "Professionnel spécifique",
+        "priority_professional": "Professionnel prioritaire",
+        "team": "Équipe (sans filtre)"
+      },
+      "fields": {
+        "ruleName": "Nom de la règle",
+        "patientCondition": "Condition du patient",
+        "categories": "Catégories de traitement",
+        "categoriesHelper": "Ex : chirurgie, implants, nettoyage. Utilisez * pour tout.",
+        "targetType": "Orienter vers",
+        "professional": "Professionnel",
+        "description": "Description (optionnel)"
+      }
+    }
   },
   "profile": {
     "title": "Mon profil",
@@ -783,6 +891,7 @@
     "general_fallback": "Général",
     "view_schedules": "Voir horaires",
     "edit_profile": "Modifier le profil",
+    "priorityProfessional": "Professionnel Prioritaire",
     "new_professional": "Nouveau professionnel",
     "total_staff": "Total personnel",
     "active_doctors": "Médecins actifs",
@@ -933,7 +1042,11 @@
   },
   "login_extra": {
     "demo_ready": "Compte démo prêt. Un clic et vous êtes connecté.",
-    "sign_in_link": "Se connecter avec mon compte"
+    "sign_in_link": "Se connecter avec mon compte",
+    "demo_enter_button": "Entrer dans la démo"
+  },
+  "demo": {
+    "whatsapp_message": "Bonjour, j'aimerais des informations sur les rendez-vous."
   },
   "legal": {
     "center_title": "Centre juridique de {appName}",
@@ -1277,5 +1390,122 @@
     "patient_id_placeholder": "UUID du patient",
     "patient_id_help": "Entrez l'ID du patient existant dans le système",
     "convert": "Convertir"
+  },
+  "roi": {
+    "title": "Tableau de bord ROI",
+    "total_spend": "Dépenses Totales",
+    "total_revenue": "Revenus Totaux",
+    "total_leads": "Leads",
+    "conversions": "Conversions",
+    "conversion_rate": "Taux de Conversion",
+    "cost_per_lead": "Coût par Lead",
+    "cost_per_conversion": "Coût par Conversion",
+    "attribution_mix": "Mix d'Attribution",
+    "trend": "Tendance",
+    "top_campaigns": "Meilleures Campagnes",
+    "first_touch": "Premier Contact",
+    "last_touch": "Dernier Contact",
+    "conversion": "Conversion",
+    "organic": "Organique",
+    "campaign": "Campagne",
+    "patients": "Patients",
+    "real_data_badge": "Données réelles",
+    "estimated_data_badge": "Données estimées",
+    "no_data": "Aucune donnée pour cette période",
+    "period_last_7d": "7 jours",
+    "period_last_30d": "30 jours",
+    "period_last_90d": "90 jours",
+    "period_this_year": "Cette année"
+  },
+  "liquidation": {
+    "tab_rendimiento": "Performance",
+    "tab_liquidacion": "Liquidation",
+    "total_billed": "Total Facturé",
+    "total_paid": "Total Encaissé",
+    "total_pending": "Total En Attente",
+    "total_appointments": "Total Rendez-vous",
+    "total_patients": "Patients",
+    "filter_all": "Tous",
+    "filter_pending": "En attente",
+    "filter_partial": "Partiel",
+    "filter_paid": "Payé",
+    "sessions": "séances",
+    "session": "séance",
+    "no_clinical_notes": "Pas de notes cliniques",
+    "export_csv": "Exporter CSV",
+    "no_data": "Aucune donnée de liquidation pour la période sélectionnée",
+    "treatment_no_type": "Aucun type assigné",
+    "billing_notes": "Notes de facturation",
+    "clinical_notes": "Notes cliniques",
+    "appointments": "rendez-vous",
+    "patients": "patients",
+    "billed": "facturé",
+    "paid": "encaissé",
+    "collected": "encaissé",
+    "pending": "en attente",
+    "status_paid": "Payé",
+    "status_partial": "Partiel",
+    "status_pending": "En attente",
+    "toggle_notes": "Voir les notes cliniques",
+    "empty_state": "Aucune donnée de liquidation pour la période sélectionnée"
+  },
+  "errorBoundary": {
+    "title": "Quelque chose s'est mal passé",
+    "description": "Une erreur inattendue s'est produite. Vous pouvez réessayer ou contacter le support si le problème persiste.",
+    "retry": "Réessayer"
+  },
+  "digitalRecords": {
+    "tab": "Fiche Numérique",
+    "title": "Fiches Numériques",
+    "empty": "Aucune fiche générée pour ce patient",
+    "generate": "Générer une Fiche",
+    "generating": "Génération de la fiche numérique...",
+    "selectTemplate": "Sélectionner le type de document",
+    "clinical_report": "Rapport Clinique",
+    "clinical_report_desc": "Résumé clinique complet avec odontogramme, historique et recommandations",
+    "post_surgery": "Rapport Post-Opératoire",
+    "post_surgery_desc": "Rapport de suivi post-opératoire avec évolution et prochain rendez-vous",
+    "odontogram_art": "Évaluation Dentaire",
+    "odontogram_art_desc": "Fiche avec odontogramme visuel pour assurance ou sécurité sociale",
+    "authorization_request": "Demande d'Autorisation",
+    "authorization_request_desc": "Demande formelle d'autorisation pour les traitements",
+    "downloadPdf": "Télécharger PDF",
+    "sendEmail": "Envoyer par Email",
+    "sendEmailTitle": "Envoyer la Fiche par Email",
+    "emailPlaceholder": "email@exemple.com",
+    "sending": "Envoi en cours...",
+    "sent": "Envoyé",
+    "sentTo": "Envoyé à",
+    "delete": "Supprimer",
+    "deleteConfirm": "Supprimer cette fiche numérique ?",
+    "view": "Voir",
+    "back": "Retour",
+    "draft": "Brouillon",
+    "final": "Final",
+    "editSection": "Régénérer la section",
+    "warnings": "Avertissements de génération",
+    "warningHallucination": "Des incohérences possibles ont été détectées. Veuillez vérifier les données signalées.",
+    "generated": "Fiche générée avec succès",
+    "emailSent": "Fiche envoyée avec succès",
+    "error": "Erreur lors de la génération de la fiche"
+  },
+  "holidays": {
+    "title": "Jour férié",
+    "workingDay": "Jour ouvrable",
+    "closure": "Clinique fermée",
+    "specialHours": "Horaires spéciaux",
+    "startTime": "De",
+    "endTime": "À",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "invalidTimeRange": "L'heure de début doit être antérieure à l'heure de fin",
+    "toggleSuccess": "Configuration mise à jour",
+    "customHours": "Horaires personnalisés",
+    "nationalHoliday": "Jour férié national",
+    "customHoliday": "Jour férié personnalisé",
+    "recurring": "Récurrent",
+    "workingDayDescription": "La clinique fonctionne ce jour avec des horaires spéciaux",
+    "override_open": "Horaires spéciaux",
+    "type": "Type"
   }
 }

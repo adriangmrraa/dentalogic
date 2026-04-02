@@ -48,6 +48,14 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, []);
 
   useEffect(() => {
+    // If there's already a user-chosen language in localStorage, respect it
+    // and skip the API call — the user's explicit choice takes priority.
+    const storedLang = localStorage.getItem(STORAGE_KEY);
+    if (storedLang === 'es' || storedLang === 'en' || storedLang === 'fr') {
+      setIsLoading(false);
+      return;
+    }
+
     const userProfile = localStorage.getItem('USER_PROFILE');
     if (!userProfile) {
       setIsLoading(false);

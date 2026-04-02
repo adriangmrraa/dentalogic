@@ -8,6 +8,7 @@ import listPlugin from '@fullcalendar/list';
 import resourceTimeGridPlugin from '@fullcalendar/resource-timegrid';
 import AppointmentForm from '../components/AppointmentForm';
 import MobileAgenda from '../components/MobileAgenda';
+import HolidayDetailModal from '../components/HolidayDetailModal';
 import { RefreshCw, Stethoscope } from 'lucide-react';
 import AppointmentCard from '../components/AppointmentCard';
 import api from '../api/axios';
@@ -62,6 +63,18 @@ export interface Patient {
   first_name: string;
   last_name: string;
   phone_number: string;
+}
+
+export interface Holiday {
+  id?: string;
+  date: string;
+  name: string;
+  holiday_type?: string;
+  is_recurring?: boolean;
+  country_code?: string;
+  custom_hours_start?: string | null;
+  custom_hours_end?: string | null;
+  custom_hours?: { start: string; end: string } | null;
 }
 
 // ==================== SOURCE COLORS ====================
@@ -126,12 +139,14 @@ export default function AgendaView() {
   const location = useLocation();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [googleBlocks, setGoogleBlocks] = useState<GoogleCalendarBlock[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Appointment | null>(null);
+  const [selectedHoliday, setSelectedHoliday] = useState<Holiday | null>(null);
   // Keep selectedEvent in sync when appointments reload (e.g., after PAYMENT_CONFIRMED socket event)
   useEffect(() => {
     if (selectedEvent && appointments.length > 0) {
@@ -295,15 +310,17 @@ export default function AgendaView() {
         params.professional_id = profFilter;
       }
 
-      const [appointmentsRes, blocksRes] = await Promise.all([
+      const [appointmentsRes, blocksRes, holidaysRes] = await Promise.all([
         api.get('/admin/appointments', { params }),
         fetchGoogleBlocks(startDateStr, endDateStr, profFilter),
+        api.get('/admin/holidays', { params: { days: 365 } }),
       ]);
 
       const newAppointments = appointmentsRes.data;
       setAppointments(newAppointments);
       eventsRef.current = newAppointments;
       setGoogleBlocks(blocksRes || []);
+      setHolidays(holidaysRes.data?.upcoming || []);
       // Los eventos se pasan via prop `events={calendarEvents}` — no manipular el calendario directamente
       // para evitar el loop datesSet → fetchData → re-render → datesSet
     } catch (error) {
@@ -386,6 +403,9 @@ export default function AgendaView() {
     return googleBlocks.filter((block: GoogleCalendarBlock) => block.professional_id?.toString() === selectedProfessionalId);
   }, [googleBlocks, selectedProfessionalId]);
 
+  // Holidays shown to all users (not filtered by professional)
+  const filteredHolidays = useMemo(() => holidays, [holidays]);
+
   // Professional user: lock filter to their id once we have professionals
   useEffect(() => {
     if (user?.role === 'professional' && user?.email && professionals.length > 0) {
@@ -461,6 +481,16 @@ export default function AgendaView() {
       extendedProps: { ...block, eventType: 'gcalendar_block' },
       resourceId: block.professional_id?.toString() || undefined,
     })),
+    ...filteredHolidays.map((holiday) => ({
+      id: holiday.id || `holiday-${holiday.date}`,
+      title: `🎉 ${holiday.name}`,
+      start: holiday.date,
+      allDay: true,
+      backgroundColor: '#ef4444', // Red for holidays
+      borderColor: '#ef4444',
+      textColor: '#ffffff',
+      extendedProps: { ...holiday, eventType: 'holiday' },
+    })),
   ];
 
   // Map professionals to resources (professional user: only their column)
@@ -500,8 +530,17 @@ export default function AgendaView() {
   };
 
   const handleEventClick = (info: any) => {
+    const eventType = info.event.extendedProps.eventType;
+    
+    // Check if it's a holiday
+    if (eventType === 'holiday') {
+      const holiday = info.event.extendedProps as Holiday;
+      setSelectedHoliday(holiday);
+      return;
+    }
+    
     // Check if it's a Google Calendar block
-    if (info.event.extendedProps.eventType === 'gcalendar_block') {
+    if (eventType === 'gcalendar_block') {
       alert(`${t('agenda.google_block')}:\n\n${info.event.title}\n${new Date(info.event.start).toLocaleString(language)} - ${new Date(info.event.end).toLocaleString(language)}`);
       return;
     }
@@ -637,11 +676,13 @@ export default function AgendaView() {
               selectedDate={selectedDate || new Date()}
               onDateChange={(date) => {
                 setSelectedDate(date);
-                // Sync calendar ref if it ever gets remounted or for consistency
                 if (calendarRef.current) calendarRef.current.getApi().gotoDate(date);
               }}
               onEventClick={handleEventClick}
+              onNewAppointment={(date) => handleDateClick({ date })}
               professionals={professionals}
+              holidays={holidays}
+              onHolidaySave={() => fetchData()}
             />
         </div>
       ) : (
@@ -1010,6 +1051,14 @@ export default function AgendaView() {
           onDelete={handleDelete}
           isEditing={!!selectedEvent}
         />
+
+      {/* Holiday Detail Modal */}
+      <HolidayDetailModal
+        holiday={selectedHoliday}
+        isOpen={!!selectedHoliday}
+        onClose={() => setSelectedHoliday(null)}
+        onSaved={() => { setSelectedHoliday(null); fetchData(); }}
+      />
     </div>
   );
 }

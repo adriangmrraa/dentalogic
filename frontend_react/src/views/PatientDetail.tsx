@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, Phone, Mail, AlertTriangle,
   FileText, Plus, Activity, Heart, Pill, Stethoscope, Megaphone,
-  ClipboardList, History, Folder, X, HeartPulse
+  ClipboardList, History, Folder, X, HeartPulse, Link, Check, Copy
 } from 'lucide-react';
 import api from '../api/axios';
 import { useTranslation } from '../context/LanguageContext';
@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import Odontogram from '../components/Odontogram';
 import DocumentGallery from '../components/DocumentGallery';
 import AnamnesisPanel from '../components/AnamnesisPanel';
+import DigitalRecordsTab from '../components/DigitalRecordsTab';
 import { io, Socket } from 'socket.io-client';
 import { BACKEND_URL } from '../api/axios';
 
@@ -36,6 +37,7 @@ interface Patient {
   next_appointment_date?: string;
   last_visit?: string;
   pending_balance?: number;
+  anamnesis_token?: string;
 }
 
 interface ClinicalRecord {
@@ -60,7 +62,7 @@ const criticalConditions = [
   'vih', 'hepatitis', 'asma severa'
 ];
 
-type TabType = 'summary' | 'history' | 'documents' | 'anamnesis';
+type TabType = 'summary' | 'history' | 'documents' | 'anamnesis' | 'digital_records';
 
 export default function PatientDetail() {
   const { id } = useParams<{ id: string }>();
@@ -72,11 +74,13 @@ export default function PatientDetail() {
   const [loading, setLoading] = useState(true);
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [criticalConditionsFound, setCriticalConditionsFound] = useState<string[]>([]);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('summary');
   const { user } = useAuth();
   const idRef = useRef<string | undefined>(id);
   const socketRef = useRef<Socket | null>(null);
   const [anamnesisRefreshKey, setAnamnesisRefreshKey] = useState(0);
+  const [digitalRecordsRefreshKey, setDigitalRecordsRefreshKey] = useState(0);
 
   const [formData, setFormData] = useState({
     record_type: 'evolution',
@@ -130,7 +134,7 @@ export default function PatientDetail() {
   useEffect(() => {
     const jwtToken = localStorage.getItem('access_token');
     const adminToken = localStorage.getItem('ADMIN_TOKEN');
-    
+
     socketRef.current = io(BACKEND_URL, {
       transports: ['websocket', 'polling'],
       auth: { token: jwtToken || '', adminToken: adminToken || '' },
@@ -151,6 +155,20 @@ export default function PatientDetail() {
       const currentPatientId = id ? parseInt(id) : null;
       if (payload.patient_id && payload.patient_id === currentPatientId) {
         fetchPatientData();
+      }
+    });
+
+    socketRef.current.on('DIGITAL_RECORD_CREATED', (payload: { patient_id?: number }) => {
+      const currentPatientId = id ? parseInt(id) : null;
+      if (payload.patient_id && payload.patient_id === currentPatientId) {
+        setDigitalRecordsRefreshKey(prev => prev + 1);
+      }
+    });
+
+    socketRef.current.on('DIGITAL_RECORD_SENT', (payload: { patient_id?: number }) => {
+      const currentPatientId = id ? parseInt(id) : null;
+      if (payload.patient_id && payload.patient_id === currentPatientId) {
+        setDigitalRecordsRefreshKey(prev => prev + 1);
       }
     });
 
@@ -228,14 +246,14 @@ export default function PatientDetail() {
     }
   };
 
-  // Obtener etiqueta legible para fuente de adquisición
+  // Obtener etiqueta legible para fuente de adquisicion
   const getAcquisitionSourceLabel = (source: string) => {
     const sourceMap: Record<string, string> = {
       'INSTAGRAM': 'Instagram',
       'GOOGLE': 'Google',
       'REFERRED': 'Referido',
       'OTHER': 'Otro',
-      'ORGANIC': 'Orgánico'
+      'ORGANIC': 'Organico'
     };
     return sourceMap[source] || source;
   };
@@ -245,9 +263,32 @@ export default function PatientDetail() {
       case 'anamnesis':
         return (
           <div className="bg-white/[0.03] border border-white/[0.06] rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <HeartPulse size={20} className="text-primary" /> Anamnesis
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <HeartPulse size={20} className="text-primary" /> Anamnesis
+              </h3>
+              {patient?.anamnesis_token && (
+                <button
+                  onClick={() => {
+                    const tenantId = (user as any)?.tenant_id || localStorage.getItem('X-Tenant-ID') || '1';
+                    const baseUrl = window.location.origin;
+                    const link = `${baseUrl}/anamnesis/${tenantId}/${patient.anamnesis_token}`;
+                    navigator.clipboard.writeText(link).then(() => {
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    });
+                  }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    linkCopied
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      : 'bg-white/[0.06] text-white/70 border border-white/[0.08] hover:bg-white/[0.1] hover:text-white'
+                  }`}
+                >
+                  {linkCopied ? <Check size={14} /> : <Copy size={14} />}
+                  {linkCopied ? t('copied') || 'Copiado' : t('copyAnamnesisLink') || 'Copiar link de anamnesis'}
+                </button>
+              )}
+            </div>
             <AnamnesisPanel
               patientId={parseInt(id!)}
               userRole={(user as any)?.role}
@@ -270,7 +311,7 @@ export default function PatientDetail() {
                     <p className="text-lg font-bold text-white">{records.length}</p>
                   </div>
                   <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
-                    <p className="text-[10px] text-white/40 uppercase font-bold">Próximo turno</p>
+                    <p className="text-[10px] text-white/40 uppercase font-bold">Proximo turno</p>
                     <p className="text-sm font-semibold text-blue-400">
                       {patient?.next_appointment_date
                         ? new Date(patient.next_appointment_date).toLocaleDateString('es-AR', {day:'2-digit', month:'short'})
@@ -278,7 +319,7 @@ export default function PatientDetail() {
                     </p>
                   </div>
                   <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
-                    <p className="text-[10px] text-white/40 uppercase font-bold">Última visita</p>
+                    <p className="text-[10px] text-white/40 uppercase font-bold">Ultima visita</p>
                     <p className="text-sm font-semibold text-white/60">
                       {patient?.last_visit
                         ? new Date(patient.last_visit).toLocaleDateString('es-AR', {day:'2-digit', month:'short', year:'numeric'})
@@ -290,7 +331,7 @@ export default function PatientDetail() {
                     <p className={`text-sm font-bold ${(patient?.pending_balance || 0) > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
                       {(patient?.pending_balance || 0) > 0
                         ? `$${Math.round(patient.pending_balance).toLocaleString('es-AR')}`
-                        : 'Al día'}
+                        : 'Al dia'}
                     </p>
                   </div>
                 </div>
@@ -303,12 +344,12 @@ export default function PatientDetail() {
               initialData={records[0]?.odontogram_data}
               readOnly={false}
               onSave={() => {
-                // Recargar datos después de guardar
+                // Recargar datos despues de guardar
                 fetchPatientData();
               }}
             />
 
-            {/* Información básica del paciente */}
+            {/* Informacion basica del paciente */}
             <div className="bg-white/[0.03] border border-white/[0.06] rounded-lg p-6">
               <h3 className="text-lg font-semibold text-white mb-4">{t('patient_detail.basic_info')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -348,7 +389,7 @@ export default function PatientDetail() {
       case 'history':
         return (
           <div className="space-y-6">
-            {/* Header de la sección */}
+            {/* Header de la seccion */}
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-semibold text-white">{t('patient_detail.tabs.history')}</h3>
@@ -365,7 +406,7 @@ export default function PatientDetail() {
               </button>
             </div>
 
-            {/* Lista de registros clínicos */}
+            {/* Lista de registros clinicos */}
             {records.length === 0 ? (
               <div className="bg-white/[0.03] border border-white/[0.06] rounded-lg p-8 text-center">
                 <FileText size={48} className="mx-auto mb-4 text-white/30" />
@@ -450,8 +491,8 @@ export default function PatientDetail() {
                           )}
                           {record.vital_signs.temperature && (
                             <div className="text-xs">
-                              <span className="text-white/30">{t('patient_detail.temperature_short') || 'T°'}: </span>
-                              <span className="text-white">{record.vital_signs.temperature}°C</span>
+                              <span className="text-white/30">{t('patient_detail.temperature_short') || 'T'}: </span>
+                              <span className="text-white">{record.vital_signs.temperature}C</span>
                             </div>
                           )}
                         </div>
@@ -469,6 +510,15 @@ export default function PatientDetail() {
           <DocumentGallery
             patientId={parseInt(id!)}
             readOnly={false}
+          />
+        );
+
+      case 'digital_records':
+        return (
+          <DigitalRecordsTab
+            patientId={parseInt(id!)}
+            patientEmail={patient?.email || ''}
+            refreshKey={digitalRecordsRefreshKey}
           />
         );
 
@@ -524,16 +574,16 @@ export default function PatientDetail() {
                   )}
                 </div>
 
-                {/* Datos Demográficos - Nuevos campos de admisión */}
+                {/* Datos Demograficos - Nuevos campos de admision */}
                 <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-white/40">
                   {patient.city && (
                     <span className="bg-white/[0.04] px-2 py-0.5 rounded">
-                      📍 {patient.city}
+                      {patient.city}
                     </span>
                   )}
                   {patient.birth_date && (
                     <span className="bg-white/[0.04] px-2 py-0.5 rounded">
-                      🎂 {formatBirthDate(patient.birth_date)}
+                      {formatBirthDate(patient.birth_date)}
                     </span>
                   )}
                   {patient.acquisition_source && patient.acquisition_source !== 'ORGANIC' && (
@@ -543,18 +593,18 @@ export default function PatientDetail() {
                   )}
                   {patient.insurance_provider ? (
                     <span className="bg-green-500/10 text-green-400 px-2 py-0.5 rounded">
-                      🏥 {patient.insurance_provider}
+                      {patient.insurance_provider}
                     </span>
                   ) : (
                     <span className="bg-white/[0.04] text-white/60 px-2 py-0.5 rounded">
-                      🏥 Particular
+                      Particular
                     </span>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Alertas Médicas */}
+            {/* Alertas Medicas */}
             {criticalConditionsFound.length > 0 && (
               <div className="sm:ml-auto flex items-center gap-2 bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-2 rounded-lg">
                 <AlertTriangle size={18} className="shrink-0" />
@@ -593,7 +643,7 @@ export default function PatientDetail() {
           </div>
         </div>
 
-        {/* Sistema de Pestañas con Scroll Isolation Horizontal */}
+        {/* Sistema de Pestanas con Scroll Isolation Horizontal */}
         <div className="border-t border-white/[0.06]">
           <div className="flex overflow-x-auto hide-scrollbar">
             <button
@@ -647,6 +697,19 @@ export default function PatientDetail() {
                 Anamnesis
               </div>
             </button>
+            <button
+              onClick={() => setActiveTab('digital_records')}
+              className={`flex-shrink-0 py-3 px-3 lg:px-4 text-xs lg:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'digital_records'
+                ? 'text-primary border-b-2 border-primary'
+                : 'text-white/40 hover:text-white/70 hover:bg-white/[0.04]'
+                }`}
+            >
+              <div className="flex items-center justify-center gap-1.5">
+                <FileText size={16} />
+                <span className="hidden sm:inline">{t('digitalRecords.tab')}</span>
+                <span className="sm:hidden">Fichas</span>
+              </div>
+            </button>
           </div>
         </div>
       </div>
@@ -658,7 +721,7 @@ export default function PatientDetail() {
         </div>
       </div>
 
-      {/* Modal para agregar nota (Adaptación Mobile) */}
+      {/* Modal para agregar nota (Adaptacion Mobile) */}
       {showNoteForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50">
           <div className="bg-[#0d1117] border border-white/[0.08] w-full sm:max-w-2xl sm:mx-4 sm:rounded-lg rounded-t-xl sm:rounded-t-lg h-[90vh] sm:h-auto sm:max-h-[90vh] flex flex-col">

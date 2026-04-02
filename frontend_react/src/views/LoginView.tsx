@@ -29,15 +29,15 @@ interface ClinicOption {
   clinic_name: string;
 }
 
-const TOOLTIPS: Record<string, string> = {
-  email: 'Usa tu email profesional. Sera tu usuario de acceso.',
-  password: 'Minimo 8 caracteres. Usa letras y numeros.',
-  role: 'Profesional: acceso a agenda y pacientes. Secretaria: gestion de turnos. CEO: acceso total.',
-  clinic: 'Selecciona la clinica donde trabajas. El CEO te debe aprobar.',
-  specialty: 'Tu area de expertise. Aparecera en tu perfil publico.',
-  phone: 'Para que la clinica pueda contactarte.',
-  registration_id: 'Numero de matricula profesional. Opcional.',
-  google_calendar: 'ID de tu calendario. Se configura despues desde el panel.',
+const TOOLTIP_KEYS: Record<string, string> = {
+  email: 'login.tooltip_email',
+  password: 'login.tooltip_password',
+  role: 'login.tooltip_role',
+  clinic: 'login.tooltip_clinic',
+  specialty: 'login.tooltip_specialty',
+  phone: 'login.tooltip_phone',
+  registration_id: 'login.tooltip_registration_id',
+  google_calendar: 'login.tooltip_google_calendar',
 };
 
 /* ── Inline styles for CSS animations (no external CSS needed) ── */
@@ -583,7 +583,7 @@ const LoginView: React.FC = () => {
                           disabled={loading}
                           className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white text-sm font-semibold hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-300 disabled:opacity-50"
                         >
-                          {loading ? t('login.processing') : 'Entrar a la demo'}
+                          {loading ? t('login.processing') : t('login_extra.demo_enter_button')}
                         </button>
                         <div className="text-center">
                           <Link to="/login" className="text-sm text-cyan-400/70 hover:text-white transition-colors duration-300">
@@ -630,7 +630,7 @@ const LoginView: React.FC = () => {
                         <div>
                           <label className={labelClass}>
                             {t('login.email')}
-                            <Tooltip text={TOOLTIPS.email} />
+                            <Tooltip text={t(TOOLTIP_KEYS.email)} />
                           </label>
                           <div className="relative">
                             <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/20" />
@@ -648,7 +648,7 @@ const LoginView: React.FC = () => {
                         <div>
                           <label className={labelClass}>
                             {t('login.password')}
-                            <Tooltip text={TOOLTIPS.password} />
+                            <Tooltip text={t(TOOLTIP_KEYS.password)} />
                           </label>
                           <div className="relative">
                             <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/20" />
@@ -675,7 +675,7 @@ const LoginView: React.FC = () => {
                           <div>
                             <label className={labelClass}>
                               {t('login.role')}
-                              <Tooltip text={TOOLTIPS.role} />
+                              <Tooltip text={t(TOOLTIP_KEYS.role)} />
                             </label>
                             <select value={role} onChange={(e) => setRole(e.target.value)} className={selectClass}>
                               <option value="professional">{t('login.role_professional')}</option>
@@ -690,7 +690,7 @@ const LoginView: React.FC = () => {
                           <div>
                             <label className={labelClass}>
                               {t('login.clinic')} <span className="text-blue-400/80">*</span>
-                              <Tooltip text={TOOLTIPS.clinic} />
+                              <Tooltip text={t(TOOLTIP_KEYS.clinic)} />
                             </label>
                             <select
                               value={tenantId}
@@ -715,7 +715,7 @@ const LoginView: React.FC = () => {
                             <div>
                               <label className={labelClass}>
                                 {t('login.specialty')}
-                                <Tooltip text={TOOLTIPS.specialty} />
+                                <Tooltip text={t(TOOLTIP_KEYS.specialty)} />
                               </label>
                               <select value={specialty} onChange={(e) => setSpecialty(e.target.value)} className={selectClass}>
                                 <option value="">{t('login.select_specialty')}</option>
@@ -728,7 +728,7 @@ const LoginView: React.FC = () => {
                               <div>
                                 <label className={labelClass}>
                                   {t('login.phone')}
-                                  <Tooltip text={TOOLTIPS.phone} />
+                                  <Tooltip text={t(TOOLTIP_KEYS.phone)} />
                                 </label>
                                 <input
                                   type="text"
@@ -741,7 +741,7 @@ const LoginView: React.FC = () => {
                               <div>
                                 <label className={labelClass}>
                                   {t('login.registration_id')}
-                                  <Tooltip text={TOOLTIPS.registration_id} />
+                                  <Tooltip text={t(TOOLTIP_KEYS.registration_id)} />
                                 </label>
                                 <input
                                   type="text"
@@ -755,7 +755,7 @@ const LoginView: React.FC = () => {
                             <div>
                               <label className={labelClass}>
                                 Google Calendar ID
-                                <Tooltip text={TOOLTIPS.google_calendar} />
+                                <Tooltip text={t(TOOLTIP_KEYS.google_calendar)} />
                               </label>
                               <input
                                 type="text"
@@ -773,7 +773,7 @@ const LoginView: React.FC = () => {
                           <div>
                             <label className={labelClass}>
                               {t('login.phone')}
-                              <Tooltip text={TOOLTIPS.phone} />
+                              <Tooltip text={t(TOOLTIP_KEYS.phone)} />
                             </label>
                             <input
                               type="text"

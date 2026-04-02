@@ -19,7 +19,8 @@
     "expand": "Expand",
     "collapse": "Collapse",
     "app_name": "Dentalogic",
-    "credentials": "Credentials"
+    "credentials": "Credentials",
+    "roi": "ROI Dashboard"
   },
   "common": {
     "save": "Save",
@@ -42,6 +43,7 @@
     "since": "Since",
     "verifying_session": "Verifying session...",
     "copied": "Copied",
+    "copyAnamnesisLink": "Copy anamnesis link",
     "new": "New",
     "minutes_short": "min",
     "min_short": "m",
@@ -147,7 +149,15 @@
     "have_account": "Already have an account? Log in here",
     "request_access_link": "No access? Request it now",
     "placeholder_optional": "Optional",
-    "placeholder_calendar": "Optional. Configurable later in profile."
+    "placeholder_calendar": "Optional. Configurable later in profile.",
+    "tooltip_email": "Use your professional email. It will be your login username.",
+    "tooltip_password": "Minimum 8 characters. Use letters and numbers.",
+    "tooltip_role": "Professional: access to agenda and patients. Secretary: appointment management. CEO: full access.",
+    "tooltip_clinic": "Select the clinic where you work. The CEO must approve you.",
+    "tooltip_specialty": "Your area of expertise. It will appear on your public profile.",
+    "tooltip_phone": "So the clinic can contact you.",
+    "tooltip_registration_id": "Professional license number. Optional.",
+    "tooltip_google_calendar": "Your calendar ID. Configured later from the panel."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -582,7 +592,9 @@
     "bank_alias": "Alias",
     "bank_holder_name": "Account Holder Name",
     "derivation_email_label": "Human Handoff Email",
-    "derivation_email_help": "Email where handoff notifications will be sent when the AI needs human intervention."
+    "derivation_email_help": "Email where handoff notifications will be sent when the AI needs human intervention.",
+    "country_code": "Clinic Country",
+    "country_code_help": "Used to automatically detect national holidays. The AI agent won't schedule appointments on holidays."
   },
   "treatments": {
     "title": "Treatments",
@@ -645,7 +657,103 @@
     "tip_migration": "Tip: Check the 006_treatment_config.sql migration",
     "assigned_professionals": "Assigned Professionals",
     "all_if_none": "If none selected, all professionals can perform it",
-    "all_professionals": "All professionals"
+    "all_professionals": "All professionals",
+    "instructions": {
+      "configureButton": "Configure Instructions",
+      "editButton": "Edit Instructions",
+      "configured": "Instructions configured",
+      "notConfigured": "No instructions configured",
+      "explanation": "The AI assistant will automatically send these instructions to the patient after scheduling an appointment. It is important to complete them correctly.",
+      "modalTitle": "Treatment Instructions",
+      "pre": {
+        "title": "Pre-treatment Instructions",
+        "helper": "The assistant will send this along with the appointment confirmation.",
+        "placeholder": "E.g.: Do not eat for 8 hours before..."
+      },
+      "post": {
+        "title": "Post-treatment Instructions",
+        "addButton": "Add instruction",
+        "timing": {
+          "immediate": "Immediate",
+          "24h": "After 24 hours",
+          "48h": "After 48 hours",
+          "72h": "After 72 hours",
+          "1w": "After 1 week",
+          "stitch_removal": "Stitch removal",
+          "custom": "Custom"
+        },
+        "days": "days",
+        "bookFollowup": "Suggest scheduling a follow-up appointment",
+        "contentPlaceholder": "Write the instructions for this moment..."
+      },
+      "followup": {
+        "title": "Automatic Follow-up Messages",
+        "inDevelopment": "Follow-up messages will be sent automatically after the appointment. This feature is under development.",
+        "addButton": "Add follow-up message",
+        "hoursAfter": "hours after",
+        "variables": "Available variables: {patient_name}, {treatment_name}, {appointment_date}, {professional_name}",
+        "messagePlaceholder": "Hi {patient_name}, how are you feeling after your {treatment_name}?"
+      },
+      "save": "Save instructions",
+      "cancel": "Cancel"
+    }
+  },
+  "settings": {
+    "insurance": {
+      "title": "Insurance Providers",
+      "addButton": "Add Insurance Provider",
+      "emptyState": "You haven't configured any insurance providers yet. Add the ones you accept so the assistant can respond automatically.",
+      "deleteConfirm": "Remove {name} from the catalog?",
+      "status": {
+        "accepted": "Accepted",
+        "restricted": "With restrictions",
+        "external_derivation": "External referral",
+        "rejected": "Not accepted"
+      },
+      "fields": {
+        "providerName": "Insurance provider name",
+        "status": "Status",
+        "restrictions": "Restrictions",
+        "externalTarget": "Refer to",
+        "requiresCopay": "Requires co-payment",
+        "copayNotes": "Co-payment details",
+        "aiTemplate": "Custom assistant response",
+        "aiTemplatePlaceholder": "Leave empty to use the default response"
+      },
+      "errors": {
+        "nameRequired": "Name is required",
+        "restrictionsRequired": "Restrictions are required for this status",
+        "externalTargetRequired": "Referral destination is required",
+        "duplicateName": "An insurance provider with that name already exists"
+      }
+    },
+    "derivation": {
+      "title": "Derivation",
+      "addButton": "Add Rule",
+      "explainer": "Derivation rules determine which professional is assigned to each patient based on treatment type. They are evaluated in priority order.",
+      "emptyState": "No derivation rules configured. The assistant will assign appointments without a professional filter.",
+      "maxRulesWarning": "Maximum 20 rules per clinic.",
+      "conflictWarning": "This rule may overlap with '{name}'. The one with the lower number will apply first.",
+      "condition": {
+        "new_patient": "New patient",
+        "existing_patient": "Existing patient",
+        "any": "Any patient"
+      },
+      "target": {
+        "specific_professional": "Specific professional",
+        "priority_professional": "Priority professional",
+        "team": "Team (no filter)"
+      },
+      "fields": {
+        "ruleName": "Rule name",
+        "patientCondition": "Patient condition",
+        "categories": "Treatment categories",
+        "categoriesHelper": "E.g.: surgery, implants, cleaning. Use * for all.",
+        "targetType": "Refer to",
+        "professional": "Professional",
+        "description": "Description (optional)"
+      }
+    }
   },
   "profile": {
     "title": "My Profile",
@@ -828,7 +936,8 @@
     "sign_medical_alta": "Sign medical onboarding",
     "general_fallback": "General",
     "view_schedules": "View schedules",
-    "edit_profile": "Edit profile"
+    "edit_profile": "Edit profile",
+    "priorityProfessional": "Priority Professional"
   },
   "layout": {
     "app_title": "Dentalogic",
@@ -1308,7 +1417,11 @@
   },
   "login_extra": {
     "demo_ready": "Demo account ready. One click and you're in.",
-    "sign_in_link": "Sign in with my account"
+    "sign_in_link": "Sign in with my account",
+    "demo_enter_button": "Enter the demo"
+  },
+  "demo": {
+    "whatsapp_message": "Hello, I'd like to inquire about appointments."
   },
   "legal": {
     "center_title": "{appName} Legal Center",
@@ -1356,47 +1469,15 @@
     "headline": "Agenda, patients and AI in a single app",
     "subheadline": "Try the platform with one click. No credit card. Immediate access to the demo.",
     "cta_try_app": "Try the app",
-    "cta_disclaimer": "We automatically log you into the demo account (no credentials exposed)",
+    "cta_disclaimer": "We automatically log you in the background directly to the demo account (without exposing passwords in screenshots)",
+    "demo_title": "What the demo includes",
+    "feature_agenda": "Agenda by clinic and professional. Syncs with Google calendars.",
+    "feature_ai": "Telephone AI agent (WhatsApp) that answers, schedules, triages and hands off to human.",
+    "feature_analytics": "Analytics for CEOs and analytics for professionals.",
+    "demo_credentials_title": "Demo Credentials",
     "cta_whatsapp": "Try WhatsApp AI Agent",
     "cta_login": "Login with my account",
-    "demo_title": "What the demo includes",
-    "demo_credentials_title": "Demo Credentials",
-    "credentials_password": "Password:",
-    "feature_agenda": "Agenda by clinic and professional. Syncs with Google Calendar.",
-    "feature_ai": "AI agent on WhatsApp: scheduling, triage, and human handoff.",
-    "feature_analytics": "Analytics for CEOs and professionals.",
-    "stat_professionals": "Professionals",
-    "stat_patients": "Patients",
-    "stat_uptime": "Uptime",
-    "features_title": "Everything your clinic needs",
-    "features_subtitle": "A complete platform that transforms your dental clinic management",
-    "feat_agenda": "Smart scheduling",
-    "feat_agenda_desc": "Appointment management by professional and location. Google Calendar sync. Automatic WhatsApp reminders.",
-    "feat_ai": "AI Agent 24/7",
-    "feat_ai_desc": "Automatic WhatsApp support. Books appointments, answers questions, detects emergencies and collects deposits.",
-    "feat_analytics": "Advanced analytics",
-    "feat_analytics_desc": "Real-time KPI dashboard. Revenue, attendance rate, performance by professional and campaign ROI.",
-    "feat_odontogram": "Digital odontogram",
-    "feat_odontogram_desc": "Visual clinical record with 10 states per tooth. Animations and color coding by condition. Auto-save.",
-    "feat_patients": "Patient records",
-    "feat_patients_desc": "Complete clinical history, digital anamnesis filled by patients from their phone, document and X-ray gallery.",
-    "feat_marketing": "Marketing Hub",
-    "feat_marketing_desc": "Real ROI from Meta Ads and Google Ads. Patient attribution by campaign. Investment vs revenue in one place.",
-    "how_title": "How it works",
-    "step1_title": "Try the demo",
-    "step1_desc": "One click and you're in the full platform. No sign-up, no credit card.",
-    "step2_title": "Talk to the AI",
-    "step2_desc": "Message the agent on WhatsApp. Watch it book an appointment automatically.",
-    "step3_title": "See the magic",
-    "step3_desc": "The notification appears in real time. The appointment shows in the calendar. All automatic.",
-    "testimonial_text": "Since we implemented Dentalogic, automatic WhatsApp support tripled our after-hours bookings.",
-    "testimonial_author": "Dr. Martinez",
-    "testimonial_role": "Director, Premium Dental Clinic",
-    "final_cta_title": "Transform your clinic today",
-    "final_cta_desc": "Join the clinics already managing everything with artificial intelligence",
-    "showcase_title": "The clinic of the future, today",
-    "showcase_subtitle": "Discover why Dentalogic is the preferred platform for leading clinics.",
-    "footer": "Artificial intelligence for dental clinics."
+    "credentials_password": "Password:"
   },
   "leads": {
     "status_new": "New",
@@ -1521,5 +1602,122 @@
     "patient_id_placeholder": "Patient UUID",
     "patient_id_help": "Enter the existing patient's ID in the system",
     "convert": "Convert"
+  },
+  "roi": {
+    "title": "ROI Dashboard",
+    "total_spend": "Total Spend",
+    "total_revenue": "Total Revenue",
+    "total_leads": "Leads",
+    "conversions": "Conversions",
+    "conversion_rate": "Conversion Rate",
+    "cost_per_lead": "Cost per Lead",
+    "cost_per_conversion": "Cost per Conversion",
+    "attribution_mix": "Attribution Mix",
+    "trend": "Trend",
+    "top_campaigns": "Top Campaigns",
+    "first_touch": "First Touch",
+    "last_touch": "Last Touch",
+    "conversion": "Conversion",
+    "organic": "Organic",
+    "campaign": "Campaign",
+    "patients": "Patients",
+    "real_data_badge": "Real data",
+    "estimated_data_badge": "Estimated data",
+    "no_data": "No data for this period",
+    "period_last_7d": "7 days",
+    "period_last_30d": "30 days",
+    "period_last_90d": "90 days",
+    "period_this_year": "This year"
+  },
+  "liquidation": {
+    "tab_rendimiento": "Performance",
+    "tab_liquidacion": "Liquidation",
+    "total_billed": "Total Billed",
+    "total_paid": "Total Collected",
+    "total_pending": "Total Pending",
+    "total_appointments": "Total Appointments",
+    "total_patients": "Patients",
+    "filter_all": "All",
+    "filter_pending": "Pending",
+    "filter_partial": "Partial",
+    "filter_paid": "Paid",
+    "sessions": "sessions",
+    "session": "session",
+    "no_clinical_notes": "No clinical notes",
+    "export_csv": "Export CSV",
+    "no_data": "No liquidation data for the selected period",
+    "treatment_no_type": "No type assigned",
+    "billing_notes": "Billing notes",
+    "clinical_notes": "Clinical notes",
+    "appointments": "appointments",
+    "patients": "patients",
+    "billed": "billed",
+    "paid": "collected",
+    "collected": "collected",
+    "pending": "pending",
+    "status_paid": "Paid",
+    "status_partial": "Partial",
+    "status_pending": "Pending",
+    "toggle_notes": "View clinical notes",
+    "empty_state": "No liquidation data for the selected period"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "description": "An unexpected error occurred. You can try again or contact support if the problem persists.",
+    "retry": "Retry"
+  },
+  "digitalRecords": {
+    "tab": "Digital Records",
+    "title": "Digital Records",
+    "empty": "No records generated for this patient",
+    "generate": "Generate Record",
+    "generating": "Generating digital record...",
+    "selectTemplate": "Select document type",
+    "clinical_report": "Clinical Report",
+    "clinical_report_desc": "Complete clinical summary with odontogram, history and recommendations",
+    "post_surgery": "Post-Surgery Report",
+    "post_surgery_desc": "Post-operative follow-up report with progress and next appointment",
+    "odontogram_art": "Dental Evaluation",
+    "odontogram_art_desc": "Record with visual odontogram for insurance or social health plans",
+    "authorization_request": "Authorization Request",
+    "authorization_request_desc": "Formal authorization request for treatments",
+    "downloadPdf": "Download PDF",
+    "sendEmail": "Send by Email",
+    "sendEmailTitle": "Send Record by Email",
+    "emailPlaceholder": "email@example.com",
+    "sending": "Sending...",
+    "sent": "Sent",
+    "sentTo": "Sent to",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this digital record?",
+    "view": "View",
+    "back": "Back",
+    "draft": "Draft",
+    "final": "Final",
+    "editSection": "Regenerate section",
+    "warnings": "Generation warnings",
+    "warningHallucination": "Possible inconsistencies detected. Please review the flagged data.",
+    "generated": "Record generated successfully",
+    "emailSent": "Record sent successfully",
+    "error": "Error generating record"
+  },
+  "holidays": {
+    "title": "Holiday",
+    "workingDay": "Working day",
+    "closure": "Clinic closed",
+    "specialHours": "Special hours",
+    "startTime": "From",
+    "endTime": "To",
+    "save": "Save",
+    "cancel": "Cancel",
+    "invalidTimeRange": "Start time must be before end time",
+    "toggleSuccess": "Configuration updated",
+    "customHours": "Custom hours",
+    "nationalHoliday": "National holiday",
+    "customHoliday": "Custom holiday",
+    "recurring": "Recurring",
+    "workingDayDescription": "The clinic operates on this day with special hours",
+    "override_open": "Special hours",
+    "type": "Type"
   }
 }

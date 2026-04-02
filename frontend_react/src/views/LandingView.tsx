@@ -8,8 +8,6 @@ import ConversionPopups from '../components/public/ConversionPopups';
 import { useDemoTracking } from '../hooks/useDemoTracking';
 
 const DEMO_WHATSAPP = import.meta.env.VITE_DEMO_WHATSAPP || '5493435256815';
-const DEMO_MESSAGE = 'Hola, quisiera consultar por turnos.';
-const WHATSAPP_URL = `https://wa.me/${DEMO_WHATSAPP}?text=${encodeURIComponent(DEMO_MESSAGE)}`;
 
 const SHOWCASE_IMAGES = [
   'https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=800&q=80',
@@ -26,6 +24,8 @@ const fadeUp = {
 export default function LandingView() {
   const { t } = useTranslation();
   const { trackEvent } = useDemoTracking();
+  const demoMessage = t('demo.whatsapp_message');
+  const whatsappUrl = `https://wa.me/${DEMO_WHATSAPP}?text=${encodeURIComponent(demoMessage)}`;
 
   return (
     <div className="min-h-screen flex flex-col relative" style={{ background: 'radial-gradient(ellipse at top right, #0d1830, #06060e 60%)' }}>
@@ -61,7 +61,7 @@ export default function LandingView() {
                 className="flex items-center justify-center gap-3 px-8 py-4 text-base font-bold text-gray-900 bg-white rounded-2xl hover:bg-white/90 active:scale-[0.98] transition-all shadow-xl shadow-white/10 min-h-[56px]">
                 <Zap size={20} /> {t('landing.cta_try_app') || 'Probar app'}
               </Link>
-              <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('whatsapp_click', {})}
+              <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('whatsapp_click', {})}
                 className="flex items-center justify-center gap-3 px-8 py-4 text-base font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl hover:bg-emerald-500/20 active:scale-[0.98] transition-all min-h-[56px]">
                 <MessageCircle size={20} /> {t('landing.cta_whatsapp') || 'Probar agente WhatsApp'}
               </a>
