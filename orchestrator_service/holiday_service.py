@@ -2,7 +2,7 @@ import logging
 from datetime import date, datetime
 from typing import List, Dict, Optional
 
-from .db import db
+from db import db
 
 logger = logging.getLogger(__name__)
 

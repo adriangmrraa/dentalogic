@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from .db import db
+from db import db
 
 logger = logging.getLogger("analytics")
 

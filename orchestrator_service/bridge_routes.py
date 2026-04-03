@@ -2,8 +2,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Header
 import os
 import logging
-from .demo_tracking_service import demo_tracking_service
-from .db import db
+from demo_tracking_service import demo_tracking_service
+from db import db
 
 logger = logging.getLogger("bridge_routes")
 router = APIRouter()

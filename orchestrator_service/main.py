@@ -9,7 +9,7 @@ from contextvars import ContextVar
 from contextlib import asynccontextmanager
 from dateutil.parser import parse as dateutil_parse
 import re
-from .gcal_service import gcal_service
+from gcal_service import gcal_service
 
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,14 +31,14 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain.tools import tool
 
 import socketio
-from .db import db
-from .admin_routes import router as admin_router
-from .auth_routes import router as auth_router
-from .demo_tracking_routes import router as demo_tracking_router
-from .bridge_routes import router as bridge_router
-from .demo_tracking_service import demo_tracking_service
-from .email_service import email_service
-from .holiday_service import holiday_service
+from db import db
+from admin_routes import router as admin_router
+from auth_routes import router as auth_router
+from demo_tracking_routes import router as demo_tracking_router
+from bridge_routes import router as bridge_router
+from demo_tracking_service import demo_tracking_service
+from email_service import email_service
+from holiday_service import holiday_service
 
 # --- CONFIGURACIÓN ---
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()

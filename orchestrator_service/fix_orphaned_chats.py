@@ -7,7 +7,7 @@ if not os.getenv("POSTGRES_DSN"):
         "postgresql://postgres:password@127.0.0.1:5432/clinica_dental_db"
     )
 
-from .db import db
+from db import db
 
 
 async def main():

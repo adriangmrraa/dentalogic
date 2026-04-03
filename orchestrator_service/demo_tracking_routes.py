@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import logging
-from .demo_tracking_service import demo_tracking_service
-from .admin_routes import verify_admin_token
+from demo_tracking_service import demo_tracking_service
+from admin_routes import verify_admin_token
 
 router = APIRouter()
 logger = logging.getLogger("demo_tracking_routes")

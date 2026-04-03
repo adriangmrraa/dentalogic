@@ -21,10 +21,10 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
-from .db import db
-from .gcal_service import gcal_service
-from .analytics_service import analytics_service
-from .holiday_service import holiday_service
+from db import db
+from gcal_service import gcal_service
+from analytics_service import analytics_service
+from holiday_service import holiday_service
 
 # Configuración
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-token")

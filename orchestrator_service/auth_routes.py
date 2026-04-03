@@ -5,8 +5,8 @@ import uuid
 import json
 import logging
 import asyncpg
-from .db import db
-from .auth_service import auth_service
+from db import db
+from auth_service import auth_service
 
 router = APIRouter(prefix="/auth", tags=["Nexus Auth"])
 logger = logging.getLogger("auth_routes")

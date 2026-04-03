@@ -2,7 +2,7 @@ import json
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
-from .db import db
+from db import db
 
 logger = logging.getLogger("demo_tracking_service")
 

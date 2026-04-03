@@ -1,6 +1,6 @@
 import asyncio
 import os
-from .db import db
+from db import db
 from dotenv import load_dotenv
 
 
