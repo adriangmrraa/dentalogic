@@ -1152,16 +1152,16 @@ async def get_dashboard_stats(
 ):
     """Devuelve métricas avanzadas filtradas por rango temporal. Aislado por tenant_id (Regla de Oro)."""
     try:
-        days = 7 if range == "weekly" else 30
+        days_map = {"weekly": 7, "monthly": 30, "yearly": 365}
+        days = days_map.get(range, 99999)  # 99999 = effectively all time
 
-        # 1. IA Conversations (Hilos únicos de pacientes en el rango seleccionado)
+        # 1. IA Conversations (Hilos únicos en el rango seleccionado)
         ia_conversations = (
             await db.pool.fetchval(
                 """
-            SELECT COUNT(DISTINCT m.from_number) 
-            FROM chat_messages m
-            JOIN patients p ON m.from_number = p.phone_number
-            WHERE p.tenant_id = $1 AND m.created_at >= CURRENT_DATE - INTERVAL '1 day' * $2
+            SELECT COUNT(DISTINCT from_number)
+            FROM chat_messages
+            WHERE tenant_id = $1 AND created_at >= CURRENT_DATE - INTERVAL '1 day' * $2
         """,
                 tenant_id,
                 days,
@@ -1173,7 +1173,7 @@ async def get_dashboard_stats(
         ia_appointments = (
             await db.pool.fetchval(
                 """
-            SELECT COUNT(*) FROM appointments 
+            SELECT COUNT(*) FROM appointments
             WHERE tenant_id = $1 AND source = 'ai' AND appointment_datetime >= CURRENT_DATE - INTERVAL '1 day' * $2
         """,
                 tenant_id,
@@ -1186,8 +1186,8 @@ async def get_dashboard_stats(
         active_urgencies = (
             await db.pool.fetchval(
                 """
-            SELECT COUNT(*) FROM appointments 
-            WHERE tenant_id = $1 AND urgency_level IN ('high', 'emergency') 
+            SELECT COUNT(*) FROM appointments
+            WHERE tenant_id = $1 AND urgency_level IN ('high', 'emergency')
             AND status NOT IN ('cancelled', 'completed')
             AND appointment_datetime >= CURRENT_DATE - INTERVAL '1 day' * $2
         """,
@@ -1201,11 +1201,11 @@ async def get_dashboard_stats(
         total_revenue = (
             await db.pool.fetchval(
                 """
-            SELECT COALESCE(SUM(at.amount), 0) 
+            SELECT COALESCE(SUM(at.amount), 0)
             FROM accounting_transactions at
             JOIN appointments a ON at.appointment_id = a.id
-            WHERE at.tenant_id = $1 
-            AND at.transaction_type = 'payment' 
+            WHERE at.tenant_id = $1
+            AND at.transaction_type = 'payment'
             AND at.status = 'completed'
             AND a.status IN ('completed', 'attended')
             AND a.appointment_datetime >= CURRENT_DATE - INTERVAL '1 day' * $2
@@ -1216,10 +1216,10 @@ async def get_dashboard_stats(
             or 0
         )
 
-        # 5. Datos de crecimiento (Últimos N días) — parámetro $2 para evitar inyección
+        # 5. Datos de crecimiento
         growth_rows = await db.pool.fetch(
             """
-            SELECT 
+            SELECT
                 DATE(appointment_datetime) as date,
                 COUNT(*) FILTER (WHERE source = 'ai') as ia_referrals,
                 COUNT(*) FILTER (WHERE status IN ('completed', 'attended')) as completed_appointments
