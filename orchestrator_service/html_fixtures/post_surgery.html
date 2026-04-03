@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Instrucciones Post-Operatorias</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+        .section { margin-bottom: 25px; }
+        .section-title { font-weight: bold; color: #2c3e50; margin-bottom: 10px; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+        .footer { margin-top: 50px; text-align: right; font-size: 0.9em; color: #7f8c8d; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Instrucciones Post‑Operatorias</h1>
+        <p>Clínica Dental Demo - Dr. Laura Delgado</p>
+        <p>Fecha de cirugía: {{ fecha_cirugia }}</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">PACIENTE</div>
+        <p><strong>Nombre:</strong> {{ paciente_nombre }}</p>
+        <p><strong>Procedimiento realizado:</strong> {{ procedimiento }}</p>
+    </div>
+
+    <div class="warning">
+        <strong>⚠ IMPORTANTE:</strong> Siga estas instrucciones al pie de la letra para una recuperación óptima y evitar complicaciones.
+    </div>
+
+    <div class="section">
+        <div class="section-title">PRIMERAS 24 HORAS</div>
+        <ul>
+            <li>Mantenga el apósito de gasa presionando la zona durante 30‑45 minutos.</li>
+            <li>No enjuague, escupa ni use pajita (popote) durante las primeras 24 horas.</li>
+            <li>Aplique hielo externo (20 minutos sí, 20 minutos no) para reducir la inflamación.</li>
+            <li>Si aparece sangrado, muerda una gasa limpia durante 30 minutos.</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <div class="section-title">ALIMENTACIÓN</div>
+        <ul>
+            <li>Consuma alimentos blandos y fríos (yogur, puré, gelatina) el primer día.</li>
+            <li>Evite alimentos calientes, picantes, duros o con semillas durante una semana.</li>
+            <li>Mastique del lado contrario a la intervención.</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <div class="section-title">HIGIENE</div>
+        <ul>
+            <li>Cepille los dientes no intervenidos con cuidado.</li>
+            <li>En la zona operada, use el enjuague bucal recetado (sin alcohol) después de 24 horas.</li>
+            <li>No use hilo dental en la zona hasta que el profesional lo autorice.</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <div class="section-title">MEDICACIÓN</div>
+        <p>{{ medicacion }}</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">SEÑALES DE ALARMA (consultar inmediatamente)</div>
+        <ul>
+            <li>Fiebre superior a 38°C.</li>
+            <li>Sangrado abundante que no cede con presión.</li>
+            <li>Dolor intenso que no mejora con la medicación.</li>
+            <li>Inflamación que aumenta después del tercer día.</li>
+        </ul>
+    </div>
+
+    <div class="footer">
+        <p>Documento generado automáticamente por Dentalogic AI</p>
+        <p>ID: {{ record_id }}</p>
+    </div>
+</body>
+</html>

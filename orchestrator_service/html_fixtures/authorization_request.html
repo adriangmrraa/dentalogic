@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Solicitud de Autorización a Obra Social</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+        .section { margin-bottom: 25px; }
+        .section-title { font-weight: bold; color: #2c3e50; margin-bottom: 10px; }
+        .field { display: flex; margin-bottom: 10px; }
+        .field-label { width: 200px; font-weight: bold; }
+        .field-value { flex: 1; }
+        .signature-area { margin-top: 60px; border-top: 1px solid #000; padding-top: 20px; }
+        .footer { margin-top: 50px; text-align: right; font-size: 0.9em; color: #7f8c8d; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Solicitud de Autorización a Obra Social</h1>
+        <p>Clínica Dental Demo - Dr. Laura Delgado</p>
+        <p>N° de solicitud: {{ solicitud_numero }}</p>
+        <p>Fecha: {{ fecha }}</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">DATOS DEL PACIENTE</div>
+        <div class="field">
+            <div class="field-label">Nombre completo:</div>
+            <div class="field-value">{{ paciente_nombre }}</div>
+        </div>
+        <div class="field">
+            <div class="field-label">DNI:</div>
+            <div class="field-value">{{ paciente_dni }}</div>
+        </div>
+        <div class="field">
+            <div class="field-label">N° de afiliado:</div>
+            <div class="field-value">{{ numero_afiliado }}</div>
+        </div>
+        <div class="field">
+            <div class="field-label">Obra social:</div>
+            <div class="field-value">{{ obra_social }}</div>
+        </div>
+        <div class="field">
+            <div class="field-label">Plan:</div>
+            <div class="field-value">{{ plan }}</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">DATOS DEL PROFESIONAL / CLÍNICA</div>
+        <div class="field">
+            <div class="field-label">Nombre del profesional:</div>
+            <div class="field-value">{{ profesional_nombre }}</div>
+        </div>
+        <div class="field">
+            <div class="field-label">Matrícula:</div>
+            <div class="field-value">{{ profesional_matricula }}</div>
+        </div>
+        <div class="field">
+            <div class="field-label">Clínica:</div>
+            <div class="field-value">{{ clinica_nombre }}</div>
+        </div>
+        <div class="field">
+            <div class="field-label">Dirección:</div>
+            <div class="field-value">{{ clinica_direccion }}</div>
+        </div>
+        <div class="field">
+            <div class="field-label">Teléfono:</div>
+            <div class="field-value">{{ clinica_telefono }}</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">TRATAMIENTO SOLICITADO</div>
+        <div class="field">
+            <div class="field-label">Código de práctica:</div>
+            <div class="field-value">{{ codigo_practica }}</div>
+        </div>
+        <div class="field">
+            <div class="field-label">Descripción:</div>
+            <div class="field-value">{{ descripcion_practica }}</div>
+        </div>
+        <div class="field">
+            <div class="field-label">Diagnóstico (CIE‑10):</div>
+            <div class="field-value">{{ diagnostico_cie10 }}</div>
+        </div>
+        <div class="field">
+            <div class="field-label">Fecha propuesta:</div>
+            <div class="field-value">{{ fecha_propuesta }}</div>
+        </div>
+        <div class="field">
+            <div class="field-label">Urgencia:</div>
+            <div class="field-value">{{ urgencia }}</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">JUSTIFICACIÓN CLÍNICA</div>
+        <p>{{ justificacion_clinica }}</p>
+    </div>
+
+    <div class="signature-area">
+        <div class="field">
+            <div class="field-label">Firma del profesional:</div>
+            <div class="field-value">_________________________</div>
+        </div>
+        <div class="field">
+            <div class="field-label">Sello de la clínica:</div>
+            <div class="field-value">[Sello]</div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Documento generado automáticamente por Dentalogic AI</p>
+        <p>ID: {{ record_id }}</p>
+    </div>
+</body>
+</html>

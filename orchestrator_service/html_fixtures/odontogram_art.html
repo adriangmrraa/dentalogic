@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Odontograma Artístico</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+        .odontogram { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; max-width: 800px; margin: 30px auto; }
+        .tooth { border: 2px solid #ccc; padding: 15px; text-align: center; border-radius: 8px; background-color: #f9f9f9; }
+        .tooth-number { font-weight: bold; font-size: 1.2em; color: #2c3e50; }
+        .tooth-condition { font-size: 0.9em; color: #7f8c8d; margin-top: 5px; }
+        .legend { display: flex; justify-content: center; flex-wrap: wrap; margin: 40px 0; }
+        .legend-item { display: flex; align-items: center; margin: 0 15px; }
+        .legend-color { width: 20px; height: 20px; margin-right: 8px; border-radius: 4px; }
+        .footer { margin-top: 50px; text-align: right; font-size: 0.9em; color: #7f8c8d; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Odontograma Artístico</h1>
+        <p>Clínica Dental Demo - Dr. Laura Delgado</p>
+        <p>Fecha de evaluación: {{ fecha_evaluacion }}</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">PACIENTE</div>
+        <p><strong>Nombre:</strong> {{ paciente_nombre }}</p>
+        <p><strong>Edad:</strong> {{ paciente_edad }}</p>
+        <p><strong>Observaciones:</strong> {{ observaciones_generales }}</p>
+    </div>
+
+    <div class="odontogram">
+        <!-- Dientes 1-8 (superior derecha) -->
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">18</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #fff3e0;"><div class="tooth-number">17</div><div class="tooth-condition">Caries</div></div>
+        <div class="tooth" style="background-color: #ffebee;"><div class="tooth-number">16</div><div class="tooth-condition">Extraído</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">15</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #e3f2fd;"><div class="tooth-number">14</div><div class="tooth-condition">Obturado</div></div>
+        <div class="tooth" style="background-color: #fff3e0;"><div class="tooth-number">13</div><div class="tooth-condition">Caries</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">12</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">11</div><div class="tooth-condition">Sano</div></div>
+
+        <!-- Dientes 9-16 (superior izquierda) -->
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">21</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">22</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #fff3e0;"><div class="tooth-number">23</div><div class="tooth-condition">Caries</div></div>
+        <div class="tooth" style="background-color: #e3f2fd;"><div class="tooth-number">24</div><div class="tooth-condition">Obturado</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">25</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #ffebee;"><div class="tooth-number">26</div><div class="tooth-condition">Extraído</div></div>
+        <div class="tooth" style="background-color: #fff3e0;"><div class="tooth-number">27</div><div class="tooth-condition">Caries</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">28</div><div class="tooth-condition">Sano</div></div>
+
+        <!-- Dientes 17-24 (inferior izquierda) -->
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">38</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #fff3e0;"><div class="tooth-number">37</div><div class="tooth-condition">Caries</div></div>
+        <div class="tooth" style="background-color: #e3f2fd;"><div class="tooth-number">36</div><div class="tooth-condition">Obturado</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">35</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">34</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #fff3e0;"><div class="tooth-number">33</div><div class="tooth-condition">Caries</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">32</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">31</div><div class="tooth-condition">Sano</div></div>
+
+        <!-- Dientes 25-32 (inferior derecha) -->
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">41</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">42</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #fff3e0;"><div class="tooth-number">43</div><div class="tooth-condition">Caries</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">44</div><div class="tooth-condition">Sano</div></div>
+        <div class="tooth" style="background-color: #e3f2fd;"><div class="tooth-number">45</div><div class="tooth-condition">Obturado</div></div>
+        <div class="tooth" style="background-color: #fff3e0;"><div class="tooth-number">46</div><div class="tooth-condition">Caries</div></div>
+        <div class="tooth" style="background-color: #ffebee;"><div class="tooth-number">47</div><div class="tooth-condition">Extraído</div></div>
+        <div class="tooth" style="background-color: #e8f5e9;"><div class="tooth-number">48</div><div class="tooth-condition">Sano</div></div>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background-color: #e8f5e9;"></div> Sano</div>
+        <div class="legend-item"><div class="legend-color" style="background-color: #fff3e0;"></div> Caries</div>
+        <div class="legend-item"><div class="legend-color" style="background-color: #e3f2fd;"></div> Obturado</div>
+        <div class="legend-item"><div class="legend-color" style="background-color: #ffebee;"></div> Extraído</div>
+        <div class="legend-item"><div class="legend-color" style="background-color: #f3e5f5;"></div> Coronado</div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">TRATAMIENTOS PLANIFICADOS</div>
+        <ul>
+            <li>Obturación en pieza 17, 23, 33, 46.</li>
+            <li>Extracción de pieza 16, 26, 47 (ya extraídas).</li>
+            <li>Limpieza profesional y aplicación de flúor.</li>
+        </ul>
+    </div>
+
+    <div class="footer">
+        <p>Documento generado automáticamente por Dentalogic AI</p>
+        <p>ID: {{ record_id }}</p>
+    </div>
+</body>
+</html>

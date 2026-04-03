@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Informe Clínico</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+        .section { margin-bottom: 25px; }
+        .section-title { font-weight: bold; color: #2c3e50; margin-bottom: 10px; }
+        .footer { margin-top: 50px; text-align: right; font-size: 0.9em; color: #7f8c8d; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Informe Clínico</h1>
+        <p>Clínica Dental Demo - Dr. Laura Delgado</p>
+        <p>Fecha de generación: {{ fecha }}</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">DATOS DEL PACIENTE</div>
+        <p><strong>Nombre:</strong> {{ paciente_nombre }}</p>
+        <p><strong>DNI:</strong> {{ paciente_dni }}</p>
+        <p><strong>Fecha de nacimiento:</strong> {{ paciente_nacimiento }}</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">MOTIVO DE CONSULTA</div>
+        <p>{{ motivo_consulta }}</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">EXAMEN CLÍNICO</div>
+        <p>{{ examen_clinico }}</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">DIAGNÓSTICO</div>
+        <p>{{ diagnostico }}</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">TRATAMIENTO RECOMENDADO</div>
+        <p>{{ tratamiento }}</p>
+    </div>
+
+    <div class="footer">
+        <p>Documento generado automáticamente por Dentalogic AI</p>
+        <p>ID: {{ record_id }}</p>
+    </div>
+</body>
+</html>

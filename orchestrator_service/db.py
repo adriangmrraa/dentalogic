@@ -5,6 +5,7 @@ from typing import List, Tuple, Optional
 
 POSTGRES_DSN = os.getenv("POSTGRES_DSN")
 
+
 class Database:
     def __init__(self):
         self.pool: Optional[asyncpg.Pool] = None
@@ -18,24 +19,25 @@ class Database:
 
             # asyncpg no soporta el esquema 'postgresql+asyncpg', solo 'postgresql' o 'postgres'
             dsn = POSTGRES_DSN.replace("postgresql+asyncpg://", "postgresql://")
-            
+
             try:
                 self.pool = await asyncpg.create_pool(dsn)
             except Exception as e:
                 print(f"❌ ERROR: Failed to create database pool: {e}")
                 return
-            
+
             # Auto-Migration: Ejecutar dentalogic_schema.sql si las tablas no existen
             await self._run_auto_migrations()
-    
+
     async def _run_auto_migrations(self):
         """
         Sistema de Auto-Migración (Maintenance Robot / Schema Surgeon).
         Se asegura de que la base de datos esté siempre actualizada y saludable.
         """
         import logging
+
         logger = logging.getLogger("db")
-        
+
         try:
             # 1. Auditoría de Salud: ¿Existe la base mínima?
             async with self.pool.acquire() as conn:
@@ -45,31 +47,38 @@ class Database:
                         WHERE table_name = 'tenants'
                     )
                 """)
-            
+
             # 2. Aplicar Base (Foundation) si es un Fresh Install
             if not schema_exists:
                 logger.warning("⚠️ Base de datos vacía, aplicando Foundation...")
                 await self._apply_foundation(logger)
-            
+
             # 3. Evolución Continua (Pipeline de Cirugía)
             # Aquí agregamos parches específicos que deben correr siempre de forma segura
             await self._run_evolution_pipeline(logger)
-            
-            logger.info("✅ Base de datos verificada y actualizada (Maintenance Robot OK)")
-            
+
+            logger.info(
+                "✅ Base de datos verificada y actualizada (Maintenance Robot OK)"
+            )
+
         except Exception as e:
             import traceback
+
             logger.error(f"❌ Error en Maintenance Robot: {e}")
             logger.error(traceback.format_exc())
 
     async def _apply_foundation(self, logger):
         """Ejecuta el esquema base dentalogic_schema.sql"""
         possible_paths = [
-            os.path.join(os.path.dirname(__file__), "..", "db", "init", "dentalogic_schema.sql"),
-            os.path.join(os.path.dirname(__file__), "db", "init", "dentalogic_schema.sql"),
-            "/app/db/init/dentalogic_schema.sql"
+            os.path.join(
+                os.path.dirname(__file__), "..", "db", "init", "dentalogic_schema.sql"
+            ),
+            os.path.join(
+                os.path.dirname(__file__), "db", "init", "dentalogic_schema.sql"
+            ),
+            "/app/db/init/dentalogic_schema.sql",
         ]
-        
+
         schema_path = next((p for p in possible_paths if os.path.exists(p)), None)
         if not schema_path:
             logger.error("❌ Foundation schema not found!")
@@ -79,9 +88,9 @@ class Database:
             schema_sql = f.read()
 
         # Limpiar comentarios y separar sentencias respetando $$
-        clean_lines = [line.split('--')[0].rstrip() for line in schema_sql.splitlines()]
+        clean_lines = [line.split("--")[0].rstrip() for line in schema_sql.splitlines()]
         clean_sql = "\n".join(clean_lines)
-        
+
         statements = []
         current_stmt = []
         in_dollar = False
@@ -91,18 +100,72 @@ class Database:
             current_stmt.append(line)
             if not in_dollar and ";" in line:
                 full = "\n".join(current_stmt).strip()
-                if full: statements.append(full)
+                if full:
+                    statements.append(full)
                 current_stmt = []
-        
+
         if current_stmt:
             leftover = "\n".join(current_stmt).strip()
-            if leftover: statements.append(leftover)
+            if leftover:
+                statements.append(leftover)
 
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 for i, stmt in enumerate(statements):
                     await conn.execute(stmt)
         logger.info(f"✅ Foundation aplicada ({len(statements)} sentencias)")
+
+    async def _seed_demo_data(self, conn, logger):
+        """
+        Ejecuta el script de datos demo (seed_demo_data.sql) si existe.
+        Solo se ejecuta si no hay pacientes demo ya insertados (opcional).
+        """
+        import os
+
+        seed_path = os.path.join(os.path.dirname(__file__), "seed_demo_data.sql")
+        if not os.path.exists(seed_path):
+            logger.warning(f"⚠️  Archivo de seed no encontrado: {seed_path}")
+            return
+
+        with open(seed_path, "r", encoding="utf-8") as f:
+            sql_content = f.read()
+
+        # Separar sentencias respetando bloques DO $$ (similar a _apply_foundation)
+        clean_lines = [
+            line.split("--")[0].rstrip() for line in sql_content.splitlines()
+        ]
+        clean_sql = "\n".join(clean_lines)
+
+        statements = []
+        current_stmt = []
+        in_dollar = False
+        for line in clean_sql.splitlines():
+            if "$$" in line:
+                in_dollar = not in_dollar if line.count("$$") % 2 != 0 else in_dollar
+            current_stmt.append(line)
+            if not in_dollar and ";" in line:
+                full = "\n".join(current_stmt).strip()
+                if full:
+                    statements.append(full)
+                current_stmt = []
+
+        if current_stmt:
+            leftover = "\n".join(current_stmt).strip()
+            if leftover:
+                statements.append(leftover)
+
+        if not statements:
+            logger.warning("⚠️  Seed vacío, nada que ejecutar.")
+            return
+
+        logger.info(f"🌱 Ejecutando seed demo ({len(statements)} sentencias)...")
+        for i, stmt in enumerate(statements):
+            try:
+                await conn.execute(stmt)
+            except Exception as e:
+                logger.error(f"❌ Error en sentencia seed {i + 1}: {e}")
+                # Continuar con las siguientes (seed es idempotente)
+        logger.info("✅ Seed demo ejecutado (los conflictos se ignoraron)")
 
     async def _run_evolution_pipeline(self, logger):
         """
@@ -394,6 +457,146 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_demo_events_lead ON demo_events(lead_id);
             CREATE INDEX IF NOT EXISTS idx_demo_events_type ON demo_events(event_type);
             """,
+            # Parche 17: Tabla patient_documents (documentos del paciente)
+            """
+            DO $$
+            BEGIN
+                -- Crear tabla patient_documents si no existe
+                CREATE TABLE IF NOT EXISTS patient_documents (
+                    id SERIAL PRIMARY KEY,
+                    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                    patient_id INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+                    file_name VARCHAR(255) NOT NULL,
+                    file_path VARCHAR(500) NOT NULL,
+                    file_size INTEGER,
+                    mime_type VARCHAR(100),
+                    document_type VARCHAR(50) DEFAULT 'clinical',
+                    uploaded_by UUID REFERENCES users(id),
+                    source VARCHAR(50) DEFAULT 'manual',
+                    source_details JSONB DEFAULT '{}',
+                    uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+
+                -- Índices
+                CREATE INDEX IF NOT EXISTS idx_patient_documents_tenant ON patient_documents(tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_patient_documents_patient ON patient_documents(patient_id);
+                CREATE INDEX IF NOT EXISTS idx_patient_documents_uploaded_at ON patient_documents(uploaded_at DESC);
+
+                -- Constraint único: tenant_id + patient_id + file_name (evita duplicados en misma clínica)
+                ALTER TABLE patient_documents DROP CONSTRAINT IF EXISTS patient_documents_tenant_patient_filename_key;
+                ALTER TABLE patient_documents ADD CONSTRAINT patient_documents_tenant_patient_filename_key UNIQUE (tenant_id, patient_id, file_name);
+            EXCEPTION
+                WHEN others THEN NULL; -- Ignorar errores (tabla ya existe, columnas ya existen, etc.)
+            END $$;
+            """,
+            # Parche 18: Tabla patient_digital_records (registros digitales)
+            """
+            DO $$
+            BEGIN
+                -- Crear tabla patient_digital_records si no existe
+                CREATE TABLE IF NOT EXISTS patient_digital_records (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                    patient_id INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+                    professional_id INTEGER REFERENCES professionals(id) ON DELETE SET NULL,
+                    template_type VARCHAR(50) NOT NULL,
+                    title VARCHAR(255) NOT NULL,
+                    html_content TEXT NOT NULL DEFAULT '',
+                    pdf_path VARCHAR(500),
+                    pdf_generated_at TIMESTAMPTZ,
+                    source_data JSONB DEFAULT '{}',
+                    generation_metadata JSONB DEFAULT '{}',
+                    status VARCHAR(20) DEFAULT 'draft',
+                    sent_to_email VARCHAR(255),
+                    sent_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+
+                -- Índices
+                CREATE INDEX IF NOT EXISTS idx_pdr_tenant_patient ON patient_digital_records(tenant_id, patient_id);
+                CREATE INDEX IF NOT EXISTS idx_pdr_tenant ON patient_digital_records(tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_pdr_status ON patient_digital_records(tenant_id, status);
+                CREATE INDEX IF NOT EXISTS idx_pdr_template_type ON patient_digital_records(template_type);
+                CREATE INDEX IF NOT EXISTS idx_pdr_created_at ON patient_digital_records(created_at DESC);
+
+                -- Constraints de verificación (si no existen)
+                ALTER TABLE patient_digital_records DROP CONSTRAINT IF EXISTS ck_patient_digital_records_status;
+                ALTER TABLE patient_digital_records ADD CONSTRAINT ck_patient_digital_records_status 
+                    CHECK (status IN ('draft', 'final', 'sent'));
+
+                ALTER TABLE patient_digital_records DROP CONSTRAINT IF EXISTS ck_patient_digital_records_template_type;
+                ALTER TABLE patient_digital_records ADD CONSTRAINT ck_patient_digital_records_template_type 
+                    CHECK (template_type IN ('clinical_report', 'post_surgery', 'odontogram_art', 'authorization_request'));
+            EXCEPTION
+                WHEN others THEN NULL; -- Ignorar errores (tabla ya existe, columnas ya existen, etc.)
+            END $$;
+            """,
+            # Parche 19: Columnas faltantes en tabla patients (anamnesis_token, guardian_phone, city, instagram_psid, facebook_psid)
+            """
+            DO $$
+            BEGIN
+                -- Añadir anamnesis_token si no existe
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'anamnesis_token') THEN
+                    ALTER TABLE patients ADD COLUMN anamnesis_token VARCHAR(100);
+                END IF;
+
+                -- Añadir guardian_phone si no existe
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'guardian_phone') THEN
+                    ALTER TABLE patients ADD COLUMN guardian_phone VARCHAR(20);
+                END IF;
+
+                -- Añadir city si no existe
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'city') THEN
+                    ALTER TABLE patients ADD COLUMN city VARCHAR(100);
+                END IF;
+
+                -- Añadir instagram_psid si no existe
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'instagram_psid') THEN
+                    ALTER TABLE patients ADD COLUMN instagram_psid VARCHAR(255);
+                END IF;
+
+                -- Añadir facebook_psid si no existe
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'facebook_psid') THEN
+                    ALTER TABLE patients ADD COLUMN facebook_psid VARCHAR(255);
+                END IF;
+
+                -- Añadir anamnesis_completed_at si no existe (opcional, de ClinicForge)
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'anamnesis_completed_at') THEN
+                    ALTER TABLE patients ADD COLUMN anamnesis_completed_at TIMESTAMPTZ;
+                END IF;
+
+                -- Añadir anamnesis_completed_by si no existe (opcional)
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'anamnesis_completed_by') THEN
+                    ALTER TABLE patients ADD COLUMN anamnesis_completed_by INTEGER REFERENCES professionals(id);
+                END IF;
+            END $$;
+            """,
+            # Parche 20: Tabla tenant_holidays (feriados y cierres por clínica)
+            """
+            DO $$
+            BEGIN
+                -- Crear tabla tenant_holidays si no existe
+                CREATE TABLE IF NOT EXISTS tenant_holidays (
+                    id SERIAL PRIMARY KEY,
+                    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                    date DATE NOT NULL,
+                    description TEXT NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+
+                -- Índices
+                CREATE INDEX IF NOT EXISTS idx_tenant_holidays_tenant_date ON tenant_holidays(tenant_id, date);
+                CREATE INDEX IF NOT EXISTS idx_tenant_holidays_date ON tenant_holidays(date);
+
+                -- Constraint único: un feriado por clínica y fecha (simplificado)
+                ALTER TABLE tenant_holidays DROP CONSTRAINT IF EXISTS tenant_holidays_tenant_date_key;
+                ALTER TABLE tenant_holidays ADD CONSTRAINT tenant_holidays_tenant_date_key UNIQUE (tenant_id, date);
+            EXCEPTION
+                WHEN others THEN NULL; -- Ignorar errores (tabla ya existe, columnas ya existen, etc.)
+            END $$;
+            """,
         ]
 
         async with self.pool.acquire() as conn:
@@ -402,7 +605,9 @@ class Database:
                     try:
                         await conn.execute(patch)
                     except Exception as e:
-                        logger.error(f"❌ Error aplicando parche evolutivo {i+1}: {e}")
+                        logger.error(
+                            f"❌ Error aplicando parche evolutivo {i + 1}: {e}"
+                        )
                         # En evolución, a veces es mejor fallar rápido para no corromper
                         raise e
 
@@ -410,7 +615,15 @@ class Database:
         if self.pool:
             await self.pool.close()
 
-    async def try_insert_inbound(self, provider: str, provider_message_id: str, event_id: str, from_number: str, payload: dict, correlation_id: str) -> bool:
+    async def try_insert_inbound(
+        self,
+        provider: str,
+        provider_message_id: str,
+        event_id: str,
+        from_number: str,
+        payload: dict,
+        correlation_id: str,
+    ) -> bool:
         """Try to insert inbound message. Returns True if inserted, False if duplicate."""
         query = """
         INSERT INTO inbound_messages (provider, provider_message_id, event_id, from_number, payload, status, correlation_id)
@@ -419,7 +632,15 @@ class Database:
         RETURNING id
         """
         async with self.pool.acquire() as conn:
-            result = await conn.fetchval(query, provider, provider_message_id, event_id, from_number, json.dumps(payload), correlation_id)
+            result = await conn.fetchval(
+                query,
+                provider,
+                provider_message_id,
+                event_id,
+                from_number,
+                json.dumps(payload),
+                correlation_id,
+            )
             return result is not None
 
     async def mark_inbound_processing(self, provider: str, provider_message_id: str):
@@ -432,17 +653,34 @@ class Database:
         async with self.pool.acquire() as conn:
             await conn.execute(query, provider, provider_message_id)
 
-    async def mark_inbound_failed(self, provider: str, provider_message_id: str, error: str):
+    async def mark_inbound_failed(
+        self, provider: str, provider_message_id: str, error: str
+    ):
         query = "UPDATE inbound_messages SET status = 'failed', processed_at = NOW(), error = $3 WHERE provider = $1 AND provider_message_id = $2"
         async with self.pool.acquire() as conn:
             await conn.execute(query, provider, provider_message_id, error)
 
-    async def append_chat_message(self, from_number: str, role: str, content: str, correlation_id: str, tenant_id: int = 1):
+    async def append_chat_message(
+        self,
+        from_number: str,
+        role: str,
+        content: str,
+        correlation_id: str,
+        tenant_id: int = 1,
+    ):
         query = "INSERT INTO chat_messages (from_number, role, content, correlation_id, tenant_id) VALUES ($1, $2, $3, $4, $5)"
         async with self.pool.acquire() as conn:
-            await conn.execute(query, from_number, role, content, correlation_id, tenant_id)
+            await conn.execute(
+                query, from_number, role, content, correlation_id, tenant_id
+            )
 
-    async def ensure_patient_exists(self, phone_number: str, tenant_id: int, first_name: str = 'Visitante', status: str = 'guest'):
+    async def ensure_patient_exists(
+        self,
+        phone_number: str,
+        tenant_id: int,
+        first_name: str = "Visitante",
+        status: str = "guest",
+    ):
         """
         Ensures a patient record exists for the given phone number.
         If it exists as a 'guest', it can be updated to 'active' or update its name.
@@ -464,9 +702,13 @@ class Database:
         RETURNING id, status
         """
         async with self.pool.acquire() as conn:
-            return await conn.fetchrow(query, tenant_id, phone_number, first_name, status)
+            return await conn.fetchrow(
+                query, tenant_id, phone_number, first_name, status
+            )
 
-    async def get_chat_history(self, from_number: str, limit: int = 15, tenant_id: Optional[int] = None) -> List[dict]:
+    async def get_chat_history(
+        self, from_number: str, limit: int = 15, tenant_id: Optional[int] = None
+    ) -> List[dict]:
         """Returns list of {'role': ..., 'content': ...} in chronological order. Opcional tenant_id para aislamiento por clínica."""
         if tenant_id is not None:
             query = "SELECT role, content FROM chat_messages WHERE from_number = $1 AND tenant_id = $2 ORDER BY created_at DESC LIMIT $3"
@@ -483,21 +725,22 @@ class Database:
         """Wrapper para pool.fetch - usado por check_availability."""
         async with self.pool.acquire() as conn:
             return await conn.fetch(query, *args)
-    
+
     async def fetchrow(self, query: str, *args):
         """Wrapper para pool.fetchrow - usado por book_appointment."""
         async with self.pool.acquire() as conn:
             return await conn.fetchrow(query, *args)
-    
+
     async def fetchval(self, query: str, *args):
         """Wrapper para pool.fetchval."""
         async with self.pool.acquire() as conn:
             return await conn.fetchval(query, *args)
-    
+
     async def execute(self, query: str, *args):
         """Wrapper para pool.execute - usado por book_appointment."""
         async with self.pool.acquire() as conn:
             return await conn.execute(query, *args)
+
 
 # Global instance
 db = Database()
