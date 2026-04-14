@@ -14,16 +14,26 @@ import ProfileView from './views/ProfileView';
 import ClinicsView from './views/ClinicsView';
 import ConfigView from './views/ConfigView';
 import MetaTemplatesView from './views/MetaTemplatesView';
+import PlaybooksView from './views/PlaybooksView';
 import MarketingHubView from './views/MarketingHubView';
+import ROIDashboardView from './views/ROIDashboardView';
 import LeadsManagementView from './views/LeadsManagementView';
 import LeadDetailView from './views/LeadDetailView';
 import DashboardStatusView from './views/DashboardStatusView';
 import PrivacyTermsView from './views/PrivacyTermsView';
 import AnamnesisPublicView from './views/AnamnesisPublicView';
+import FinancialCommandCenterView from './views/FinancialCommandCenterView';
+import ProfessionalLiquidationsView from './views/ProfessionalLiquidationsView';
 import SuperAdminDashboard from './views/SuperAdminDashboard';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 import ProtectedRoute from './components/ProtectedRoute';
+
+function RoleLandingRedirect() {
+  const { user } = useAuth();
+  if (user?.role === 'ceo') return <DashboardView />;
+  return <Navigate to="/agenda" replace />;
+}
 
 function App() {
   return (
@@ -41,7 +51,7 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <Routes>
-                    <Route index element={<DashboardView />} />
+                    <Route index element={<RoleLandingRedirect />} />
                     <Route path="dashboard/status" element={
                       <ProtectedRoute allowedRoles={['ceo']}>
                         <DashboardStatusView />
@@ -57,7 +67,11 @@ function App() {
                         <ProfessionalAnalyticsView />
                       </ProtectedRoute>
                     } />
-                    <Route path="tratamientos" element={<TreatmentsView />} />
+                    <Route path="tratamientos" element={
+                      <ProtectedRoute allowedRoles={['ceo', 'secretary']}>
+                        <TreatmentsView />
+                      </ProtectedRoute>
+                    } />
                     <Route path="perfil" element={<ProfileView />} />
                     <Route path="aprobaciones" element={
                       <ProtectedRoute allowedRoles={['ceo']}>
@@ -80,9 +94,19 @@ function App() {
                         <MarketingHubView />
                       </ProtectedRoute>
                     } />
+                    <Route path="roi" element={
+                      <ProtectedRoute allowedRoles={['ceo']}>
+                        <ROIDashboardView />
+                      </ProtectedRoute>
+                    } />
                     <Route path="templates" element={
                       <ProtectedRoute allowedRoles={['ceo']}>
                         <MetaTemplatesView />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="playbooks" element={
+                      <ProtectedRoute allowedRoles={['ceo']}>
+                        <PlaybooksView />
                       </ProtectedRoute>
                     } />
                     <Route path="leads" element={
@@ -93,6 +117,16 @@ function App() {
                     <Route path="leads/:id" element={
                       <ProtectedRoute allowedRoles={['ceo']}>
                         <LeadDetailView />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="finanzas" element={
+                      <ProtectedRoute allowedRoles={['ceo']}>
+                        <FinancialCommandCenterView />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="mis-liquidaciones" element={
+                      <ProtectedRoute allowedRoles={['professional']}>
+                        <ProfessionalLiquidationsView />
                       </ProtectedRoute>
                     } />
                     <Route path="superadmin" element={
