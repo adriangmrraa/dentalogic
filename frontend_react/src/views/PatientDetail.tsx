@@ -113,18 +113,21 @@ export default function PatientDetail() {
     if (!fetchForId) return;
     try {
       setLoading(true);
-      const [patientRes, recordsRes] = await Promise.all([
-        api.get(`/admin/patients/${fetchForId}`),
-        api.get(`/admin/patients/${fetchForId}/records`),
-      ]);
+      const patientRes = await api.get(`/admin/patients/${fetchForId}`);
       if (idRef.current !== fetchForId) return;
       setPatient(patientRes.data);
-      setRecords(recordsRes.data);
       if (patientRes.data.medical_notes) {
         const notes = patientRes.data.medical_notes.toLowerCase();
         setCriticalConditionsFound(
           criticalConditions.filter(c => notes.includes(c.toLowerCase()))
         );
+      }
+      // Records fetch is independent — don't let it break the whole page
+      try {
+        const recordsRes = await api.get(`/admin/patients/${fetchForId}/records`);
+        if (idRef.current === fetchForId) setRecords(Array.isArray(recordsRes.data) ? recordsRes.data : []);
+      } catch {
+        if (idRef.current === fetchForId) setRecords([]);
       }
     } catch (error) {
       if (idRef.current === fetchForId) console.error('Error fetching patient data:', error);

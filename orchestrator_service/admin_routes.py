@@ -2907,8 +2907,11 @@ async def get_patient(id: int, tenant_id: int = Depends(get_resolved_tenant_id))
     """Obtener un paciente por ID. Aislado por tenant_id (Regla de Oro)."""
     row = await db.pool.fetchrow(
         """
-        SELECT id, first_name, last_name, phone_number, email, insurance_provider as obra_social, dni, birth_date, created_at, status, notes
-        FROM patients 
+        SELECT id, first_name, last_name, phone_number, email,
+               insurance_provider, dni, birth_date, created_at, status,
+               notes as medical_notes, last_visit,
+               medical_history
+        FROM patients
         WHERE id = $1 AND tenant_id = $2
     """,
         id,
@@ -2916,7 +2919,17 @@ async def get_patient(id: int, tenant_id: int = Depends(get_resolved_tenant_id))
     )
     if not row:
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
-    return dict(row)
+    result = dict(row)
+    # Extraer anamnesis_token del medical_history JSONB si existe
+    mh = result.pop("medical_history", None) or {}
+    if isinstance(mh, str):
+        import json
+        try:
+            mh = json.loads(mh)
+        except Exception:
+            mh = {}
+    result["anamnesis_token"] = mh.get("anamnesis_token")
+    return result
 
 
 @router.put(
@@ -2986,9 +2999,13 @@ async def get_clinical_records(
     """Obtener historia clínica de un paciente. Aislado por tenant_id (Regla de Oro)."""
     rows = await db.pool.fetch(
         """
-        SELECT cr.id, cr.appointment_id, cr.diagnosis, cr.treatment_plan, cr.created_at 
+        SELECT cr.id, cr.patient_id, cr.professional_id, cr.diagnosis, cr.treatment_plan,
+               cr.clinical_notes as notes, cr.odontogram as odontogram_data,
+               cr.record_date, cr.created_at,
+               COALESCE(pr.first_name || ' ' || pr.last_name, 'Sin profesional') as professional_name
         FROM clinical_records cr
         JOIN patients p ON cr.patient_id = p.id
+        LEFT JOIN professionals pr ON cr.professional_id = pr.id
         WHERE cr.patient_id = $1 AND p.tenant_id = $2
         ORDER BY cr.created_at DESC
     """,
