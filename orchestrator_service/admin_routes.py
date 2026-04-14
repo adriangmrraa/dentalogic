@@ -6,7 +6,8 @@ import httpx
 import logging
 import re
 from datetime import datetime, timedelta, date, timezone
-from typing import List, Optional, Dict, Any
+from decimal import Decimal
+from typing import List, Optional, Dict, Any, Union
 from fastapi import (
     APIRouter,
     HTTPException,
@@ -25,6 +26,20 @@ from db import db
 from gcal_service import gcal_service
 from analytics_service import analytics_service
 from holiday_service import holiday_service
+
+# Treatment Plan Schemas
+from schemas.treatment_plan import (
+    AddPlanItemBody,
+    UpdatePlanItemBody,
+    TreatmentPlanItemResponse,
+    TreatmentPlanDetailResponse,
+    ItemStatus,
+    PlanStatus,
+    RegisterPaymentBody,
+    LinkPlanItemBody,
+    CreateTreatmentPlanBody,
+    UpdateTreatmentPlanBody,
+)
 
 # Configuración
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-token")
@@ -2924,6 +2939,7 @@ async def get_patient(id: int, tenant_id: int = Depends(get_resolved_tenant_id))
     mh = result.pop("medical_history", None) or {}
     if isinstance(mh, str):
         import json
+
         try:
             mh = json.loads(mh)
         except Exception:
@@ -4582,3 +4598,1482 @@ async def get_professionals_analytics(
     except Exception as e:
         logger.error(f"Error in analytics endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# TREATMENT PLAN BILLING - CRUD ENDPOINTS (EP-01 a EP-10)
+# ============================================
+
+
+async def emit_treatment_plan_event(
+    event_type: str, data: Dict[str, Any], request: Request
+):
+    """Emite eventos de treatment plan via Socket.IO."""
+    if hasattr(request.app.state, "emit_appointment_event"):
+        await request.app.state.emit_appointment_event(event_type, data)
+
+
+async def recalculate_plan_totals(
+    pool, plan_id: str, tenant_id: int
+) -> Dict[str, float]:
+    """Recalcula estimated_total del plan basado en sus items."""
+    result = await pool.fetchrow(
+        """
+        SELECT 
+            COALESCE(SUM(estimated_price), 0) as estimated_total,
+            COALESCE(SUM(approved_price), 0) as approved_total
+        FROM treatment_plan_items
+        WHERE plan_id = $1 AND tenant_id = $2 AND status != 'cancelled'
+        """,
+        plan_id,
+        tenant_id,
+    )
+    return {
+        "estimated_total": float(result["estimated_total"]) if result else 0,
+        "approved_total": float(result["approved_total"]) if result else 0,
+    }
+
+
+async def recalculate_plan_estimated_total(
+    pool, plan_id: uuid.UUID, tenant_id: int
+) -> Decimal:
+    """
+    Recalcula el estimated_total del plan sumando COALESCE(approved_price, estimated_price)
+    de todos los ítems no cancelados. Si existe precio aprobado, ese tiene prioridad.
+    """
+    total = await pool.fetchval(
+        """
+        SELECT COALESCE(SUM(COALESCE(approved_price, estimated_price)), 0)
+        FROM treatment_plan_items
+        WHERE plan_id = $1 AND tenant_id = $2 AND status != 'cancelled'
+        """,
+        plan_id,
+        tenant_id,
+    )
+    return Decimal(str(total)) if total else Decimal("0")
+
+
+async def get_professional_name(pool, professional_id: int) -> Optional[str]:
+    """Obtiene el nombre del profesional."""
+    row = await pool.fetchrow(
+        "SELECT first_name FROM professionals WHERE id = $1", professional_id
+    )
+    return row["first_name"] if row else None
+
+
+def validate_plan_status_transition(current: str, new: str) -> bool:
+    """Valida transiciones de estado válidas para planes."""
+    valid_transitions = {
+        "draft": ["approved", "cancelled"],
+        "approved": ["in_progress", "cancelled"],
+        "in_progress": ["completed", "cancelled"],
+        "completed": [],
+        "cancelled": [],
+    }
+    return new in valid_transitions.get(current, [])
+
+
+# EP-01: GET /admin/patients/{patient_id}/treatment-plans
+@router.get(
+    "/patients/{patient_id}/treatment-plans",
+    tags=["Treatment Plans"],
+    summary="EP-01: Lista planes de tratamiento de un paciente",
+)
+async def list_patient_treatment_plans(
+    patient_id: int,
+    request: Request,
+    status: Optional[str] = None,
+    user_data=Depends(verify_admin_token),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """
+    Lista todos los planes de tratamiento de un paciente.
+    Retorna cada plan con campos agregados: items_count, paid_total, pending_total.
+    Acepta query param opcional ?status= para filtrar por estado.
+    """
+    tenant_id = resolved_tenant_id
+
+    ALLOWED_PLAN_STATUSES = {
+        "draft",
+        "approved",
+        "in_progress",
+        "completed",
+        "cancelled",
+    }
+    if status is not None and status not in ALLOWED_PLAN_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Estado inválido. Valores permitidos: {', '.join(sorted(ALLOWED_PLAN_STATUSES))}",
+        )
+
+    patient = await db.pool.fetchrow(
+        "SELECT id FROM patients WHERE id = $1 AND tenant_id = $2",
+        patient_id,
+        tenant_id,
+    )
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+
+    if status is not None:
+        rows = await db.pool.fetch(
+            """
+            SELECT
+                tp.id, tp.tenant_id, tp.patient_id, tp.professional_id, tp.name, tp.status,
+                tp.estimated_total, tp.approved_total, tp.approved_by, tp.approved_at,
+                tp.notes, tp.created_at, tp.updated_at,
+                prof.first_name as professional_first_name,
+                (SELECT COUNT(*) FROM treatment_plan_items tpi
+                 WHERE tpi.plan_id = tp.id AND tpi.tenant_id = tp.tenant_id AND tpi.status != 'cancelled') as items_count,
+                COALESCE((SELECT SUM(tp_pay.amount) FROM treatment_plan_payments tp_pay
+                          WHERE tp_pay.plan_id = tp.id AND tp_pay.tenant_id = tp.tenant_id), 0) as paid_total
+            FROM treatment_plans tp
+            LEFT JOIN professionals prof ON tp.professional_id = prof.id
+            WHERE tp.patient_id = $1 AND tp.tenant_id = $2 AND tp.status = $3
+            ORDER BY tp.created_at DESC
+            """,
+            patient_id,
+            tenant_id,
+            status,
+        )
+    else:
+        rows = await db.pool.fetch(
+            """
+            SELECT
+                tp.id, tp.tenant_id, tp.patient_id, tp.professional_id, tp.name, tp.status,
+                tp.estimated_total, tp.approved_total, tp.approved_by, tp.approved_at,
+                tp.notes, tp.created_at, tp.updated_at,
+                prof.first_name as professional_first_name,
+                (SELECT COUNT(*) FROM treatment_plan_items tpi
+                 WHERE tpi.plan_id = tp.id AND tpi.tenant_id = tp.tenant_id AND tpi.status != 'cancelled') as items_count,
+                COALESCE((SELECT SUM(tp_pay.amount) FROM treatment_plan_payments tp_pay
+                          WHERE tp_pay.plan_id = tp.id AND tp_pay.tenant_id = tp.tenant_id), 0) as paid_total
+            FROM treatment_plans tp
+            LEFT JOIN professionals prof ON tp.professional_id = prof.id
+            WHERE tp.patient_id = $1 AND tp.tenant_id = $2
+            ORDER BY tp.created_at DESC
+            """,
+            patient_id,
+            tenant_id,
+        )
+
+    plans = []
+    for row in rows:
+        approved = float(row["approved_total"] or 0)
+        paid = float(row["paid_total"]) if row["paid_total"] else 0
+        pending = max(approved - paid, 0) if approved > 0 else 0
+
+        plans.append(
+            {
+                "id": str(row["id"]),
+                "tenant_id": row["tenant_id"],
+                "patient_id": row["patient_id"],
+                "professional_id": row["professional_id"],
+                "name": row["name"],
+                "status": row["status"],
+                "estimated_total": float(row["estimated_total"]),
+                "approved_total": row["approved_total"],
+                "approved_by": row["approved_by"],
+                "approved_at": row["approved_at"].isoformat()
+                if row["approved_at"]
+                else None,
+                "notes": row["notes"],
+                "created_at": row["created_at"].isoformat(),
+                "updated_at": row["updated_at"].isoformat(),
+                "items_count": row["items_count"],
+                "paid_total": paid,
+                "pending_total": pending,
+                "professional_name": row["professional_first_name"],
+            }
+        )
+
+    return plans
+
+
+# EP-02: POST /admin/patients/{patient_id}/treatment-plans
+@router.post(
+    "/patients/{patient_id}/treatment-plans",
+    tags=["Treatment Plans"],
+    summary="EP-02: Crear nuevo plan de tratamiento",
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_treatment_plan(
+    patient_id: int,
+    payload: CreateTreatmentPlanBody,
+    request: Request,
+    user_data=Depends(verify_admin_token),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """
+    Crea un nuevo plan de tratamiento para un paciente.
+    Puede incluir items iniciales opcionales.
+    """
+    tenant_id = resolved_tenant_id
+
+    patient = await db.pool.fetchrow(
+        "SELECT id FROM patients WHERE id = $1 AND tenant_id = $2",
+        patient_id,
+        tenant_id,
+    )
+    if not patient:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+
+    if payload.professional_id:
+        prof = await db.pool.fetchrow(
+            "SELECT id FROM professionals WHERE id = $1 AND tenant_id = $2",
+            payload.professional_id,
+            tenant_id,
+        )
+        if not prof:
+            raise HTTPException(status_code=400, detail="Profesional no válido")
+
+    plan_id = uuid.uuid4()
+
+    async with db.pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                """
+                INSERT INTO treatment_plans 
+                (id, tenant_id, patient_id, professional_id, name, status, estimated_total, notes, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, 'draft', 0, $6, NOW(), NOW())
+                """,
+                plan_id,
+                tenant_id,
+                patient_id,
+                payload.professional_id,
+                payload.name,
+                payload.notes,
+            )
+
+            items_created = []
+            if payload.items:
+                max_order = await conn.fetchval(
+                    "SELECT COALESCE(MAX(sort_order), -1) FROM treatment_plan_items WHERE plan_id = $1",
+                    plan_id,
+                )
+
+                for idx, item in enumerate(payload.items):
+                    item_id = uuid.uuid4()
+                    sort_order = max_order + idx + 1
+
+                    estimated_price = item.estimated_price
+                    if item.treatment_type_code and estimated_price == 0:
+                        base_price = await conn.fetchval(
+                            "SELECT base_price FROM treatment_types WHERE code = $1 AND tenant_id = $2",
+                            item.treatment_type_code,
+                            tenant_id,
+                        )
+                        if base_price:
+                            estimated_price = float(base_price)
+
+                    await conn.execute(
+                        """
+                        INSERT INTO treatment_plan_items
+                        (id, plan_id, tenant_id, treatment_type_code, custom_description, 
+                         estimated_price, approved_price, status, sort_order, created_at, updated_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+                        """,
+                        item_id,
+                        plan_id,
+                        tenant_id,
+                        item.treatment_type_code,
+                        item.custom_description,
+                        estimated_price,
+                        item.approved_price,
+                        item.status or "pending",
+                        sort_order,
+                    )
+
+                    items_created.append(
+                        {
+                            "id": str(item_id),
+                            "plan_id": str(plan_id),
+                            "tenant_id": tenant_id,
+                            "treatment_type_code": item.treatment_type_code,
+                            "custom_description": item.custom_description,
+                            "estimated_price": estimated_price,
+                            "approved_price": item.approved_price,
+                            "status": item.status or "pending",
+                            "sort_order": sort_order,
+                        }
+                    )
+
+            totals = await recalculate_plan_totals(conn, str(plan_id), tenant_id)
+            if totals["estimated_total"] > 0:
+                await conn.execute(
+                    "UPDATE treatment_plans SET estimated_total = $1 WHERE id = $2",
+                    totals["estimated_total"],
+                    plan_id,
+                )
+
+    plan = await db.pool.fetchrow(
+        "SELECT * FROM treatment_plans WHERE id = $1", plan_id
+    )
+    prof_name = (
+        await get_professional_name(db.pool, plan["professional_id"])
+        if plan["professional_id"]
+        else None
+    )
+
+    await emit_treatment_plan_event(
+        "TREATMENT_PLAN_CREATED",
+        {
+            "plan_id": str(plan_id),
+            "patient_id": patient_id,
+            "tenant_id": tenant_id,
+            "name": plan["name"],
+            "status": plan["status"],
+        },
+        request,
+    )
+
+    return {
+        "id": str(plan["id"]),
+        "tenant_id": plan["tenant_id"],
+        "patient_id": plan["patient_id"],
+        "professional_id": plan["professional_id"],
+        "name": plan["name"],
+        "status": plan["status"],
+        "estimated_total": float(plan["estimated_total"]),
+        "approved_total": plan["approved_total"],
+        "approved_by": plan["approved_by"],
+        "approved_at": plan["approved_at"].isoformat() if plan["approved_at"] else None,
+        "notes": plan["notes"],
+        "created_at": plan["created_at"].isoformat(),
+        "updated_at": plan["updated_at"].isoformat(),
+        "items": items_created,
+        "professional_name": prof_name,
+    }
+
+
+# EP-03: GET /admin/treatment-plans/{plan_id}
+@router.get(
+    "/treatment-plans/{plan_id}",
+    tags=["Treatment Plans"],
+    summary="EP-03: Detalle completo de plan de tratamiento",
+)
+async def get_treatment_plan_detail(
+    plan_id: str,
+    request: Request,
+    user_data=Depends(verify_admin_token),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """
+    Retorna el detalle completo de un plan: datos del plan + arrays de items y payments.
+    """
+    tenant_id = resolved_tenant_id
+
+    try:
+        plan_uuid = uuid.UUID(plan_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de plan inválido")
+
+    plan = await db.pool.fetchrow(
+        """
+        SELECT tp.*, 
+               p.first_name as patient_first_name, p.last_name as patient_last_name,
+               prof.first_name as professional_first_name
+        FROM treatment_plans tp
+        LEFT JOIN patients p ON tp.patient_id = p.id
+        LEFT JOIN professionals prof ON tp.professional_id = prof.id
+        WHERE tp.id = $1 AND tp.tenant_id = $2
+        """,
+        plan_uuid,
+        tenant_id,
+    )
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan no encontrado")
+
+    items = await db.pool.fetch(
+        """
+        SELECT tpi.*, tt.name as treatment_name,
+               (SELECT COUNT(*) FROM appointments a WHERE a.plan_item_id = tpi.id AND a.tenant_id = tpi.tenant_id) as appointments_count,
+               (SELECT COALESCE(JSON_AGG(JSON_BUILD_OBJECT(
+                   'id', a.id,
+                   'datetime', a.appointment_datetime,
+                   'status', a.status,
+                   'type', COALESCE(a.appointment_type, 'Sin tipo')
+               ) ORDER BY a.appointment_datetime), '[]'::json)
+               FROM appointments a
+               WHERE a.plan_item_id = tpi.id AND a.tenant_id = $2
+               ) as appointments
+        FROM treatment_plan_items tpi
+        LEFT JOIN treatment_types tt ON tpi.treatment_type_code = tt.code AND tpi.tenant_id = tt.tenant_id
+        WHERE tpi.plan_id = $1 AND tpi.tenant_id = $2
+        ORDER BY tpi.sort_order
+        """,
+        plan_uuid,
+        tenant_id,
+    )
+
+    items_list = []
+    for item in items:
+        raw_appointments = item["appointments"]
+        if isinstance(raw_appointments, str):
+            import json as _json
+
+            appts = _json.loads(raw_appointments)
+        else:
+            appts = raw_appointments if raw_appointments is not None else []
+        items_list.append(
+            {
+                "id": str(item["id"]),
+                "plan_id": str(item["plan_id"]),
+                "tenant_id": item["tenant_id"],
+                "treatment_type_code": item["treatment_type_code"],
+                "custom_description": item["custom_description"],
+                "estimated_price": float(item["estimated_price"]),
+                "approved_price": float(item["approved_price"])
+                if item["approved_price"]
+                else None,
+                "status": item["status"],
+                "sort_order": item["sort_order"],
+                "created_at": item["created_at"].isoformat(),
+                "updated_at": item["updated_at"].isoformat(),
+                "treatment_name": item["treatment_name"],
+                "appointments_count": item["appointments_count"] or 0,
+                "appointments": appts,
+            }
+        )
+
+    payments = await db.pool.fetch(
+        """
+        SELECT tpp.*, u.email as recorded_by_email
+        FROM treatment_plan_payments tpp
+        LEFT JOIN users u ON tpp.recorded_by = u.email
+        WHERE tpp.plan_id = $1 AND tpp.tenant_id = $2
+        ORDER BY tpp.payment_date DESC, tpp.created_at DESC
+        """,
+        plan_uuid,
+        tenant_id,
+    )
+
+    payments_list = []
+    for pay in payments:
+        payments_list.append(
+            {
+                "id": str(pay["id"]),
+                "plan_id": str(pay["plan_id"]),
+                "tenant_id": pay["tenant_id"],
+                "amount": float(pay["amount"]),
+                "payment_method": pay["payment_method"],
+                "payment_date": pay["payment_date"].isoformat()
+                if pay["payment_date"]
+                else None,
+                "recorded_by": pay["recorded_by_email"] or pay["recorded_by"],
+                "appointment_id": str(pay["appointment_id"])
+                if pay["appointment_id"]
+                else None,
+                "receipt_data": pay["receipt_data"],
+                "payment_receipt_data": pay["receipt_data"],
+                "notes": pay["notes"],
+                "created_at": pay["created_at"].isoformat(),
+            }
+        )
+
+    approved = float(plan["approved_total"] or 0)
+    paid = sum(float(p["amount"]) for p in payments_list)
+    pending = max(approved - paid, 0) if approved > 0 else 0
+    progress_pct = round(paid / approved * 100, 1) if approved > 0 else 0.0
+    patient_name = (
+        f"{plan['patient_first_name']} {plan['patient_last_name'] or ''}".strip()
+    )
+
+    return {
+        "id": str(plan["id"]),
+        "tenant_id": plan["tenant_id"],
+        "patient_id": plan["patient_id"],
+        "professional_id": plan["professional_id"],
+        "name": plan["name"],
+        "status": plan["status"],
+        "estimated_total": float(plan["estimated_total"]),
+        "approved_total": plan["approved_total"],
+        "approved_by": plan["approved_by"],
+        "approved_by_name": plan.get("approved_by") or None,
+        "approved_at": plan["approved_at"].isoformat() if plan["approved_at"] else None,
+        "notes": plan["notes"],
+        "created_at": plan["created_at"].isoformat(),
+        "updated_at": plan["updated_at"].isoformat(),
+        "items": items_list,
+        "payments": payments_list,
+        "professional_name": plan["professional_first_name"],
+        "patient_name": patient_name,
+        "paid_total": paid,
+        "pending_total": pending,
+        "progress_pct": progress_pct,
+    }
+
+
+# EP-04: PATCH /admin/treatment-plans/{plan_id}
+@router.patch(
+    "/treatment-plans/{plan_id}",
+    tags=["Treatment Plans"],
+    summary="EP-04: Actualizar plan de tratamiento",
+)
+@router.put(
+    "/treatment-plans/{plan_id}",
+    tags=["Treatment Plans"],
+    summary="EP-04: Actualizar plan de tratamiento (PUT alias)",
+    include_in_schema=False,
+)
+async def update_treatment_plan(
+    plan_id: str,
+    payload: UpdateTreatmentPlanBody,
+    request: Request,
+    user_data=Depends(verify_admin_token),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """
+    Actualiza un plan de tratamiento.
+    Caso especial: status='approved' establece approved_by y approved_at.
+    """
+    tenant_id = resolved_tenant_id
+
+    try:
+        plan_uuid = uuid.UUID(plan_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de plan inválido")
+
+    plan = await db.pool.fetchrow(
+        "SELECT * FROM treatment_plans WHERE id = $1 AND tenant_id = $2",
+        plan_uuid,
+        tenant_id,
+    )
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan no encontrado")
+
+    update_fields = []
+    params = []
+    idx = 1
+
+    if payload.name is not None:
+        update_fields.append(f"name = ${idx}")
+        params.append(payload.name)
+        idx += 1
+
+    if payload.professional_id is not None:
+        if payload.professional_id:
+            prof = await db.pool.fetchrow(
+                "SELECT id FROM professionals WHERE id = $1 AND tenant_id = $2",
+                payload.professional_id,
+                tenant_id,
+            )
+            if not prof:
+                raise HTTPException(status_code=400, detail="Profesional no válido")
+        update_fields.append(f"professional_id = ${idx}")
+        params.append(payload.professional_id)
+        idx += 1
+
+    if payload.status is not None:
+        if not validate_plan_status_transition(plan["status"], payload.status):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Transición de estado inválida: {plan['status']} -> {payload.status}",
+            )
+
+        if payload.status == "approved":
+            update_fields.append(f"status = ${idx}")
+            params.append(payload.status)
+            idx += 1
+            update_fields.append(f"approved_by = ${idx}")
+            params.append(
+                user_data.email
+            )  # approved_by stores user email (VARCHAR column)
+            idx += 1
+            update_fields.append(f"approved_at = NOW()")
+            if payload.approved_total is not None:
+                update_fields.append(f"approved_total = ${idx}")
+                params.append(payload.approved_total)
+                idx += 1
+            else:
+                update_fields.append(f"approved_total = estimated_total")
+        else:
+            update_fields.append(f"status = ${idx}")
+            params.append(payload.status)
+            idx += 1
+
+    if payload.approved_total is not None and payload.status != "approved":
+        update_fields.append(f"approved_total = ${idx}")
+        params.append(payload.approved_total)
+        idx += 1
+
+    # Merge budget config fields into notes when no new DB columns exist yet.
+    # If `notes` was explicitly sent, use it as-is (caller already composed the string).
+    # Otherwise, if any budget field is present, build a JSON metadata note.
+    budget_fields_present = any(
+        [
+            payload.payment_conditions is not None,
+            payload.discount_pct is not None,
+            payload.discount_amount is not None,
+            payload.installments is not None,
+            payload.installments_amount is not None,
+            payload.currency is not None,
+            payload.financed_total is not None,
+        ]
+    )
+
+    if payload.notes is not None:
+        # Explicit notes wins; budget fields are ignored for storage (already in approved_total)
+        update_fields.append(f"notes = ${idx}")
+        params.append(payload.notes)
+        idx += 1
+    elif budget_fields_present:
+        # Build a structured JSON note from budget config fields
+        import json as _json
+
+        budget_meta: dict = {}
+        if payload.payment_conditions is not None:
+            budget_meta["payment_conditions"] = payload.payment_conditions
+        if payload.discount_pct is not None:
+            budget_meta["discount_pct"] = payload.discount_pct
+        if payload.discount_amount is not None:
+            budget_meta["discount_amount"] = payload.discount_amount
+        if payload.installments is not None:
+            budget_meta["installments"] = payload.installments
+        if payload.installments_amount is not None:
+            budget_meta["installments_amount"] = payload.installments_amount
+        if payload.currency is not None:
+            budget_meta["currency"] = payload.currency
+        if payload.financed_total is not None:
+            budget_meta["financed_total"] = payload.financed_total
+        # Merge with existing config if notes is already JSON
+        existing_notes = plan["notes"] or ""
+        try:
+            existing_meta = (
+                _json.loads(existing_notes)
+                if existing_notes.strip().startswith("{")
+                else {}
+            )
+        except Exception:
+            existing_meta = {}
+        existing_meta.update(budget_meta)
+        merged_notes = _json.dumps(existing_meta, ensure_ascii=False)
+        update_fields.append(f"notes = ${idx}")
+        params.append(merged_notes)
+        idx += 1
+
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No hay campos para actualizar")
+
+    update_fields.append(f"updated_at = NOW()")
+    params.append(plan_uuid)
+
+    await db.pool.execute(
+        f"UPDATE treatment_plans SET {', '.join(update_fields)} WHERE id = ${idx}",
+        *params,
+    )
+
+    updated_plan = await db.pool.fetchrow(
+        "SELECT * FROM treatment_plans WHERE id = $1", plan_uuid
+    )
+    prof_name = (
+        await get_professional_name(db.pool, updated_plan["professional_id"])
+        if updated_plan["professional_id"]
+        else None
+    )
+
+    paid = await db.pool.fetchval(
+        "SELECT COALESCE(SUM(amount), 0) FROM treatment_plan_payments WHERE plan_id = $1 AND tenant_id = $2",
+        plan_uuid,
+        tenant_id,
+    )
+    paid = float(paid) if paid else 0
+    approved = float(updated_plan["approved_total"] or 0)
+    pending = max(approved - paid, 0) if approved > 0 else 0
+    items_count = await db.pool.fetchval(
+        "SELECT COUNT(*) FROM treatment_plan_items WHERE plan_id = $1 AND status != 'cancelled'",
+        plan_uuid,
+    )
+
+    await emit_treatment_plan_event(
+        "TREATMENT_PLAN_UPDATED",
+        {
+            "plan_id": str(plan_uuid),
+            "patient_id": updated_plan["patient_id"],
+            "tenant_id": tenant_id,
+            "status": updated_plan["status"],
+            "changes": list(payload.model_dump(exclude_none=True).keys()),
+        },
+        request,
+    )
+
+    return {
+        "id": str(updated_plan["id"]),
+        "tenant_id": updated_plan["tenant_id"],
+        "patient_id": updated_plan["patient_id"],
+        "professional_id": updated_plan["professional_id"],
+        "name": updated_plan["name"],
+        "status": updated_plan["status"],
+        "estimated_total": float(updated_plan["estimated_total"]),
+        "approved_total": updated_plan["approved_total"],
+        "approved_by": updated_plan["approved_by"],
+        "approved_at": updated_plan["approved_at"].isoformat()
+        if updated_plan["approved_at"]
+        else None,
+        "notes": updated_plan["notes"],
+        "created_at": updated_plan["created_at"].isoformat(),
+        "updated_at": updated_plan["updated_at"].isoformat(),
+        "items_count": items_count,
+        "paid_total": paid,
+        "pending_total": pending,
+        "professional_name": prof_name,
+    }
+
+
+# EP-05: DELETE /admin/treatment-plans/{plan_id}
+@router.delete(
+    "/treatment-plans/{plan_id}",
+    tags=["Treatment Plans"],
+    summary="EP-05: Soft-cancel plan de tratamiento",
+)
+async def delete_treatment_plan(
+    plan_id: str,
+    request: Request,
+    user_data=Depends(verify_admin_token),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """
+    Soft-cancel de un plan de tratamiento (status='cancelled').
+    No permite cancelar planes con status='completed'.
+    """
+    tenant_id = resolved_tenant_id
+
+    try:
+        plan_uuid = uuid.UUID(plan_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de plan inválido")
+
+    plan = await db.pool.fetchrow(
+        "SELECT * FROM treatment_plans WHERE id = $1 AND tenant_id = $2",
+        plan_uuid,
+        tenant_id,
+    )
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan no encontrado")
+
+    if plan["status"] == "completed":
+        raise HTTPException(
+            status_code=400, detail="No se puede cancelar un plan completado"
+        )
+
+    if plan["status"] == "cancelled":
+        return {
+            "status": "cancelled",
+            "plan_id": str(plan_uuid),
+            "message": "El plan ya estaba cancelado",
+        }
+
+    await db.pool.execute(
+        "UPDATE treatment_plans SET status = 'cancelled', updated_at = NOW() WHERE id = $1",
+        plan_uuid,
+    )
+
+    await emit_treatment_plan_event(
+        "TREATMENT_PLAN_UPDATED",
+        {
+            "plan_id": str(plan_uuid),
+            "patient_id": plan["patient_id"],
+            "tenant_id": tenant_id,
+            "name": plan["name"],
+        },
+        request,
+    )
+
+    return {
+        "status": "cancelled",
+        "plan_id": str(plan_uuid),
+        "message": "Plan cancelado exitosamente",
+    }
+
+
+# ============================================
+# TREATMENT PLAN ITEMS CRUD (EP-06 a EP-08)
+# ============================================
+
+
+# EP-06: POST /admin/treatment-plans/{plan_id}/items
+@router.post(
+    "/treatment-plans/{plan_id}/items",
+    tags=["Treatment Plans"],
+    summary="EP-06: Agregar ítem a plan",
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_plan_item(
+    plan_id: str,
+    payload: AddPlanItemBody,
+    request: Request,
+    user_data=Depends(verify_admin_token),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """
+    EP-06: Agrega un ítem a un plan de tratamiento existente.
+    - Calcula sort_order automáticamente
+    - Carga base_price de treatment_types si no se provee estimated_price
+    - Recalcula estimated_total del plan
+    - Valida que el plan no esté cancelled/completed
+    """
+    # Validar plan_id como UUID
+    try:
+        plan_uuid = uuid.UUID(plan_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de plan inválido")
+
+    # Verificar que el plan existe y no está cancelled/completed
+    plan = await db.pool.fetchrow(
+        """
+        SELECT id, tenant_id, status, name, patient_id
+        FROM treatment_plans
+        WHERE id = $1
+        """,
+        plan_uuid,
+    )
+
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan no encontrado")
+
+    # Aislamiento por tenant
+    if plan["tenant_id"] != resolved_tenant_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a este plan")
+
+    # Validar estado del plan
+    if plan["status"] in ("cancelled", "completed"):
+        raise HTTPException(
+            status_code=422,
+            detail=f"No se puede agregar ítems a un plan en estado '{plan['status']}'",
+        )
+
+    # Obtener base_price de treatment_types si no se provee
+    estimated_price = payload.estimated_price
+    if estimated_price is None:
+        treatment_type = await db.pool.fetchrow(
+            "SELECT base_price FROM treatment_types WHERE code = $1 AND tenant_id = $2",
+            payload.treatment_type_code,
+            resolved_tenant_id,
+        )
+        if treatment_type and treatment_type["base_price"]:
+            estimated_price = Decimal(str(treatment_type["base_price"]))
+        else:
+            estimated_price = Decimal("0")
+
+    # Calcular sort_order (siguiente número libre)
+    max_sort_order = await db.pool.fetchval(
+        """
+        SELECT COALESCE(MAX(sort_order), 0)
+        FROM treatment_plan_items
+        WHERE plan_id = $1 AND tenant_id = $2
+        """,
+        plan_uuid,
+        resolved_tenant_id,
+    )
+    new_sort_order = (max_sort_order or 0) + 1
+
+    # Crear el ítem
+    item_id = uuid.uuid4()
+    await db.pool.execute(
+        """
+        INSERT INTO treatment_plan_items (
+            id, plan_id, tenant_id, treatment_type_code, custom_description,
+            estimated_price, status, sort_order, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+        """,
+        item_id,
+        plan_uuid,
+        resolved_tenant_id,
+        payload.treatment_type_code,
+        payload.custom_description,
+        estimated_price,
+        "pending",
+        new_sort_order,
+    )
+
+    # Recalcular estimated_total del plan
+    new_total = await recalculate_plan_estimated_total(
+        db.pool, plan_uuid, resolved_tenant_id
+    )
+    await db.pool.execute(
+        """
+        UPDATE treatment_plans SET estimated_total = $1, updated_at = NOW()
+        WHERE id = $2 AND tenant_id = $3
+        """,
+        new_total,
+        plan_uuid,
+        resolved_tenant_id,
+    )
+
+    # Emitir evento Socket.IO
+    await emit_appointment_event(
+        "TREATMENT_PLAN_UPDATED",
+        {"plan_id": str(plan_uuid), "tenant_id": resolved_tenant_id},
+        request,
+    )
+
+    # Obtener el ítem creado para devolverlo
+    item = await db.pool.fetchrow(
+        """
+        SELECT id, plan_id, tenant_id, treatment_type_code, custom_description,
+               estimated_price, approved_price, status, sort_order, created_at, updated_at
+        FROM treatment_plan_items WHERE id = $1
+        """,
+        item_id,
+    )
+
+    response = TreatmentPlanItemResponse(
+        id=str(item["id"]),
+        plan_id=str(item["plan_id"]),
+        tenant_id=item["tenant_id"],
+        treatment_type_code=item["treatment_type_code"],
+        custom_description=item["custom_description"],
+        estimated_price=item["estimated_price"],
+        approved_price=item["approved_price"],
+        status=ItemStatus(item["status"]),
+        sort_order=item["sort_order"],
+        appointments_count=0,
+        created_at=item["created_at"],
+        updated_at=item["updated_at"],
+    )
+
+    return {
+        "status": "created",
+        "item": response.model_dump(),
+        "plan_estimated_total": float(new_total),
+    }
+
+
+# EP-07: PUT /admin/treatment-plan-items/{item_id}
+@router.put(
+    "/treatment-plan-items/{item_id}",
+    tags=["Treatment Plans"],
+    summary="EP-07: Actualizar ítem de plan",
+)
+async def update_plan_item(
+    item_id: str,
+    payload: UpdatePlanItemBody,
+    request: Request,
+    user_data=Depends(verify_admin_token),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """
+    EP-07: Actualiza un ítem de plan existente.
+    - Update dinámico de campos
+    - Recalcula estimated_total si cambia el precio
+    """
+    # Validar item_id como UUID
+    try:
+        item_uuid = uuid.UUID(item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de ítem inválido")
+
+    # Verificar que el ítem existe
+    item = await db.pool.fetchrow(
+        """
+        SELECT tpi.id, tpi.plan_id, tpi.tenant_id, tpi.status, tpi.estimated_price,
+               tp.status as plan_status
+        FROM treatment_plan_items tpi
+        JOIN treatment_plans tp ON tpi.plan_id = tp.id
+        WHERE tpi.id = $1
+        """,
+        item_uuid,
+    )
+
+    if not item:
+        raise HTTPException(status_code=404, detail="Ítem no encontrado")
+
+    # Aislamiento por tenant
+    if item["tenant_id"] != resolved_tenant_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a este ítem")
+
+    # Validar estado del ítem (no permite cambiar de completed a pending)
+    if item["status"] == "completed" and payload.status == ItemStatus.PENDING:
+        raise HTTPException(
+            status_code=422,
+            detail="No se puede revertir un ítem completado a pendiente",
+        )
+
+    # Validar estado del plan
+    if item["plan_status"] in ("cancelled", "completed"):
+        raise HTTPException(
+            status_code=422,
+            detail=f"No se puede modificar un ítem de un plan en estado '{item['plan_status']}'",
+        )
+
+    # Construir update dinámico
+    update_fields = []
+    update_values = []
+    param_idx = 1
+
+    if payload.treatment_type_code is not None:
+        update_fields.append(f"treatment_type_code = ${param_idx}")
+        update_values.append(payload.treatment_type_code)
+        param_idx += 1
+
+    if payload.custom_description is not None:
+        update_fields.append(f"custom_description = ${param_idx}")
+        update_values.append(payload.custom_description)
+        param_idx += 1
+
+    if payload.estimated_price is not None:
+        update_fields.append(f"estimated_price = ${param_idx}")
+        update_values.append(payload.estimated_price)
+        param_idx += 1
+
+    if payload.approved_price is not None:
+        update_fields.append(f"approved_price = ${param_idx}")
+        update_values.append(payload.approved_price)
+        param_idx += 1
+
+    if payload.status is not None:
+        update_fields.append(f"status = ${param_idx}")
+        update_values.append(payload.status.value)
+        param_idx += 1
+
+    if payload.sort_order is not None:
+        update_fields.append(f"sort_order = ${param_idx}")
+        update_values.append(payload.sort_order)
+        param_idx += 1
+
+    # Si no hay campos para actualizar, devolver el ítem actual
+    if not update_fields:
+        item_detail = await db.pool.fetchrow(
+            """
+            SELECT id, plan_id, tenant_id, treatment_type_code, custom_description,
+                   estimated_price, approved_price, status, sort_order, created_at, updated_at
+            FROM treatment_plan_items WHERE id = $1
+            """,
+            item_uuid,
+        )
+        response = TreatmentPlanItemResponse(
+            id=str(item_detail["id"]),
+            plan_id=str(item_detail["plan_id"]),
+            tenant_id=item_detail["tenant_id"],
+            treatment_type_code=item_detail["treatment_type_code"],
+            custom_description=item_detail["custom_description"],
+            estimated_price=item_detail["estimated_price"],
+            approved_price=item_detail["approved_price"],
+            status=ItemStatus(item_detail["status"]),
+            sort_order=item_detail["sort_order"],
+            appointments_count=0,
+            created_at=item_detail["created_at"],
+            updated_at=item_detail["updated_at"],
+        )
+        return {"item": response.model_dump()}
+
+    # Agregar updated_at
+    update_fields.append(f"updated_at = ${param_idx}")
+    update_values.append(datetime.now())
+    param_idx += 1
+
+    # Ejecutar update
+    update_values.append(item_uuid)
+    await db.pool.execute(
+        f"""
+        UPDATE treatment_plan_items
+        SET {", ".join(update_fields)}
+        WHERE id = ${param_idx}
+        """,
+        *update_values,
+    )
+
+    # Recalcular estimated_total si cambió algún precio
+    if payload.estimated_price is not None or payload.approved_price is not None:
+        plan_uuid = item["plan_id"]
+        new_total = await recalculate_plan_estimated_total(
+            db.pool, plan_uuid, resolved_tenant_id
+        )
+        await db.pool.execute(
+            """
+            UPDATE treatment_plans SET estimated_total = $1, updated_at = NOW()
+            WHERE id = $2 AND tenant_id = $3
+            """,
+            new_total,
+            plan_uuid,
+            resolved_tenant_id,
+        )
+
+    # Emitir evento Socket.IO
+    await emit_appointment_event(
+        "TREATMENT_PLAN_UPDATED",
+        {"plan_id": str(item["plan_id"]), "tenant_id": resolved_tenant_id},
+        request,
+    )
+
+    # Obtener ítem actualizado
+    item_updated = await db.pool.fetchrow(
+        """
+        SELECT id, plan_id, tenant_id, treatment_type_code, custom_description,
+               estimated_price, approved_price, status, sort_order, created_at, updated_at
+        FROM treatment_plan_items WHERE id = $1
+        """,
+        item_uuid,
+    )
+
+    response = TreatmentPlanItemResponse(
+        id=str(item_updated["id"]),
+        plan_id=str(item_updated["plan_id"]),
+        tenant_id=item_updated["tenant_id"],
+        treatment_type_code=item_updated["treatment_type_code"],
+        custom_description=item_updated["custom_description"],
+        estimated_price=item_updated["estimated_price"],
+        approved_price=item_updated["approved_price"],
+        status=ItemStatus(item_updated["status"]),
+        sort_order=item_updated["sort_order"],
+        appointments_count=0,
+        created_at=item_updated["created_at"],
+        updated_at=item_updated["updated_at"],
+    )
+
+    # Recalcular total si hubo cambio
+    plan_uuid = item["plan_id"]
+    new_total = await recalculate_plan_estimated_total(
+        db.pool, plan_uuid, resolved_tenant_id
+    )
+
+    return {
+        "status": "updated",
+        "item_id": str(item_uuid),
+        "item": response.model_dump(),
+        "plan_estimated_total": float(new_total),
+    }
+
+
+# EP-08: DELETE /admin/treatment-plan-items/{item_id}
+@router.delete(
+    "/treatment-plan-items/{item_id}",
+    tags=["Treatment Plans"],
+    summary="EP-08: Eliminar ítem de plan",
+    status_code=status.HTTP_200_OK,
+)
+async def delete_plan_item(
+    item_id: str,
+    request: Request,
+    user_data=Depends(verify_admin_token),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """
+    EP-08: Elimina un ítem de plan (hard-delete).
+    - No permite eliminar ítems completados (debe cancelarse primero)
+    - Desvincula turnos asociados (SET NULL)
+    - Recalcula estimated_total del plan
+    """
+    # Validar item_id como UUID
+    try:
+        item_uuid = uuid.UUID(item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de ítem inválido")
+
+    # Verificar que el ítem existe
+    item = await db.pool.fetchrow(
+        """
+        SELECT tpi.id, tpi.plan_id, tpi.tenant_id, tpi.status,
+               tp.status as plan_status
+        FROM treatment_plan_items tpi
+        JOIN treatment_plans tp ON tpi.plan_id = tp.id
+        WHERE tpi.id = $1
+        """,
+        item_uuid,
+    )
+
+    if not item:
+        raise HTTPException(status_code=404, detail="Ítem no encontrado")
+
+    # Aislamiento por tenant
+    if item["tenant_id"] != resolved_tenant_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a este ítem")
+
+    # No permite eliminar ítems completados
+    if item["status"] == "completed":
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede eliminar un ítem completado. Cancélalo primero.",
+        )
+
+    plan_uuid = item["plan_id"]
+
+    # Desvincular turnos asociados (SET NULL en appointments)
+    await db.pool.execute(
+        """
+        UPDATE appointments
+        SET plan_item_id = NULL
+        WHERE plan_item_id = $1 AND tenant_id = $2
+        """,
+        item_uuid,
+        resolved_tenant_id,
+    )
+
+    # Hard-delete del ítem
+    await db.pool.execute(
+        """
+        DELETE FROM treatment_plan_items
+        WHERE id = $1 AND tenant_id = $2
+        """,
+        item_uuid,
+        resolved_tenant_id,
+    )
+
+    # Recalcular estimated_total del plan
+    new_total = await recalculate_plan_estimated_total(
+        db.pool, plan_uuid, resolved_tenant_id
+    )
+    await db.pool.execute(
+        """
+        UPDATE treatment_plans SET estimated_total = $1, updated_at = NOW()
+        WHERE id = $2 AND tenant_id = $3
+        """,
+        new_total,
+        plan_uuid,
+        resolved_tenant_id,
+    )
+
+    # Emitir evento Socket.IO
+    await emit_appointment_event(
+        "TREATMENT_PLAN_UPDATED",
+        {"plan_id": str(plan_uuid), "tenant_id": resolved_tenant_id},
+        request,
+    )
+
+    return {
+        "status": "deleted",
+        "item_id": str(item_uuid),
+        "plan_estimated_total": float(new_total),
+    }
+
+
+# EP-09: POST /admin/treatment-plans/{plan_id}/payments
+@router.post(
+    "/treatment-plans/{plan_id}/payments",
+    tags=["Treatment Plans"],
+    summary="EP-09: Registrar pago en plan de tratamiento",
+    status_code=201,
+)
+async def register_plan_payment(
+    plan_id: str,
+    body: RegisterPaymentBody,
+    request: Request,
+    user_data=Depends(verify_admin_token),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """
+    Registra un pago sobre el plan de tratamiento.
+    Sincroniza con accounting_transactions.
+    Auto-avanza el estado del plan de approved a in_progress.
+    """
+    # 1. Verificar plan existe y pertenece al tenant
+    plan = await db.pool.fetchrow(
+        """
+        SELECT id, patient_id, status, approved_total, name
+        FROM treatment_plans
+        WHERE id = $1 AND tenant_id = $2
+        """,
+        plan_id,
+        resolved_tenant_id,
+    )
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan de tratamiento no encontrado")
+
+    # 2. Validar estado del plan (solo approved o in_progress)
+    if plan["status"] not in ["approved", "in_progress"]:
+        raise HTTPException(
+            status_code=422,
+            detail="Solo se pueden registrar pagos en planes aprobados o en progreso",
+        )
+
+    # 3. Si appointment_id se provee, validar que pertenece al mismo paciente
+    if body.appointment_id:
+        appointment = await db.pool.fetchrow(
+            """
+            SELECT id, patient_id FROM appointments
+            WHERE id = $1 AND tenant_id = $2
+            """,
+            body.appointment_id,
+            resolved_tenant_id,
+        )
+        if not appointment:
+            raise HTTPException(status_code=404, detail="Turno no encontrado")
+        if appointment["patient_id"] != plan["patient_id"]:
+            raise HTTPException(
+                status_code=422,
+                detail="El turno no pertenece al paciente de este plan",
+            )
+
+    # 4. Generar payment_id
+    payment_id = str(uuid.uuid4())
+
+    # 5-8. Ejecutar en transacción atómica
+    async with db.pool.acquire() as conn:
+        async with conn.transaction():
+            # 5. INSERT en treatment_plan_payments
+            await conn.execute(
+                """
+                INSERT INTO treatment_plan_payments (
+                    id, plan_id, tenant_id, amount, payment_method,
+                    payment_date, recorded_by, appointment_id, receipt_data, notes,
+                    created_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+                """,
+                payment_id,
+                plan_id,
+                resolved_tenant_id,
+                body.amount,
+                body.payment_method.value
+                if hasattr(body.payment_method, "value")
+                else body.payment_method,
+                body.payment_date or datetime.now(),
+                body.recorded_by
+                or getattr(user_data, "email", None)
+                or str(getattr(user_data, "id", "")),
+                body.appointment_id,
+                json.dumps(body.receipt_data) if body.receipt_data else None,
+                body.notes,
+            )
+
+            # 6. Sync con accounting_transactions
+            accounting_tx_id = str(uuid.uuid4())
+            await conn.execute(
+                """
+                INSERT INTO accounting_transactions (
+                    id, tenant_id, patient_id, amount,
+                    transaction_type, payment_method, status,
+                    description, reference_id, reference_type,
+                    created_at, updated_at
+                )
+                VALUES ($1, $2, $3, $4, 'payment', $5, 'completed', $6, $7, 'treatment_plan_payment', NOW(), NOW())
+                """,
+                accounting_tx_id,
+                resolved_tenant_id,
+                plan["patient_id"],
+                body.amount,
+                body.payment_method.value
+                if hasattr(body.payment_method, "value")
+                else body.payment_method,
+                f"Pago plan: {plan['name']}",
+                payment_id,
+            )
+
+            # 7. Actualizar accounting_transaction_id en el pago
+            await conn.execute(
+                """
+                UPDATE treatment_plan_payments
+                SET accounting_transaction_id = $1
+                WHERE id = $2
+                """,
+                accounting_tx_id,
+                payment_id,
+            )
+
+            # 8. Auto-avance de estado: approved → in_progress
+            new_plan_status = plan["status"]
+            if plan["status"] == "approved":
+                new_plan_status = "in_progress"
+                await conn.execute(
+                    """
+                    UPDATE treatment_plans
+                    SET status = 'in_progress', updated_at = NOW()
+                    WHERE id = $1 AND tenant_id = $2
+                    """,
+                    plan_id,
+                    resolved_tenant_id,
+                )
+
+    # 9. Emitir evento Socket.IO
+    await emit_appointment_event(
+        "BILLING_UPDATED",
+        {
+            "plan_id": plan_id,
+            "tenant_id": resolved_tenant_id,
+            "payment_id": payment_id,
+            "amount": float(body.amount),
+            "plan_status": new_plan_status,
+        },
+        request,
+    )
+
+    # 10. Retornar respuesta
+    return {
+        "payment": {
+            "id": payment_id,
+            "plan_id": plan_id,
+            "amount": float(body.amount),
+            "payment_method": body.payment_method.value
+            if hasattr(body.payment_method, "value")
+            else body.payment_method,
+            "payment_date": (body.payment_date or datetime.now()).isoformat()
+            if hasattr((body.payment_date or datetime.now()), "isoformat")
+            else str(body.payment_date or datetime.now()),
+            "recorded_by": getattr(user_data, "email", None)
+            or str(getattr(user_data, "id", "")),
+            "appointment_id": body.appointment_id,
+            "notes": body.notes,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "plan_status": new_plan_status,
+        "accounting_transaction_id": accounting_tx_id,
+    }
+
+
+# EP-10: DELETE /admin/treatment-plan-payments/{payment_id}
+@router.delete(
+    "/treatment-plan-payments/{payment_id}",
+    tags=["Treatment Plans"],
+    summary="EP-10: Eliminar pago de plan de tratamiento",
+    status_code=204,
+)
+async def delete_plan_payment(
+    payment_id: str,
+    request: Request,
+    user_data=Depends(verify_admin_token),
+    resolved_tenant_id: int = Depends(get_resolved_tenant_id),
+):
+    """
+    Elimina un pago registrado de un plan de tratamiento.
+    Solo CEO y secretary pueden eliminar pagos.
+    Elimina la accounting_transaction relacionada.
+    """
+    # 1. Verificar rol (solo CEO o secretary)
+    if user_data.role not in ["ceo", "secretary"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo CEO o secretary pueden eliminar pagos",
+        )
+
+    # 2. Verificar que el pago existe y pertenece al tenant
+    payment = await db.pool.fetchrow(
+        """
+        SELECT id, plan_id, accounting_transaction_id
+        FROM treatment_plan_payments
+        WHERE id = $1 AND tenant_id = $2
+        """,
+        payment_id,
+        resolved_tenant_id,
+    )
+    if not payment:
+        raise HTTPException(status_code=404, detail="Pago no encontrado")
+
+    # 3. Si tiene accounting_transaction_id, eliminar el registro de accounting
+    if payment["accounting_transaction_id"]:
+        await db.pool.execute(
+            """
+            DELETE FROM accounting_transactions
+            WHERE id = $1 AND tenant_id = $2
+            """,
+            payment["accounting_transaction_id"],
+            resolved_tenant_id,
+        )
+
+    # 4. Eliminar el pago
+    await db.pool.execute(
+        "DELETE FROM treatment_plan_payments WHERE id = $1",
+        payment_id,
+    )
+
+    # 5. Emitir evento Socket.IO
+    await emit_appointment_event(
+        "BILLING_UPDATED",
+        {
+            "plan_id": payment["plan_id"],
+            "tenant_id": resolved_tenant_id,
+            "payment_id": payment_id,
+            "action": "payment_deleted",
+        },
+        request,
+    )
+
+    return None

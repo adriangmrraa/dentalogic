@@ -597,6 +597,123 @@ class Database:
                 WHEN others THEN NULL; -- Ignorar errores (tabla ya existe, columnas ya existen, etc.)
             END $$;
             """,
+            # Parche 21: Tablas de billing/treatment_plans (igual a ClinicForge)
+            """
+            DO $$
+            BEGIN
+                -- 1. Crear tabla treatment_plans si no existe
+                CREATE TABLE IF NOT EXISTS treatment_plans (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                    patient_id INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+                    professional_id INTEGER REFERENCES professionals(id) ON DELETE SET NULL,
+                    name VARCHAR(255) NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+                    estimated_total NUMERIC(12,2) DEFAULT 0,
+                    approved_total NUMERIC(12,2),
+                    approved_by VARCHAR(100),
+                    approved_at TIMESTAMPTZ,
+                    notes TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+
+                -- 2. Crear tabla treatment_plan_items si no existe
+                CREATE TABLE IF NOT EXISTS treatment_plan_items (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    plan_id UUID NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+                    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                    treatment_type_code VARCHAR(50),
+                    custom_description VARCHAR(255),
+                    estimated_price NUMERIC(12,2) DEFAULT 0,
+                    approved_price NUMERIC(12,2),
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                    sort_order INTEGER DEFAULT 0,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+
+                -- 3. Crear tabla treatment_plan_payments si no existe
+                CREATE TABLE IF NOT EXISTS treatment_plan_payments (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    plan_id UUID NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+                    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                    amount NUMERIC(12,2) NOT NULL,
+                    payment_method VARCHAR(20) NOT NULL,
+                    payment_date DATE DEFAULT CURRENT_DATE,
+                    recorded_by VARCHAR(100),
+                    appointment_id UUID REFERENCES appointments(id) ON DELETE SET NULL,
+                    receipt_data JSONB,
+                    notes TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+
+                -- Índices para treatment_plans
+                CREATE INDEX IF NOT EXISTS idx_treatment_plans_tenant_patient ON treatment_plans(tenant_id, patient_id);
+                CREATE INDEX IF NOT EXISTS idx_treatment_plans_tenant_status ON treatment_plans(tenant_id, status);
+                CREATE INDEX IF NOT EXISTS idx_treatment_plans_tenant_professional ON treatment_plans(tenant_id, professional_id);
+
+                -- Índices para treatment_plan_items
+                CREATE INDEX IF NOT EXISTS idx_treatment_plan_items_plan ON treatment_plan_items(plan_id);
+                CREATE INDEX IF NOT EXISTS idx_treatment_plan_items_tenant_plan ON treatment_plan_items(tenant_id, plan_id);
+
+                -- Índices para treatment_plan_payments
+                CREATE INDEX IF NOT EXISTS idx_treatment_plan_payments_plan ON treatment_plan_payments(plan_id);
+                CREATE INDEX IF NOT EXISTS idx_treatment_plan_payments_tenant_plan ON treatment_plan_payments(tenant_id, plan_id);
+                CREATE INDEX IF NOT EXISTS idx_treatment_plan_payments_tenant_date ON treatment_plan_payments(tenant_id, payment_date);
+
+                -- Agregar plan_item_id a appointments si no existe
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'appointments' AND column_name = 'plan_item_id') THEN
+                    ALTER TABLE appointments ADD COLUMN plan_item_id UUID REFERENCES treatment_plan_items(id) ON DELETE SET NULL;
+                    CREATE INDEX IF NOT EXISTS idx_appointments_plan_item ON appointments(plan_item_id) WHERE plan_item_id IS NOT NULL;
+                END IF;
+            EXCEPTION
+                WHEN others THEN NULL;
+            END $$;
+            """,
+            # Parche 22: Columnas faltantes en patients (igual a ClinicForge)
+            """
+            DO $$
+            BEGIN
+                -- insurance_provider
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'insurance_provider') THEN
+                    ALTER TABLE patients ADD COLUMN insurance_provider VARCHAR(100);
+                END IF;
+
+                -- insurance_id (número de socio)
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'insurance_id') THEN
+                    ALTER TABLE patients ADD COLUMN insurance_id VARCHAR(50);
+                END IF;
+
+                -- insurance_valid_until
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'insurance_valid_until') THEN
+                    ALTER TABLE patients ADD COLUMN insurance_valid_until DATE;
+                END IF;
+
+                -- external_ids (JSONB para IDs externos: meta_ad_id, instagram_psid, etc)
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'external_ids') THEN
+                    ALTER TABLE patients ADD COLUMN external_ids JSONB DEFAULT '{}';
+                END IF;
+
+                -- acquisition_source (ORGANIC, META_ADS, REFERRAL, etc)
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'acquisition_source') THEN
+                    ALTER TABLE patients ADD COLUMN acquisition_source VARCHAR(20);
+                END IF;
+
+                -- meta_ad_id, meta_ad_headline, meta_campaign_id
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'meta_ad_id') THEN
+                    ALTER TABLE patients ADD COLUMN meta_ad_id VARCHAR(50);
+                END IF;
+
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'meta_ad_headline') THEN
+                    ALTER TABLE patients ADD COLUMN meta_ad_headline VARCHAR(255);
+                END IF;
+
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patients' AND column_name = 'meta_campaign_id') THEN
+                    ALTER TABLE patients ADD COLUMN meta_campaign_id VARCHAR(50);
+                END IF;
+            END $$;
+            """,
         ]
 
         async with self.pool.acquire() as conn:
